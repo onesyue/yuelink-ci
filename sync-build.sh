@@ -54,7 +54,7 @@ must_replace(
         with:
           repository: onesyue/yuelink
           ref: ${{ github.ref_name }}
-          token: ${{ secrets.SRC_PAT }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           submodules: recursive
 """,
 "build-checkout")
@@ -70,7 +70,7 @@ must_replace(
         with:
           repository: onesyue/yuelink
           ref: ${{ github.ref_name }}
-          token: ${{ secrets.SRC_PAT }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           fetch-depth: 0
           fetch-tags: true
 

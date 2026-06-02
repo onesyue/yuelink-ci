@@ -94,13 +94,13 @@ jobs:
 
       # CI 镜像仓:本仓不含源码。从私有 onesyue/yuelink 的同名 tag checkout 源码
       # 到工作区根(路径与私有仓内构建完全一致 → 下游步骤无需改动)。
-      # SRC_PAT = 只读 Contents、仅 yuelink 一仓的 fine-grained PAT。
-      # mihomo 子模块是公开 fork,token 同样适用。
+      # SRC_DEPLOY_KEY = yuelink 上的只读部署密钥私钥(仅此一仓、不过期)。
+      # mihomo 子模块是公开 fork(.gitmodules 走 https),无需密钥即可拉。
       - uses: actions/checkout@v6
         with:
           repository: onesyue/yuelink
           ref: ${{ github.ref_name }}
-          token: ${{ secrets.SRC_PAT }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           submodules: recursive
 
       # ── Toolchains (Go for core, Flutter for app, Java for android) ───────
@@ -820,7 +820,7 @@ jobs:
         with:
           repository: onesyue/yuelink
           ref: ${{ github.ref_name }}
-          token: ${{ secrets.SRC_PAT }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           fetch-depth: 0
           fetch-tags: true
 
