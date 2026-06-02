@@ -1,13 +1,9 @@
 name: Build YueLink
 
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │ PUBLIC CI MIRROR — 本仓不含源码。源码在私有 onesyue/yuelink。            │
-# │ 公开仓 = 无限免费 Actions 分钟(macOS/Windows 也免费,无 10x)。          │
-# │ 触发:在本仓打同名 tag 并推送(vX.Y.Z / pre)→ checkout 私有仓同名 tag。 │
-# │ 产物全部进 Cloudflare R2(yuetong.app CDN origin),GitHub 这边不留产物、 │
-# │ 不建 Release → 公开仓里别人下不到任何东西。                              │
-# │ 需要的 secrets 见 README;源码 checkout 用 SRC_DEPLOY_KEY(只读部署密钥)。│
-# └─────────────────────────────────────────────────────────────────────────┘
+# ┌───────────────────────────────────────────────────────────────────────┐
+# │ PUBLIC CI MIRROR — 本仓不含源码。源码在私有 onesyue/yuelink。见 README。         │
+# │ 触发：在本仓打同名 tag 推送 → checkout 私有仓同名 tag。产物全进 R2。       │
+# └───────────────────────────────────────────────────────────────────────┘
 #
 # Release builds. One matrix job covers every platform; release downloads
 # all artifacts in one shot. Modeled after FlClash's build.yaml — same
@@ -92,10 +88,7 @@ jobs:
           sudo docker image prune -af 2>/dev/null || true
           echo "after:"; df -h / | tail -1
 
-      # CI 镜像仓:本仓不含源码。从私有 onesyue/yuelink 的同名 tag checkout 源码
-      # 到工作区根(路径与私有仓内构建完全一致 → 下游步骤无需改动)。
-      # SRC_DEPLOY_KEY = yuelink 上的只读部署密钥私钥(仅此一仓、不过期)。
-      # mihomo 子模块是公开 fork(.gitmodules 走 https),无需密钥即可拉。
+      # CI 镜像仓：checkout 私有 onesyue/yuelink 同名 tag 源码到工作区根。
       - uses: actions/checkout@v6
         with:
           repository: onesyue/yuelink
@@ -295,9 +288,12 @@ jobs:
           [ -n "$APKSIGNER" ] || { echo "::error::找不到 apksigner"; exit 1; }
           fail=0
           for apk in dist/YueLink-*-android-*.apk; do
+            # 取 "...SHA-256 digest: <hex>" 行冒号后的 hex。用 sed 删到最后一个
+            # "digest:" 为止,对 apksigner 输出里前缀冒号的数量不敏感(旧 awk -F': '
+            # 在新 build-tools 输出格式下会误取标签文字 "certificate SHA-256 digest")。
             got=$("$APKSIGNER" verify --print-certs "$apk" \
-                  | awk -F': ' '/certificate SHA-256 digest/{print $2; exit}' \
-                  | tr 'A-F' 'a-f' | tr -d ' ')
+                  | sed -n 's/.*SHA-256 digest:[[:space:]]*//p' | head -1 \
+                  | tr 'A-F' 'a-f' | tr -d '[:space:]')
             if [ "$got" != "$EXPECT_SHA256" ]; then
               echo "::error::$(basename "$apk") 签名 $got ≠ 预期 release key — 拒绝发布(防签名冲突)"
               fail=1
@@ -814,8 +810,6 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      # 私有源 checkout(同 build job)。fetch-depth:0 + tags:release notes 步骤
-      # 用 git tag/git log 取上一个 tag 拼 Full Changelog,需要完整历史。
       - uses: actions/checkout@v6
         with:
           repository: onesyue/yuelink
