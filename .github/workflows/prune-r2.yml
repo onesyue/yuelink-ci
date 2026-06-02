@@ -1,0 +1,83 @@
+name: Prune old versions from R2
+
+# 自动删除 R2 (yuelink-dist) 里的旧版本安装包, 只保留 manifest
+# (update.json / update-pre.json) 当前指向的版本 → R2 永远只留当前版本(~1.1GB),
+# 远在免费档 10GB 存储之下(R2 egress 全免, 只需守住 storage)。
+#
+# 2026-06-02: 与发版解耦 —— 改为每日定时跑(原先挂在 release 之后, prune 一失败
+# 整次发版就标红, 误导成"发版失败")。发版只管发布, 清理交给这个定时任务。
+#
+# 触发:
+#   - schedule : 每日 18:30 UTC 自动 prune + 报告存储用量。
+#   - workflow_dispatch : 手动触发(临时清理 / 排查)。
+#
+# 安全: 保留集只从 manifest 读取; 读不到则**中止**, 绝不在不确定时删除。
+
+on:
+  schedule:
+    - cron: '30 18 * * *'   # 每日 18:30 UTC ≈ 次日 02:30 北京
+  workflow_dispatch:
+
+# 只用 R2 secrets + aws-cli, 不碰 GITHUB_TOKEN / 不 checkout → 零 token 权限。
+permissions: {}
+
+jobs:
+  prune:
+    name: Prune old version prefixes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prune R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_APP_KEY }}
+          R2_ENDPOINT: https://1e192a89cfaab399d211bb1dfe77a5cd.r2.cloudflarestorage.com
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          BUCKET: yuelink-dist
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+            echo "::error::R2_KEY_ID/R2_APP_KEY 未配置 — 无法 prune"; exit 1
+          fi
+
+          # 1) 从 manifest 确定要保留的版本(当前 stable + pre)。读不到 → 中止。
+          KEEP=""
+          for m in update.json update-pre.json; do
+            v=$(aws s3 cp "s3://$BUCKET/$m" - --endpoint-url "$R2_ENDPOINT" 2>/dev/null \
+                | jq -r '.version // empty' 2>/dev/null || true)
+            [ -n "$v" ] && KEEP="$KEEP v$v"
+          done
+          KEEP=$(echo $KEEP | tr ' ' '\n' | grep -v '^$' | sort -u || true)
+          if [ -z "$KEEP" ]; then
+            echo "::error::无法从 manifest 读出要保留的版本 — 中止(绝不在不确定时删除)"
+            exit 1
+          fi
+          echo "保留版本(manifest 当前指向):"; echo "$KEEP" | sed 's/^/  /'
+
+          # 2) 列出所有 vX.Y.Z/ 版本前缀, 删除不在保留集里的。
+          aws s3 ls "s3://$BUCKET/" --endpoint-url "$R2_ENDPOINT" \
+            | awk '/ PRE /{print $2}' | sed 's#/##' | while read -r p; do
+            case "$p" in v[0-9]*) ;; *) continue ;; esac   # 只动 vX.Y.Z 前缀
+            if echo "$KEEP" | grep -qx "$p"; then
+              echo "✓ 保留 $p"
+            else
+              echo "🗑  删除旧版本 $p"
+              # 注意: `aws s3 rm` 不支持 --no-progress(只 cp/sync/mv 支持)→
+              # 加了会 ParamValidation exit 252。v1.2.34 prune 即栽在这。
+              aws s3 rm "s3://$BUCKET/$p/" --recursive \
+                --endpoint-url "$R2_ENDPOINT"
+            fi
+          done
+          echo "✓ prune 完成"
+
+          # 3) 存储用量报告 + 守护(免费档 10GB)。prune 后正常应 ~1.1GB。
+          #    >8GB(80%)发 ::warning:: 提醒; 不 fail(避免噪音), 只示警。
+          BYTES=$(aws s3 ls "s3://$BUCKET/" --recursive --endpoint-url "$R2_ENDPOINT" --summarize 2>/dev/null \
+                  | awk '/Total Size:/{print $3}')
+          BYTES=${BYTES:-0}
+          GB=$(awk "BEGIN{printf \"%.2f\", $BYTES/1024/1024/1024}")
+          echo "R2 yuelink-dist 当前用量: ${GB} GB / 10 GB 免费档"
+          if awk "BEGIN{exit !($BYTES > 8*1024*1024*1024)}"; then
+            echo "::warning::R2 存储 ${GB}GB 已超 8GB(免费档 80%)— 检查是否有未被 manifest 引用的残留版本没清掉"
+          fi
