@@ -6,7 +6,7 @@ name: Build YueLink
 # │ 触发:在本仓打同名 tag 并推送(vX.Y.Z / pre)→ checkout 私有仓同名 tag。 │
 # │ 产物全部进 Cloudflare R2(yuetong.app CDN origin),GitHub 这边不留产物、 │
 # │ 不建 Release → 公开仓里别人下不到任何东西。                              │
-# │ 需要的 secrets 见仓库 README;源码 checkout 用 SRC_PAT(只读 yuelink)。  │
+# │ 需要的 secrets 见 README;源码 checkout 用 SRC_DEPLOY_KEY(只读部署密钥)。│
 # └─────────────────────────────────────────────────────────────────────────┘
 #
 # Release builds. One matrix job covers every platform; release downloads
