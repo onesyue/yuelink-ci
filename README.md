@@ -30,17 +30,18 @@ git tag vX.Y.Z && git push origin vX.Y.Z
 
 `pre`(预发布)同理:`git tag -f pre && git push -f origin pre`。
 
-## 必须配的 Secrets(Settings → Secrets and variables → Actions)
+## Secrets(Settings → Secrets and variables → Actions)
 
-| Secret | 用途 |
-|---|---|
-| `SRC_PAT` | **新建**。fine-grained PAT,只读 Contents,**仅 `onesyue/yuelink` 一个仓**。用于 checkout 私有源 |
-| `R2_KEY_ID` / `R2_APP_KEY` | R2 上传(产物 + manifest)。值同私有仓 |
-| `KEYSTORE_BASE64` `KEYSTORE_PASSWORD` `KEY_ALIAS` `KEY_PASSWORD` | Android 签名 |
-| `APPLE_CERTIFICATE_BASE64` `APPLE_CERTIFICATE_PASSWORD` `APPLE_SIGNING_IDENTITY` `APPLE_ID` `APPLE_PASSWORD` `APPLE_TEAM_ID` | macOS 签名 / 公证 |
-| `WINDOWS_CERT_BASE64` `WINDOWS_CERT_PASSWORD` | Windows 签名 |
+**必需**(私有仓里有这 6 个 → 复制过来;构建缺它们会失败):
 
-值全部复制自私有仓的同名 secret。
+| Secret | 用途 | 状态 |
+|---|---|---|
+| `SRC_PAT` | **新建**。fine-grained PAT,只读 Contents,**仅 `onesyue/yuelink`**。checkout 私有源 | ⬜ 待建 |
+| `R2_KEY_ID` / `R2_APP_KEY` | R2 上传(产物 + manifest) | ⬜ 待填值 |
+| `KEYSTORE_BASE64` `KEYSTORE_PASSWORD` `KEY_ALIAS` `KEY_PASSWORD` | Android 签名 | ✅ 已设 |
+
+**可选**(私有仓里**本就没有**,故 macOS/Windows 当前是未签名/自签构建,与现状一致;
+要签名再补):`APPLE_*`(6 个,macOS 签名/公证)、`WINDOWS_CERT_BASE64`/`WINDOWS_CERT_PASSWORD`。
 
 ### SRC_PAT 怎么建
 
