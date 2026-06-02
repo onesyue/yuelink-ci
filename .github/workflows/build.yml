@@ -63,30 +63,36 @@ jobs:
   # Every row: setup go+flutter → build core → install core → flutter build
   #            → package → upload artifact named yuelink-<platform>.
   # ───────────────────────────────────────────────────────────────────────────
+  # 动态矩阵:按 workflow_dispatch 的 only 输入裁剪要构建的平台。job 级 if 无法用
+  # matrix 上下文(GitHub 限制),故用一个轻量 prepare job 算出矩阵,build 用
+  # fromJSON 消费。tag/push 发版时 only 为空 → 全平台。
+  prepare:
+    name: Prepare matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        env:
+          ONLY: ${{ github.event.inputs.only }}
+        run: |
+          set -euo pipefail
+          ALL='[{"platform":"android","os":"ubuntu-latest"},{"platform":"ios","os":"macos-latest"},{"platform":"macos","os":"macos-latest"},{"platform":"windows","os":"windows-latest"},{"platform":"linux","os":"ubuntu-latest"}]'
+          if [ -z "${ONLY:-}" ] || [ "$ONLY" = "all" ]; then
+            sel="$ALL"
+          else
+            sel=$(printf '%s' "$ALL" | jq -c --arg p "$ONLY" '[.[]|select(.platform==$p)]')
+          fi
+          printf 'matrix={"include":%s}\n' "$sel" >> "$GITHUB_OUTPUT"
+          echo "选中平台: ${ONLY:-all}"
+
   build:
     name: Build (${{ matrix.platform }})
+    needs: prepare
     runs-on: ${{ matrix.os }}
-    # 手动触发(workflow_dispatch)可只构建单平台测试;tag 推送(发版)恒全平台。
-    # 用 github.event.inputs(恒可用)而非 inputs 上下文——后者只在 dispatch/call
-    # 工作流有效,本 workflow 含 push 触发,引用 inputs 会让整个文件校验失败。
-    if: >-
-      github.event_name != 'workflow_dispatch'
-      || github.event.inputs.only == 'all'
-      || github.event.inputs.only == matrix.platform
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - platform: android
-            os: ubuntu-latest
-          - platform: ios
-            os: macos-latest
-          - platform: macos
-            os: macos-latest
-          - platform: windows
-            os: windows-latest
-          - platform: linux
-            os: ubuntu-latest
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       # 2026-06-01: Android(及 Linux)构建 native libs 时撑爆 ubuntu runner 磁盘
       # (No space left on device @ mergeReleaseNativeLibs)。先清掉用不到的大件
