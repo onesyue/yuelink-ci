@@ -67,10 +67,12 @@ jobs:
     name: Build (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
     # 手动触发(workflow_dispatch)可只构建单平台测试;tag 推送(发版)恒全平台。
+    # 用 github.event.inputs(恒可用)而非 inputs 上下文——后者只在 dispatch/call
+    # 工作流有效,本 workflow 含 push 触发,引用 inputs 会让整个文件校验失败。
     if: >-
       github.event_name != 'workflow_dispatch'
-      || inputs.only == 'all'
-      || inputs.only == matrix.platform
+      || github.event.inputs.only == 'all'
+      || github.event.inputs.only == matrix.platform
     strategy:
       fail-fast: false
       matrix:
