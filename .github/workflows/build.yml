@@ -400,10 +400,7 @@ jobs:
 
       - name: Refresh icons + DMG background
         if: matrix.platform == 'macos'
-        run: |
-          python3 -c "import PIL" 2>/dev/null || \
-            python3 -m pip install --quiet --break-system-packages Pillow
-          python3 scripts/round_appicon.py
+        run: dart run tool/round_appicon.dart
 
       - name: Enable macOS desktop
         if: matrix.platform == 'macos'
@@ -607,10 +604,7 @@ jobs:
       - name: Generate Inno Setup wizard images
         if: matrix.platform == 'windows'
         shell: bash
-        run: |
-          python3 -c "import PIL" 2>/dev/null || \
-            python3 -m pip install --quiet --break-system-packages Pillow
-          python3 scripts/round_appicon.py
+        run: dart run tool/round_appicon.dart
 
       - name: Install Inno Setup Chinese language pack
         if: matrix.platform == 'windows'
@@ -662,10 +656,7 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────
       - name: Refresh Linux squircle icon
         if: matrix.platform == 'linux'
-        run: |
-          python3 -c "import PIL" 2>/dev/null || \
-            python3 -m pip install --quiet --break-system-packages Pillow
-          python3 scripts/round_appicon.py
+        run: dart run tool/round_appicon.dart
 
       - name: Build Linux
         if: matrix.platform == 'linux'
