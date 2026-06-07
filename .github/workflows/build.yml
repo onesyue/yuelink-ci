@@ -451,6 +451,30 @@ jobs:
             --sign "$APPLE_SIGNING_IDENTITY" "$APP"
           codesign --verify --deep --strict --verbose=2 "$APP"
 
+      - name: Ad-hoc sign YueLink.app (no Apple account — free Gatekeeper relief)
+        if: matrix.platform == 'macos' && env.APPLE_SIGNING_IDENTITY == ''
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          # Without a paid Developer ID we can't notarize, but an *ad-hoc*
+          # signature (codesign --sign -) still gives every Mach-O a valid
+          # signature. That matters on Apple Silicon: a downloaded, totally
+          # unsigned arm64 .app is rejected outright as "已损坏 / is damaged"
+          # and won't open at all. Ad-hoc signing downgrades that to the normal
+          # "unidentified developer" Gatekeeper prompt, which the user can
+          # bypass via right-click → Open (or the bundled 修复无法打开.command).
+          # Sign inside-out: nested code first, bundle last. No entitlements —
+          # macOS YueLink uses networksetup + App Support JSON, not
+          # entitlement-gated APIs, and ad-hoc + restricted entitlements can
+          # break launch.
+          APP="build/macos/Build/Products/Release/YueLink.app"
+          find "$APP/Contents/Frameworks" -type f \( -name '*.dylib' -o -name '*.so' \) \
+            -exec codesign --force --timestamp=none --sign - {} \; 2>/dev/null || true
+          find "$APP/Contents/Frameworks" -type d -name '*.framework' \
+            -exec codesign --force --timestamp=none --sign - {} \; 2>/dev/null || true
+          codesign --force --timestamp=none --sign - "$APP"
+          codesign --verify --verbose=2 "$APP" || true
+
       - name: Package macOS .dmg
         if: matrix.platform == 'macos'
         shell: bash
