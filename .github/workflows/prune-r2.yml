@@ -8,14 +8,20 @@ name: Prune old versions from R2
 # 整次发版就标红, 误导成"发版失败")。发版只管发布, 清理交给这个定时任务。
 #
 # 触发:
-#   - schedule : 每日 18:30 UTC 自动 prune + 报告存储用量。
+#   - workflow_run : "Build YueLink" 完成后自动跑(发版末尾 update.json 已更新,
+#     正好清掉旧版)。作为独立 workflow, prune 失败只标红它自己、不污染发版状态
+#     —— 仍尊重 2026-06-02 的解耦决定。这条修掉了"GitHub cron 漏跑 → 旧版堆积"。
+#   - schedule : 每日 18:30 UTC 兜底(cron 不可靠, 可能延迟/跳过)。
 #   - workflow_dispatch : 手动触发(临时清理 / 排查)。
 #
 # 安全: 保留集只从 manifest 读取; 读不到则**中止**, 绝不在不确定时删除。
 
 on:
+  workflow_run:
+    workflows: ["Build YueLink"]
+    types: [completed]
   schedule:
-    - cron: '30 18 * * *'   # 每日 18:30 UTC ≈ 次日 02:30 北京
+    - cron: '30 18 * * *'   # 每日 18:30 UTC ≈ 次日 02:30 北京 (兜底)
   workflow_dispatch:
 
 # 只用 R2 secrets + aws-cli, 不碰 GITHUB_TOKEN / 不 checkout → 零 token 权限。
@@ -25,6 +31,8 @@ jobs:
   prune:
     name: Prune old version prefixes
     runs-on: ubuntu-latest
+    # workflow_run 触发时只在构建成功后清(失败构建不动 R2); schedule/手动恒跑。
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Prune R2
         env:
