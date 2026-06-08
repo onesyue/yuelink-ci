@@ -348,6 +348,15 @@ jobs:
           key: pods-ios-${{ hashFiles('ios/Podfile.lock') }}
           restore-keys: pods-ios-
 
+      - name: Disable Swift Package Manager (iOS — force CocoaPods)
+        # Flutter 3.44's experimental SPM double-resolves the Sentry xcframework
+        # (flutter assemble + xcodebuild) and crashes with "already exists in file
+        # system" — a deterministic flake that fails the iOS build on retries. The
+        # project is CocoaPods-based, so this is functionally a no-op and makes the
+        # iOS build deterministic.
+        if: matrix.platform == 'ios'
+        run: flutter config --no-enable-swift-package-manager
+
       - name: Build iOS
         if: matrix.platform == 'ios'
         run: |
