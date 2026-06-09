@@ -217,8 +217,9 @@ jobs:
           }
           fetch_verified GeoIP.dat    geoip.dat
           fetch_verified GeoSite.dat  geosite.dat
-          fetch_verified country.mmdb country.mmdb
-          fetch_verified ASN.mmdb     GeoLite2-ASN.mmdb
+          # country.mmdb + ASN.mmdb intentionally NOT fetched/bundled — dead
+          # weight under geodata-mode:true (~19 MB saved). pubspec only bundles
+          # GeoIP.dat + GeoSite.dat; see GeoDataService._bundledFiles.
 
       # ── Resolve version: pubspec for stable, append -pre for pre tag ──────
       # Match both the legacy `pre` overwrite-channel tag and the
