@@ -56,6 +56,10 @@ env:
   # "updates to go.mod needed". Effects are CI-ephemeral (runner
   # working tree only); we never commit back into core/mihomo.
   GOFLAGS: -mod=mod
+  # Opt JS actions (actions/attest*, etc.) into Node.js 24 now, ahead of the
+  # 2026-06-16 forced default — silences the recurring Node 20 deprecation
+  # warning. Safe to drop once Node 24 is the runner default.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # ───────────────────────────────────────────────────────────────────────────
