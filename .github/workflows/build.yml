@@ -201,12 +201,13 @@ jobs:
           fetch_verified() {
             local local_name="$1"
             local remote_name="$2"
+            local base="${3:-$BASE}"
             local dest="assets/geodata/${local_name}"
             local sum="assets/geodata/${local_name}.sha256sum"
             curl -fSL --retry 3 --retry-delay 2 \
-              -o "$dest" "${BASE}/${remote_name}"
+              -o "$dest" "${base}/${remote_name}"
             curl -fSL --retry 3 --retry-delay 2 \
-              -o "$sum" "${BASE}/${remote_name}.sha256sum"
+              -o "$sum" "${base}/${remote_name}.sha256sum"
             # Rewrite the sidecar's filename column so `sha256sum -c` finds
             # the locally-renamed file. Preserves the 64-hex digest verbatim.
             local digest
@@ -219,7 +220,15 @@ jobs:
             ( cd assets/geodata && sha256sum -c "${local_name}.sha256sum" )
             rm -f "$sum"
           }
-          fetch_verified GeoIP.dat    geoip.dat
+          # GeoIP: CN-lite (CN + private only, ~74 KB vs ~19.7 MB full) from
+          # Loyalsoldier — saves ~19.6 MB install size. GEOIP,CN (the ONLY
+          # GEOIP rule the bundled config uses) resolves offline from this; any
+          # other GEOIP,<cc> a third-party subscription references self-heals
+          # within 24h via geo-auto-update (geox-url → geo.yuetong.app serves
+          # the full file). ⚠️ MUST smoke-test China-direct routing on a `pre`
+          # build before shipping a stable release.
+          LOYAL="https://github.com/Loyalsoldier/geoip/releases/latest/download"
+          fetch_verified GeoIP.dat    geoip-only-cn-private.dat  "$LOYAL"
           fetch_verified GeoSite.dat  geosite.dat
           # country.mmdb + ASN.mmdb intentionally NOT fetched/bundled — dead
           # weight under geodata-mode:true (~19 MB saved). pubspec only bundles
