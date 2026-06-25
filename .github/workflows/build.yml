@@ -653,15 +653,6 @@ jobs:
         shell: bash
         run: dart run tool/round_appicon.dart
 
-      - name: Install Inno Setup Chinese language pack
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          $isl = "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseSimplified.isl"
-          if (-not (Test-Path $isl)) {
-            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl" -OutFile $isl
-          }
-
       - name: Download VC++ 2015-2022 Redistributable (bundled into installer)
         if: matrix.platform == 'windows'
         shell: pwsh
