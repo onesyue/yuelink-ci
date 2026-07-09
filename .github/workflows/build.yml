@@ -94,6 +94,10 @@ jobs:
     name: Build (${{ matrix.platform }})
     needs: prepare
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write      # OIDC for build-provenance attestation
+      attestations: write  # store the signed attestation per platform binary
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
@@ -811,6 +815,19 @@ jobs:
       #    GHA artifact。根因: GitHub Actions 存储配额"计量"每 6-12h 才重算, 即使删光
       #    旧 artifact, 配额表仍显示满 → 所有 upload-artifact 失败(含构建产物)→ 卡发布。
       #    走 R2(本就是分发通道)彻底绕开这个计量滞后。aws s3 sync 跨 win/mac/linux 通用。
+      # Provenance attestation runs HERE (build job), not in release: the
+      # release job downloads only .sha256 sidecars (binaries live in R2), so
+      # `subject-path: dist/*` there matched nothing → "Could not find subject"
+      # (was continue-on-error, so it silently produced NO attestation). At
+      # this point dist/ holds exactly this platform's freshly-built binaries
+      # (the .sha256 sidecars are generated inside the publish step below), so
+      # each platform attests its own artifact.
+      - name: Attest build provenance
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'dist/*'
+
       - name: Publish binaries to R2 (yuelink-dist/<tag>/)
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
@@ -1065,27 +1082,14 @@ jobs:
       # 2026-05-31 硬切:删除 "Create GitHub Release" — 分发不再经 GitHub。
       # 二进制 + manifest 在下方 "Publish to R2" 步上传到 yuetong.app CDN origin。
 
-      # ── Build provenance attestation ────────────────────────────────
-      # Signs each binary with a Sigstore-rooted OIDC certificate proving
-      # this exact byte sequence came out of this workflow run. Verifiable
-      # post-release with `gh attestation verify <binary> --owner onesyue`.
-      # Skips silently for the consolidated SHA256SUMS / SBOM files —
-      # they're metadata, not distributable binaries.
-      # 2026-06-01: 仓库转私有后此 feature 对 user-owned private repo 不可用
-      # ("Feature not available for user-owned private repositories")，会硬失败并
-      # 挡住后面的 R2 发布 → continue-on-error 让它失败不阻断发布(分发已走 R2，
-      # SHA256SUMS sidecar 提供校验，attestation 非必需)。
-      - name: Attest binary provenance
-        continue-on-error: true
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: |
-            dist/*.apk
-            dist/*.ipa
-            dist/*.dmg
-            dist/*.exe
-            dist/*.zip
-            dist/*.AppImage
+      # ── Build provenance attestation moved to the build job ─────────────
+      # It used to run here, but this release job downloads only the KB-sized
+      # .sha256 sidecars (binaries live in R2), so `subject-path: dist/*`
+      # matched nothing → "Could not find subject" (masked by
+      # continue-on-error → NO attestation was ever produced). Each build
+      # job now attests its own freshly-built binary before the R2 upload,
+      # where the file is still local. Verify post-release with
+      # `gh attestation verify <binary> --owner onesyue`.
 
       # ── Updater manifest published to fixed `updater` tag ────────────────
       - name: Generate updater manifest
