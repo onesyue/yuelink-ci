@@ -20,7 +20,10 @@ name: Build YueLink
 
 on:
   push:
-    tags: ['v*', 'pre']
+    # The floating `pre` tag is gone with the pre-release update channel.
+    # `vX.Y.Z-pre` still builds (internal test artifacts + a GitHub
+    # prerelease) but no longer publishes any updater manifest.
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       only:
@@ -42,7 +45,7 @@ permissions:
   contents: read
 
 env:
-  FLUTTER_VERSION: '3.44.1'
+  FLUTTER_VERSION: '3.44.4'
   # Aligned to the mihomo upstream release toolchain (v1.19.23 builds with
   # Go 1.26.4). Bumped from 1.23 without changing mihomo's tag or touching
   # core/go.mod / service/go.mod's `go 1.22` directive (that stays at the
@@ -938,7 +941,7 @@ jobs:
           cd dist
           # Per-binary sidecars: kept because the updater-manifest step
           # downstream reads `dist/$file.sha256` to embed hashes in
-          # update.json / update-pre.json. NOT uploaded to the Release
+          # update.json. NOT uploaded to the Release
           # page (excluded by the `files:` pattern in the Create Release
           # step) — they used to clutter the page with N extra rows.
           for f in *; do
@@ -972,18 +975,12 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           NOTES_FILE=""
           # Prerelease detection must mirror the manifest / release-flag
-          # branches above — `pre` and any `vX.Y.Z-pre` both get the
-          # "Pre-release" title. Previously only the floating `pre` tag
-          # took this branch, so `v1.0.19-pre` was getting the plain
-          # stable title and skipping docs/releases/pre.md fallback.
-          if [[ "$TAG" == "pre" || "$TAG" == *-pre ]]; then
+          # branches above. `docs/releases/pre.md` is gone with the pre
+          # channel — a `vX.Y.Z-pre` tag needs its own notes file.
+          if [[ "$TAG" == *-pre ]]; then
             VERSION="${VERSION}-pre"
             TITLE="YueLink v${VERSION} Pre-release"
-            if [ -f "docs/releases/${TAG}.md" ]; then
-              NOTES_FILE="docs/releases/${TAG}.md"
-            elif [ -f docs/releases/pre.md ]; then
-              NOTES_FILE="docs/releases/pre.md"
-            fi
+            [ -f "docs/releases/${TAG}.md" ] && NOTES_FILE="docs/releases/${TAG}.md"
           else
             TITLE="YueLink v${VERSION}"
             [ -f "docs/releases/v${VERSION}.md" ] && NOTES_FILE="docs/releases/v${VERSION}.md"
@@ -1096,19 +1093,18 @@ jobs:
         run: |
           VERSION="${{ env.APP_VERSION }}"
           TAG="${GITHUB_REF_NAME}"
-          # Pre-release detection must match the Release job's `prerelease`
-          # flag above — both the floating `pre` tag AND any `vX.Y.Z-pre`
-          # variant route to the pre-release manifest/channel. The previous
-          # `[ "$TAG" = "pre" ]` check treated `v1.0.19-pre` as stable,
-          # pushing it into update.json and flipping the stable channel to
-          # an unreleased build.
-          if [[ "$TAG" == "pre" || "$TAG" == *-pre ]]; then
-            MANIFEST_NAME="update-pre.json"
-            CHANNEL="pre"
-          else
-            MANIFEST_NAME="update.json"
-            CHANNEL="stable"
+          # There is exactly one channel now — stable/`update.json`. The
+          # pre-release channel was retired, so a `vX.Y.Z-pre` tag must NOT
+          # publish a manifest at all: it still produces test artifacts and a
+          # GitHub prerelease, but writing it into update.json would flip
+          # every stable user onto an unreleased build.
+          if [[ "$TAG" == *-pre ]]; then
+            echo "::notice::$TAG is a prerelease tag — skipping manifest publish (no pre channel)"
+            echo "SKIP_MANIFEST=1" >> "$GITHUB_ENV"
+            exit 0
           fi
+          MANIFEST_NAME="update.json"
+          CHANNEL="stable"
           # 2026-05-31 硬切:分发走自有 CDN yuetong.app (R2 origin),不再用
           # GitHub Releases。二进制上传到 R2 的 <tag>/ 前缀下。
           BASE="https://yuetong.app/${TAG}"
@@ -1165,6 +1161,7 @@ jobs:
       # added one of those files to the iteration list. Cheap defensive
       # check; fails loudly before publishing.
       - name: Manifest URL extension guard
+        if: env.SKIP_MANIFEST != '1'
         run: |
           set -euo pipefail
           MANIFEST="${MANIFEST_NAME}"
@@ -1182,7 +1179,7 @@ jobs:
       # ── Publish binaries + manifest to Cloudflare R2 (yuetong.app CDN origin) ──
       # 2026-05-31 硬切:分发全部走 R2,不再用 GitHub Releases / updater tag。
       # 用 R2 的 S3 兼容端点 + aws-cli(runner 自带)。二进制传到 <tag>/ 前缀,
-      # manifest 传到桶根 (客户端拉 https://yuetong.app/{update,update-pre}.json)。
+      # manifest 传到桶根 (客户端拉 https://yuetong.app/update.json)。
       - name: Publish to R2 (yuetong.app CDN origin)
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
@@ -1208,12 +1205,17 @@ jobs:
             aws s3 cp "$f" "s3://$BUCKET/$TAG/$(basename "$f")" \
               --endpoint-url "$R2_ENDPOINT" --no-progress
           done
-          # manifest 传桶根,低 TTL 让新版本及时被发现。
-          aws s3 cp "$MANIFEST_NAME" "s3://$BUCKET/$MANIFEST_NAME" \
-            --endpoint-url "$R2_ENDPOINT" --no-progress \
-            --content-type application/json \
-            --cache-control "no-cache, max-age=60"
-          echo "✓ 已发布 $MANIFEST_NAME + 安装包到 R2 ($BUCKET/$TAG/)"
+          # manifest 传桶根,低 TTL 让新版本及时被发现。prerelease tag 不发
+          # manifest(pre 通道已下线),只把测试产物留在 <tag>/ 下。
+          if [ "${SKIP_MANIFEST:-0}" = "1" ]; then
+            echo "✓ 已发布安装包到 R2 ($BUCKET/$TAG/) — prerelease, 未发布 manifest"
+          else
+            aws s3 cp "$MANIFEST_NAME" "s3://$BUCKET/$MANIFEST_NAME" \
+              --endpoint-url "$R2_ENDPOINT" --no-progress \
+              --content-type application/json \
+              --cache-control "no-cache, max-age=60"
+            echo "✓ 已发布 $MANIFEST_NAME + 安装包到 R2 ($BUCKET/$TAG/)"
+          fi
 
   # ───────────────────────────────────────────────────────────────────────────
   # 2026-06-02 旧版本清理已与发版解耦: 改由 prune-r2.yml 每日定时跑(+ 手动)。
