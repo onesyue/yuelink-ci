@@ -987,8 +987,8 @@ jobs:
           fi
 
           # Resolve previous tag for the Full Changelog link (skip the current
-          # one, floating `pre`, and any `*-pre` variant so stable releases
-          # compare to the prior stable tag instead of a prerelease).
+          # one and any `*-pre` variant so stable releases compare to the
+          # prior stable tag instead of a prerelease).
           PREV_TAG=$(git tag --sort=-creatordate \
             | grep -E '^v[0-9]' \
             | grep -Fxv "$TAG" \
