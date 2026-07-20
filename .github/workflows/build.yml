@@ -1108,7 +1108,11 @@ jobs:
           # 2026-05-31 硬切:分发走自有 CDN yuetong.app (R2 origin),不再用
           # GitHub Releases。二进制上传到 R2 的 <tag>/ 前缀下。
           BASE="https://yuetong.app/${TAG}"
-          RELEASE_URL="https://yuetong.app/"
+          # NOT the CDN root: yuetong.app serves R2 objects only — GET /
+          # is a 404, and releaseUrl is the client's terminal fallback
+          # (iOS post-download, manifest-missing platforms). Point it at
+          # the real download page.
+          RELEASE_URL="https://yue.to/download.html"
           NOTES=$(cat release_notes.md | head -100 | jq -Rs .)
 
           sha() {
