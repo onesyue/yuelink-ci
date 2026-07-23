@@ -209,9 +209,11 @@ jobs:
           fi
           # Every .mrs is a zstd frame — magic 0x28 0xB5 0x2F 0xFD. A file that
           # isn't (e.g. an HTML 404 page committed by mistake) would brick
-          # rule-provider load on device; catch it here.
+          # rule-provider load on device; catch it here. Use `od` (POSIX,
+          # present on ubuntu/macos/git-bash) — NOT `xxd`, which is missing on
+          # some Windows/macOS runners.
           for f in "$dir"/*.mrs; do
-            magic=$(head -c4 "$f" | xxd -p)
+            magic=$(od -An -tx1 -N4 "$f" | tr -d ' \n')
             if [ "$magic" != "28b52ffd" ]; then
               echo "::error::$f is not a zstd .mrs (magic=$magic) — corrupt seed committed?"
               exit 1
