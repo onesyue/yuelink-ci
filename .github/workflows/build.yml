@@ -241,6 +241,19 @@ jobs:
           # weight under geodata-mode:true (~19 MB saved). pubspec only bundles
           # GeoIP.dat + GeoSite.dat; see GeoDataService._bundledFiles.
 
+          # ── Capability assertion (v1.2.87/88 prod-brick lesson) ──────────
+          # GeoRuleInliningTransformer may only emit GEOIP rules for
+          # categories the CN-lite bundle carries (cn/private; telegram is
+          # expanded to static IP-CIDRs client-side). v1.2.87 emitted
+          # GEOIP,telegram against this file → hub.Parse hard-failed on EVERY
+          # official install (dev machines had the full 19.7MB file locally,
+          # so it slipped through). Lock both sides together:
+          grep -aq PRIVATE assets/geodata/GeoIP.dat \
+            || { echo "::error::bundled GeoIP.dat lacks PRIVATE — wrong variant?"; exit 1; }
+          grep -q "_bundledGeoipCats = {'cn', 'private'}" \
+            lib/core/kernel/config/geo_rule_inlining_transformer.dart \
+            || { echo "::error::transformer GEOIP allowlist drifted from the CN-lite bundle — update the bundled geodata (or this assertion) in the SAME change"; exit 1; }
+
       # ── Resolve version: pubspec for stable, append -pre for pre tag ──────
       # Match both the legacy `pre` overwrite-channel tag and the
       # versioned `vX.Y.Z-pre` / `vX.Y.Z-pre.N` prerelease tags. Before
