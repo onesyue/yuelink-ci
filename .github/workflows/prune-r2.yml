@@ -1,7 +1,7 @@
 name: Prune old versions from R2
 
 # 自动删除 R2 (yuelink-dist) 里的旧版本安装包, 只保留 manifest
-# (update.json / update-pre.json) 当前指向的版本 → R2 永远只留当前版本(~1.1GB),
+# (update.json) 当前指向的版本 → R2 永远只留当前版本(~1.1GB),
 # 远在免费档 10GB 存储之下(R2 egress 全免, 只需守住 storage)。
 #
 # 2026-06-02: 与发版解耦 —— 改为每日定时跑(原先挂在 release 之后, prune 一失败
@@ -49,9 +49,10 @@ jobs:
             echo "::error::R2_KEY_ID/R2_APP_KEY 未配置 — 无法 prune"; exit 1
           fi
 
-          # 1) 从 manifest 确定要保留的版本(当前 stable + pre)。读不到 → 中止。
+          # 1) 从 manifest 确定要保留的版本。读不到 → 中止。
+          #    只有一个通道(update.json); pre 通道已于 2026-07-20 下线。
           KEEP=""
-          for m in update.json update-pre.json; do
+          for m in update.json; do
             v=$(aws s3 cp "s3://$BUCKET/$m" - --endpoint-url "$R2_ENDPOINT" 2>/dev/null \
                 | jq -r '.version // empty' 2>/dev/null || true)
             [ -n "$v" ] && KEEP="$KEEP v$v"
