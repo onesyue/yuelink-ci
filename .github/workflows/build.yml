@@ -189,66 +189,39 @@ jobs:
           } >> "$GITHUB_ENV"
 
       # ── Geodata: declared as Flutter assets, .gitignored — fetch at CI ────
-      # Each upstream .dat/.mmdb ships alongside a <file>.sha256sum sidecar
-      # from MetaCubeX/meta-rules-dat (GNU sha256sum format). We verify the
-      # bytes against the sidecar and HARD FAIL the job on mismatch OR when
-      # the sidecar itself is missing. Rationale: CI produces the artifact
-      # that ships to every user — strict verification here is cheap and
-      # the trust boundary. Runtime (lib/core/kernel/geodata_service.dart)
-      # is fail-soft by design (see comment there).
-      - name: Download geodata files
+      # (v1.2.90) The 23 MB GeoIP/GeoSite.dat bundle + its CI download/assert
+      # is GONE. The client no longer inlines GEOSITE/GEOIP rules — it seeds
+      # the ~1 MB `.mrs` rule-provider set (assets/ruleset/, committed to git)
+      # into ./ruleset/ at startup, exactly like Clash Verge Rev / FlClash.
+      # This structurally eliminates the v1.2.87/88 "bundled geodata vs rules
+      # mismatch" brick class: there is no geodata pack to mismatch. The .mrs
+      # are checked out from git (no build-time network dependency); this
+      # guard just proves the checkout carries a sane, non-empty set.
+      - name: Verify bundled ruleset (.mrs seed set)
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p assets/geodata
-          BASE="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/release"
-          # Map: local-filename → upstream-remote-filename
-          # Upstream publishes lowercase geoip.dat/geosite.dat; we rename on
-          # save to preserve the capitalised names expected by mihomo assets.
-          fetch_verified() {
-            local local_name="$1"
-            local remote_name="$2"
-            local base="${3:-$BASE}"
-            local dest="assets/geodata/${local_name}"
-            local sum="assets/geodata/${local_name}.sha256sum"
-            curl -fSL --retry 3 --retry-delay 2 \
-              -o "$dest" "${base}/${remote_name}"
-            curl -fSL --retry 3 --retry-delay 2 \
-              -o "$sum" "${base}/${remote_name}.sha256sum"
-            # Rewrite the sidecar's filename column so `sha256sum -c` finds
-            # the locally-renamed file. Preserves the 64-hex digest verbatim.
-            local digest
-            digest=$(awk 'NR==1{print $1}' "$sum")
-            if [ -z "$digest" ] || [ ${#digest} -ne 64 ]; then
-              echo "ERROR: unparseable sidecar for $remote_name" >&2
+          dir=assets/ruleset
+          count=$(ls "$dir"/*.mrs 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$count" -lt 30 ]; then
+            echo "::error::assets/ruleset has only $count .mrs (<30) — the committed seed set is missing/truncated. RulesetSeedService would seed an empty ./ruleset and every RULE-SET would fail."
+            exit 1
+          fi
+          # Every .mrs is a zstd frame — magic 0x28 0xB5 0x2F 0xFD. A file that
+          # isn't (e.g. an HTML 404 page committed by mistake) would brick
+          # rule-provider load on device; catch it here.
+          for f in "$dir"/*.mrs; do
+            magic=$(head -c4 "$f" | xxd -p)
+            if [ "$magic" != "28b52ffd" ]; then
+              echo "::error::$f is not a zstd .mrs (magic=$magic) — corrupt seed committed?"
               exit 1
             fi
-            printf '%s  %s\n' "$digest" "$local_name" > "$sum"
-            ( cd assets/geodata && sha256sum -c "${local_name}.sha256sum" )
-            rm -f "$sum"
-          }
-          # GeoIP: FULL file (~19.7 MB), same source as the mirror's .mrs
-          # (meta-rules-dat). The client's GeoRuleInliningTransformer rewrites
-          # every subscription RULE-SET into bundled GEOSITE/GEOIP rules —
-          # including GEOIP,telegram and any other GEOIP,<cat> a template ships
-          # — so the bundled file MUST carry every category, not a CN-only
-          # subset. (v1.2.87/88 shipped Loyalsoldier CN-lite here → GEOIP,
-          # telegram had no data → hub.Parse hard-failed on EVERY official
-          # install; dev machines had the full file locally so it slipped
-          # through twice. Never ship a partial GeoIP.dat again.)
-          fetch_verified GeoIP.dat    geoip.dat
-          fetch_verified GeoSite.dat  geosite.dat
-          # country.mmdb + ASN.mmdb intentionally NOT fetched/bundled — dead
-          # weight under geodata-mode:true (~19 MB saved). pubspec only bundles
-          # GeoIP.dat + GeoSite.dat; see GeoDataService._bundledFiles.
-
-          # ── Full-geodata assertion (v1.2.87/88 prod-brick guard) ─────────
-          # The transformer inlines GEOIP,telegram (among others) directly, so
-          # the bundled file must be the FULL geoip.dat. TELEGRAM present =
-          # proof this is not the CN-lite variant. Cheap, and it's exactly the
-          # regression that bricked two releases.
-          grep -aq TELEGRAM assets/geodata/GeoIP.dat \
-            || { echo "::error::bundled GeoIP.dat has no TELEGRAM category — CN-lite variant shipped? GEOIP,telegram would brick startup. Fetch the FULL geoip.dat."; exit 1; }
+          done
+          # The load-bearing categories the fallback config routes on must be
+          # present (cheap brick-guard, mirrors the old TELEGRAM assert).
+          test -f "$dir/china.mrs" && test -f "$dir/chinaips.mrs" && test -f "$dir/ads.mrs" \
+            || { echo "::error::ruleset seed missing a load-bearing category (china/chinaips/ads)."; exit 1; }
+          echo "ruleset seed OK: $count .mrs, all zstd."
 
       # ── Resolve version: pubspec for stable, append -pre for pre tag ──────
       # Match both the legacy `pre` overwrite-channel tag and the
