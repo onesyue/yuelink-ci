@@ -4,13 +4,25 @@
 #
 #   ./release.sh vX.Y.Z
 #   ./release.sh vX.Y.Z-pre.N
+#
+# One explicitly approved official-download exception exists for v1.2.92:
+#   YUELINK_OFFICIAL_UNSIGNED_CONFIRM=YUELINK_OFFICIAL_UNSIGNED_v1.2.92_2026-07-24 \
+#     ./release.sh v1.2.92
+# It expires by UTC date and cannot authorize any other version.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 SOURCE_SNAPSHOT=""
+UNSIGNED_APPROVAL_ARMED=0
+PUBLIC_TAG_PUSHED=0
 cleanup() {
+  if [ "$UNSIGNED_APPROVAL_ARMED" -eq 1 ] &&
+     [ "$PUBLIC_TAG_PUSHED" -eq 0 ]; then
+    gh variable delete OFFICIAL_UNSIGNED_RELEASE_APPROVAL \
+      -R onesyue/yuelink-ci >/dev/null 2>&1 || true
+  fi
   if [[ "$SOURCE_SNAPSHOT" == */yuelink-ci-source-tag.* ]] &&
      [ -d "$SOURCE_SNAPSHOT" ]; then
     rm -rf -- "$SOURCE_SNAPSHOT"
@@ -32,6 +44,17 @@ command -v gh >/dev/null 2>&1 || {
   exit 1
 }
 
+readonly OFFICIAL_UNSIGNED_TAG="v1.2.92"
+readonly OFFICIAL_UNSIGNED_UTC_DATE="2026-07-24"
+readonly OFFICIAL_UNSIGNED_TOKEN="YUELINK_OFFICIAL_UNSIGNED_v1.2.92_2026-07-24"
+OFFICIAL_UNSIGNED_MODE=0
+
+official_unsigned_confirmed() {
+  [ "$TAG" = "$OFFICIAL_UNSIGNED_TAG" ] &&
+    [ "$(date -u +%F)" = "$OFFICIAL_UNSIGNED_UTC_DATE" ] &&
+    [ "${YUELINK_OFFICIAL_UNSIGNED_CONFIRM:-}" = "$OFFICIAL_UNSIGNED_TOKEN" ]
+}
+
 # GitHub does not expose secret values, but it does expose configured names.
 # Check those before creating the immutable public tag: otherwise a missing
 # certificate is discovered only after the tag has fired, leaving a permanent
@@ -40,9 +63,6 @@ required_secrets=(SRC_DEPLOY_KEY R2_KEY_ID R2_APP_KEY)
 if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   required_secrets+=(
     KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD
-    WINDOWS_CERT_BASE64 WINDOWS_CERT_PASSWORD
-    APPLE_CERTIFICATE_BASE64 APPLE_CERTIFICATE_PASSWORD
-    APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
   )
 fi
 configured_secrets="$(
@@ -59,6 +79,31 @@ done
   echo "::error::发布前密钥门禁未通过；未创建任何 tag。"
   exit 1
 }
+
+if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  system_signing_secrets=(
+    WINDOWS_CERT_BASE64 WINDOWS_CERT_PASSWORD
+    APPLE_CERTIFICATE_BASE64 APPLE_CERTIFICATE_PASSWORD
+    APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+  )
+  missing_system_signing=()
+  for secret_name in "${system_signing_secrets[@]}"; do
+    if ! grep -Fxq "$secret_name" <<<"$configured_secrets"; then
+      missing_system_signing+=("$secret_name")
+    fi
+  done
+  if [ "${#missing_system_signing[@]}" -gt 0 ]; then
+    if ! official_unsigned_confirmed; then
+      printf '::error::stable release missing system-signing secret %s\n' \
+        "${missing_system_signing[@]}"
+      echo "::error::官网 unsigned 例外未获得版本+UTC日期+显式确认三重授权；未创建任何 tag。"
+      exit 1
+    fi
+    OFFICIAL_UNSIGNED_MODE=1
+    printf '::warning::v1.2.92 官网直发例外允许缺少 system-signing secret %s\n' \
+      "${missing_system_signing[@]}"
+  fi
+fi
 
 [ "$(git branch --show-current)" = "master" ] || {
   echo "::error::必须从 yuelink-ci/master 发版。"
@@ -90,7 +135,7 @@ fi
 # 工作区。后者可能有尚未进入 tag 的修改；用它做 sync check 会让公开 tag
 # 带着“未来 workflow”去 checkout 旧私仓源码，直到 runner 缺脚本才爆炸。
 SOURCE_SNAPSHOT="$(mktemp -d "${TMPDIR:-/tmp}/yuelink-ci-source-tag.XXXXXX")"
-mkdir -p "$SOURCE_SNAPSHOT/.github/workflows"
+mkdir -p "$SOURCE_SNAPSHOT/.github/workflows" "$SOURCE_SNAPSHOT/scripts/ci"
 gh api \
   "repos/onesyue/yuelink/contents/.github/workflows/build.yml?ref=$TAG" \
   --jq '.content' \
@@ -101,12 +146,35 @@ gh api \
   echo "::error::无法读取私仓 $TAG 的 build.yml；拒绝用本地工作区代替。"
   exit 1
 }
+if [ "$OFFICIAL_UNSIGNED_MODE" -eq 1 ]; then
+  gh api \
+    "repos/onesyue/yuelink/contents/scripts/ci/official_unsigned_release.sh?ref=$TAG" \
+    --jq '.content' \
+    | tr -d '\r\n' \
+    | openssl base64 -d -A \
+        > "$SOURCE_SNAPSHOT/scripts/ci/official_unsigned_release.sh"
+  [ -s "$SOURCE_SNAPSHOT/scripts/ci/official_unsigned_release.sh" ] || {
+    echo "::error::无法读取私仓 $TAG 的一次性 unsigned policy。"
+    exit 1
+  }
+fi
 ./sync-build.sh --check "$SOURCE_SNAPSHOT"
 
 echo "✓ 工作区、远端私仓 tag workflow、公开镜像和 tag 状态均已验证"
 
+if [ "$OFFICIAL_UNSIGNED_MODE" -eq 1 ]; then
+  OFFICIAL_UNSIGNED_RELEASE_APPROVAL="$YUELINK_OFFICIAL_UNSIGNED_CONFIRM" \
+    bash "$SOURCE_SNAPSHOT/scripts/ci/official_unsigned_release.sh" "$TAG"
+  gh variable set OFFICIAL_UNSIGNED_RELEASE_APPROVAL \
+    -R onesyue/yuelink-ci \
+    --body "$YUELINK_OFFICIAL_UNSIGNED_CONFIRM"
+  UNSIGNED_APPROVAL_ARMED=1
+  echo "✓ 已为 $TAG 临时布防一次性官网直发审批变量"
+fi
+
 git tag "$TAG"
 git push origin "$TAG"
+PUBLIC_TAG_PUSHED=1
 
 echo "✓ 已推送 tag $TAG 到 yuelink-ci → 构建已触发"
 echo "  看进度: gh run watch -R onesyue/yuelink-ci"
