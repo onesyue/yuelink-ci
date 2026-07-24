@@ -1,0 +1,152 @@
+name: Verify v1.2.92 Full Release Bytes
+
+# One-shot post-upload gate for the bounded v1.2.92 direct distribution.
+# It receives no repository contents or secrets and is removed after the
+# immutable CDN objects have been downloaded and independently re-hashed.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: verify-v1.2.92-full-release-bytes
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Download and hash all nine artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERSION: '1.2.92'
+      KEY_ID: update-manifest-2026-01
+      CDN_BASE: https://yuetong.app
+    steps:
+      - name: Verify immutable candidate, checksums and full artifact bytes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+
+          download_dir="$(mktemp -d)"
+          cleanup() {
+            case "$download_dir" in
+              /tmp/tmp.*) rm -rf -- "$download_dir" ;;
+              *) echo "::error::refusing unsafe temporary cleanup" ;;
+            esac
+          }
+          trap cleanup EXIT
+
+          tag="v$VERSION"
+          candidate="$download_dir/update.candidate.json"
+          sums="$download_dir/SHA256SUMS"
+          entries=(
+            'android-arm64-v8a|android-arm64-v8a.apk'
+            'android-armeabi-v7a|android-armeabi-v7a.apk'
+            'android-x86_64|android-x86_64.apk'
+            'android-universal|android-universal.apk'
+            'ios|ios.ipa'
+            'macos-universal|macos-universal.dmg'
+            'windows-amd64-setup|windows-amd64-setup.exe'
+            'windows-amd64-portable|windows-amd64-portable.zip'
+            'linux-amd64-appimage|linux-amd64.AppImage'
+          )
+
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --retry 4 --retry-all-errors --connect-timeout 15 --max-time 60 \
+            --max-filesize 1048576 \
+            --output "$candidate" \
+            "$CDN_BASE/$tag/update.candidate.json"
+          jq -e --arg version "$VERSION" --arg key_id "$KEY_ID" '
+            type == "object" and
+            .schemaVersion == 1 and
+            .version == $version and
+            .channel == "stable" and
+            .keyId == $key_id and
+            (has("sig") | not) and
+            (.platforms | type == "object" and length == 9)
+          ' "$candidate" >/dev/null
+
+          expected_keys="$download_dir/expected-keys"
+          actual_keys="$download_dir/actual-keys"
+          expected_names="$download_dir/expected-names"
+          actual_names="$download_dir/actual-names"
+          for entry in "${entries[@]}"; do
+            key="${entry%%|*}"
+            suffix="${entry#*|}"
+            printf '%s\n' "$key"
+            printf 'YueLink-%s-%s\n' "$VERSION" "$suffix" >&3
+          done >"$expected_keys" 3>"$expected_names"
+          sort -o "$expected_keys" "$expected_keys"
+          sort -o "$expected_names" "$expected_names"
+          jq -r '.platforms | keys[]' "$candidate" | sort >"$actual_keys"
+          diff -u "$expected_keys" "$actual_keys"
+
+          sums_name="YueLink-$VERSION-SHA256SUMS"
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --retry 4 --retry-all-errors --connect-timeout 15 --max-time 60 \
+            --max-filesize 16384 \
+            --output "$sums" \
+            "$CDN_BASE/$tag/$sums_name"
+          awk '
+            NF != 2 || $1 !~ /^[0-9a-f]{64}$/ { exit 1 }
+            { print $2 }
+          ' "$sums" | sort >"$actual_names"
+          [ "$(wc -l <"$actual_names" | tr -d ' ')" -eq 9 ]
+          diff -u "$expected_names" "$actual_names"
+
+          verified=0
+          for entry in "${entries[@]}"; do
+            key="${entry%%|*}"
+            suffix="${entry#*|}"
+            filename="YueLink-$VERSION-$suffix"
+            expected_url="$CDN_BASE/$tag/$filename"
+            expected_hash="$(
+              jq -er --arg key "$key" '.platforms[$key].sha256' "$candidate"
+            )"
+            manifest_url="$(
+              jq -er --arg key "$key" '.platforms[$key].url' "$candidate"
+            )"
+            [[ "$expected_hash" =~ ^[0-9a-f]{64}$ ]]
+            [ "$manifest_url" = "$expected_url" ]
+
+            sidecar_hash="$(
+              curl --fail --silent --show-error --location \
+                --proto '=https' --proto-redir '=https' --tlsv1.2 \
+                --retry 4 --retry-all-errors --connect-timeout 15 --max-time 60 \
+                --max-filesize 1024 \
+                "$expected_url.sha256" |
+                tr -d '\r\n'
+            )"
+            [ "$sidecar_hash" = "$expected_hash" ]
+            sums_hash="$(
+              awk -v filename="$filename" '
+                $2 == filename { count++; hash = $1 }
+                END {
+                  if (count != 1) exit 1
+                  print hash
+                }
+              ' "$sums"
+            )"
+            [ "$sums_hash" = "$expected_hash" ]
+
+            artifact="$download_dir/$filename"
+            curl --fail --silent --show-error --location \
+              --proto '=https' --proto-redir '=https' --tlsv1.2 \
+              --retry 4 --retry-all-errors --connect-timeout 15 --max-time 900 \
+              --max-filesize 400000000 \
+              --output "$artifact" \
+              "$expected_url"
+            [ -s "$artifact" ]
+            actual_hash="$(sha256sum "$artifact" | awk '{print $1}')"
+            [ "$actual_hash" = "$expected_hash" ]
+            actual_size="$(stat --format='%s' "$artifact")"
+            echo "verified $filename bytes=$actual_size sha256=$actual_hash"
+            rm -f -- "$artifact"
+            verified=$((verified + 1))
+          done
+
+          [ "$verified" -eq 9 ]
+          echo "all nine v$VERSION release artifacts were downloaded and re-hashed"
