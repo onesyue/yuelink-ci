@@ -27,6 +27,13 @@ jobs:
         run: |
           set -Eeuo pipefail
           umask 077
+          [ "$GITHUB_REF" = 'refs/heads/master' ]
+          tag_commit="$(
+            git ls-remote https://github.com/onesyue/yuelink-ci.git \
+              'refs/tags/v1.2.92' |
+              awk 'NR == 1 { print $1 }'
+          )"
+          [ "$tag_commit" = '4e35bbe3065252179e5a2eb28ebe9c57f812b19d' ]
 
           download_dir="$(mktemp -d)"
           cleanup() {
@@ -36,6 +43,30 @@ jobs:
             esac
           }
           trap cleanup EXIT
+
+          fetch_exact() {
+            local url="$1"
+            local output="$2"
+            local max_size="$3"
+            local max_time="$4"
+            local retries="$5"
+            local result
+            result="$(
+              curl --fail --silent --show-error \
+                --proto '=https' --tlsv1.2 --max-redirs 0 \
+                --retry "$retries" --retry-all-errors \
+                --retry-max-time "$max_time" \
+                --connect-timeout 15 --max-time "$max_time" \
+                --max-filesize "$max_size" \
+                --output "$output" \
+                --write-out '%{http_code}|%{url_effective}' \
+                "$url"
+            )"
+            [ "$result" = "200|$url" ] || {
+              echo "::error::non-exact fetch result for $url: $result"
+              return 1
+            }
+          }
 
           tag="v$VERSION"
           candidate="$download_dir/update.candidate.json"
@@ -52,20 +83,26 @@ jobs:
             'linux-amd64-appimage|linux-amd64.AppImage'
           )
 
-          curl --fail --silent --show-error --location \
-            --proto '=https' --proto-redir '=https' --tlsv1.2 \
-            --retry 4 --retry-all-errors --connect-timeout 15 --max-time 60 \
-            --max-filesize 1048576 \
-            --output "$candidate" \
-            "$CDN_BASE/$tag/update.candidate.json"
+          fetch_exact \
+            "$CDN_BASE/$tag/update.candidate.json" \
+            "$candidate" 1048576 60 4
           jq -e --arg version "$VERSION" --arg key_id "$KEY_ID" '
             type == "object" and
+            (keys == [
+              "channel", "expiresAt", "keyId", "notes", "platforms",
+              "publishedAt", "releaseUrl", "schemaVersion", "version"
+            ]) and
             .schemaVersion == 1 and
             .version == $version and
             .channel == "stable" and
             .keyId == $key_id and
             (has("sig") | not) and
-            (.platforms | type == "object" and length == 9)
+            (.publishedAt | type == "string") and
+            (.expiresAt | type == "string") and
+            (.releaseUrl | type == "string") and
+            (.notes | type == "string") and
+            (.platforms | type == "object" and length == 9) and
+            (all(.platforms[]; keys == ["sha256", "url"]))
           ' "$candidate" >/dev/null
 
           expected_keys="$download_dir/expected-keys"
@@ -84,12 +121,9 @@ jobs:
           diff -u "$expected_keys" "$actual_keys"
 
           sums_name="YueLink-$VERSION-SHA256SUMS"
-          curl --fail --silent --show-error --location \
-            --proto '=https' --proto-redir '=https' --tlsv1.2 \
-            --retry 4 --retry-all-errors --connect-timeout 15 --max-time 60 \
-            --max-filesize 16384 \
-            --output "$sums" \
-            "$CDN_BASE/$tag/$sums_name"
+          fetch_exact \
+            "$CDN_BASE/$tag/$sums_name" \
+            "$sums" 16384 60 4
           awk '
             NF != 2 || $1 !~ /^[0-9a-f]{64}$/ { exit 1 }
             { print $2 }
@@ -98,6 +132,7 @@ jobs:
           diff -u "$expected_names" "$actual_names"
 
           verified=0
+          total_bytes=0
           for entry in "${entries[@]}"; do
             key="${entry%%|*}"
             suffix="${entry#*|}"
@@ -112,14 +147,12 @@ jobs:
             [[ "$expected_hash" =~ ^[0-9a-f]{64}$ ]]
             [ "$manifest_url" = "$expected_url" ]
 
-            sidecar_hash="$(
-              curl --fail --silent --show-error --location \
-                --proto '=https' --proto-redir '=https' --tlsv1.2 \
-                --retry 4 --retry-all-errors --connect-timeout 15 --max-time 60 \
-                --max-filesize 1024 \
-                "$expected_url.sha256" |
-                tr -d '\r\n'
-            )"
+            sidecar="$download_dir/$filename.sha256"
+            fetch_exact "$expected_url.sha256" "$sidecar" 1024 60 4
+            [ "$(stat --format='%s' "$sidecar")" -eq 65 ]
+            [ "$(wc -l <"$sidecar" | tr -d ' ')" -eq 1 ]
+            grep -Eq '^[0-9a-f]{64}$' "$sidecar"
+            sidecar_hash="$(tr -d '\n' <"$sidecar")"
             [ "$sidecar_hash" = "$expected_hash" ]
             sums_hash="$(
               awk -v filename="$filename" '
@@ -133,20 +166,18 @@ jobs:
             [ "$sums_hash" = "$expected_hash" ]
 
             artifact="$download_dir/$filename"
-            curl --fail --silent --show-error --location \
-              --proto '=https' --proto-redir '=https' --tlsv1.2 \
-              --retry 4 --retry-all-errors --connect-timeout 15 --max-time 900 \
-              --max-filesize 400000000 \
-              --output "$artifact" \
-              "$expected_url"
+            fetch_exact "$expected_url" "$artifact" 400000000 900 1
             [ -s "$artifact" ]
             actual_hash="$(sha256sum "$artifact" | awk '{print $1}')"
             [ "$actual_hash" = "$expected_hash" ]
             actual_size="$(stat --format='%s' "$artifact")"
+            [ "$actual_size" -le 400000000 ]
+            total_bytes=$((total_bytes + actual_size))
+            [ "$total_bytes" -le 1500000000 ]
             echo "verified $filename bytes=$actual_size sha256=$actual_hash"
             rm -f -- "$artifact"
             verified=$((verified + 1))
           done
 
           [ "$verified" -eq 9 ]
-          echo "all nine v$VERSION release artifacts were downloaded and re-hashed"
+          echo "all nine v$VERSION release artifacts were downloaded and re-hashed; total_bytes=$total_bytes"
