@@ -7,16 +7,17 @@ name: Build YueLink
 #
 # Release builds. One matrix job covers every platform; release downloads
 # all artifacts in one shot. Modeled after FlClash's build.yaml — same
-# 3-job shape (build → release → post-publish), one matrix row per target.
+# 3-job shape (build → release candidate → private signer), one matrix row per
+# target. This public builder never receives the updater-manifest private key.
 #
 # Triggers:
 #   • v*  tag → stable release
-#   • pre tag → pre-release (overwrites previous)
+#   • vX.Y.Z-pre[.N] tag → immutable pre-release artifacts (no updater root)
 #   • workflow_dispatch
 #
-# Analyze + integration tests live in ci.yml (runs on dev/master pushes)
-# and intentionally do NOT gate this workflow. By the time a commit gets
-# tagged it has already been through ci.yml on dev.
+# Analyze + integration tests live in ci.yml (master/PR/manual). The release
+# preflight below independently re-runs every hard gate, so a tag cannot race
+# or bypass a sibling workflow.
 
 on:
   push:
@@ -34,10 +35,13 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}
-  cancel-in-progress: true
+  # A second tag queues behind the first. Cancelling a production build can
+  # leave only some immutable R2 artifacts/candidate inputs; the separate
+  # private signer has its own monotonic root-promotion guard.
+  cancel-in-progress: false
 
-# Least-privilege default. Individual jobs override (release / publish
-# need contents: write; attestation needs id-token: write). Adding the
+# Least-privilege default. Build jobs add OIDC only for provenance;
+# R2 publication does not need repository write permission. Adding the
 # top-level block doesn't change behavior for jobs that already declare
 # their own `permissions:`; it only narrows the floor for jobs that
 # don't.
@@ -45,20 +49,16 @@ permissions:
   contents: read
 
 env:
-  FLUTTER_VERSION: '3.44.4'
-  # Aligned to the mihomo upstream release toolchain (v1.19.23 builds with
-  # Go 1.26.4). Bumped from 1.23 without changing mihomo's tag or touching
-  # core/go.mod / service/go.mod's `go 1.22` directive (that stays at the
-  # compatibility floor). If CI cores fail the post-bump rebuild, roll
-  # this back to 1.23 before rolling back anything else.
-  GO_VERSION: '1.26.4'
-  # `-mod=mod` lets `go build` auto-download any modules missing from
-  # go.sum and accept a go.mod that isn't fully `go mod tidy`-clean.
-  # Needed after the mihomo v1.19.23 → v1.19.24 bump (a7e48ca): Go
-  # 1.26.4's default `-mod=readonly` rejects the v1.19.24 go.mod with
-  # "updates to go.mod needed". Effects are CI-ephemeral (runner
-  # working tree only); we never commit back into core/mihomo.
-  GOFLAGS: -mod=mod
+  FLUTTER_VERSION: '3.44.7'
+  # Go 1.26.5 contains the July 2026 crypto/tls security fixes. Keep the
+  # release builder and govulncheck on this exact patch release; using a
+  # floating 1.26 selector can silently rebuild the same tag with a different
+  # standard library.
+  GO_VERSION: '1.26.5'
+  # Production builds consume the reviewed module graph exactly. `core/go.mod`
+  # and go.sum are tidy against the pinned mihomo submodule; dependency drift
+  # must fail the build instead of being resolved implicitly on a runner.
+  GOFLAGS: -mod=readonly
   # Opt JS actions (actions/attest*, etc.) into Node.js 24 now, ahead of the
   # 2026-06-16 forced default — silences the recurring Node 20 deprecation
   # warning. Safe to drop once Node 24 is the runner default.
@@ -93,9 +93,72 @@ jobs:
           printf 'matrix={"include":%s}\n' "$sel" >> "$GITHUB_OUTPUT"
           echo "选中平台: ${ONLY:-all}"
 
+  preflight:
+    name: Release preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag_kind: ${{ steps.classify.outputs.kind }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ github.ref_name }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            core/go.sum
+            service/go.sum
+
+      - name: Classify release tag once
+        id: classify
+        env:
+          REF: ${{ github.ref }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$REF" == refs/tags/* ]]; then
+            kind="$(bash scripts/ci/release_tag.sh kind "$TAG")"
+          else
+            kind="nonrelease"
+          fi
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+
+      - name: Run in-workflow release gates
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          R2_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          R2_APP_KEY: ${{ secrets.R2_APP_KEY }}
+        run: bash scripts/ci/release_preflight.sh
+
   build:
     name: Build (${{ matrix.platform }})
-    needs: prepare
+    needs: [prepare, preflight]
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -119,20 +182,21 @@ jobs:
           echo "after:"; df -h / | tail -1
 
       # CI 镜像仓：checkout 私有 onesyue/yuelink 同名 tag 源码到工作区根。
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
           ref: ${{ github.ref_name }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           submodules: recursive
+          persist-credentials: false
 
       # ── Toolchains (Go for core, Flutter for app, Java for android) ───────
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: core/go.sum
 
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
@@ -140,14 +204,14 @@ jobs:
 
       - name: Setup Java (Android only)
         if: matrix.platform == 'android'
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Setup Android NDK
         if: matrix.platform == 'android'
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
 
       - name: Install Android NDK r27
         if: matrix.platform == 'android'
@@ -161,7 +225,7 @@ jobs:
       # 是编译,缓存救不了那 10min,但能省依赖/AGP 重下,热运行小幅提速。
       - name: Cache Gradle
         if: matrix.platform == 'android'
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.gradle/caches
@@ -192,38 +256,51 @@ jobs:
       # (v1.2.90) The 23 MB GeoIP/GeoSite.dat bundle + its CI download/assert
       # is GONE. The client no longer inlines GEOSITE/GEOIP rules — it seeds
       # the ~1 MB `.mrs` rule-provider set (assets/ruleset/, committed to git)
-      # into ./ruleset/ at startup, exactly like Clash Verge Rev / FlClash.
+      # into ./ruleset/yueto/ at startup. The private subtree avoids colliding
+      # with generic paths from imported third-party subscriptions.
       # This structurally eliminates the v1.2.87/88 "bundled geodata vs rules
       # mismatch" brick class: there is no geodata pack to mismatch. The .mrs
       # are checked out from git (no build-time network dependency); this
-      # guard just proves the checkout carries a sane, non-empty set.
+      # guard proves the checkout carries the exact reviewed inventory.
       - name: Verify bundled ruleset (.mrs seed set)
         shell: bash
         run: |
           set -euo pipefail
           dir=assets/ruleset
-          count=$(ls "$dir"/*.mrs 2>/dev/null | wc -l | tr -d ' ')
-          if [ "$count" -lt 30 ]; then
-            echo "::error::assets/ruleset has only $count .mrs (<30) — the committed seed set is missing/truncated. RulesetSeedService would seed an empty ./ruleset and every RULE-SET would fail."
+          expected="$dir/inventory.txt"
+          test -f "$expected"
+          actual=$(mktemp)
+          trap 'rm -f "$actual"' EXIT
+          find "$dir" -maxdepth 1 -type f -name '*.mrs' \
+            -exec basename {} \; | LC_ALL=C sort > "$actual"
+          grep -Ev '^[[:space:]]*(#|$)' "$expected" \
+            | LC_ALL=C sort | diff -u - "$actual" || {
+              echo "::error::bundled .mrs inventory drift"
+              exit 1
+            }
+          count=$(wc -l < "$actual" | tr -d ' ')
+          [ "$count" -eq 39 ] || {
+            echo "::error::expected exactly 39 .mrs assets, found $count"
             exit 1
-          fi
+          }
           # Every .mrs is a zstd frame — magic 0x28 0xB5 0x2F 0xFD. A file that
           # isn't (e.g. an HTML 404 page committed by mistake) would brick
           # rule-provider load on device; catch it here. Use `od` (POSIX,
           # present on ubuntu/macos/git-bash) — NOT `xxd`, which is missing on
           # some Windows/macOS runners.
           for f in "$dir"/*.mrs; do
+            size=$(wc -c < "$f" | tr -d ' ')
+            [ "$size" -gt 64 ] || {
+              echo "::error::$f is truncated ($size bytes)"
+              exit 1
+            }
             magic=$(od -An -tx1 -N4 "$f" | tr -d ' \n')
             if [ "$magic" != "28b52ffd" ]; then
               echo "::error::$f is not a zstd .mrs (magic=$magic) — corrupt seed committed?"
               exit 1
             fi
           done
-          # The load-bearing categories the fallback config routes on must be
-          # present (cheap brick-guard, mirrors the old TELEGRAM assert).
-          test -f "$dir/china.mrs" && test -f "$dir/chinaips.mrs" && test -f "$dir/ads.mrs" \
-            || { echo "::error::ruleset seed missing a load-bearing category (china/chinaips/ads)."; exit 1; }
-          echo "ruleset seed OK: $count .mrs, all zstd."
+          echo "ruleset seed OK: exact $count-file inventory, all zstd."
 
       # ── Resolve version: pubspec for stable, append -pre for pre tag ──────
       # Match both the legacy `pre` overwrite-channel tag and the
@@ -237,8 +314,9 @@ jobs:
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
-          case "$GITHUB_REF_NAME" in
-            pre|*-pre|*-pre.*)
+          TAG_KIND="$(bash scripts/ci/release_tag.sh kind "$GITHUB_REF_NAME")"
+          case "$TAG_KIND" in
+            prerelease)
               if [[ "$VERSION" == *-pre* ]]; then
                 APP_VERSION="${VERSION}"
               else
@@ -252,7 +330,7 @@ jobs:
           echo "APP_VERSION=${APP_VERSION}" >> $GITHUB_ENV
           echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
 
       # ── Compile Go core (platform-aware) and copy into Flutter dirs ───────
       # Windows + Linux: setup.dart's default builds BOTH amd64 + arm64, but
@@ -345,7 +423,7 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────
       - name: Cache CocoaPods (iOS)
         if: matrix.platform == 'ios'
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ~/.cocoapods
@@ -369,6 +447,24 @@ jobs:
             --build-name=${{ env.APP_VERSION }} \
             --build-number=${{ env.BUILD_NUM }}
 
+      - name: Validate iOS container and extension versions
+        if: matrix.platform == 'ios'
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="build/ios/iphoneos/Runner.app"
+          extension="$app/PlugIns/PacketTunnel.appex"
+          app_version="$(plutil -extract CFBundleShortVersionString raw "$app/Info.plist")"
+          app_build="$(plutil -extract CFBundleVersion raw "$app/Info.plist")"
+          extension_version="$(plutil -extract CFBundleShortVersionString raw "$extension/Info.plist")"
+          extension_build="$(plutil -extract CFBundleVersion raw "$extension/Info.plist")"
+          [ "$app_version" = "$extension_version" ] &&
+          [ "$app_build" = "$extension_build" ] || {
+            echo "::error::iOS bundle version mismatch: app=$app_version+$app_build extension=$extension_version+$extension_build"
+            exit 1
+          }
+          echo "iOS bundle versions match: $app_version+$app_build"
+
       - name: Sign iOS bundle for TrollStore
         if: matrix.platform == 'ios'
         run: |
@@ -385,6 +481,37 @@ jobs:
           codesign --force --sign - \
             --entitlements ios/Runner/Runner.entitlements \
             build/ios/iphoneos/Runner.app
+
+      - name: Verify iOS signatures and VPN entitlements
+        if: matrix.platform == 'ios'
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="build/ios/iphoneos/Runner.app"
+          extension="$app/PlugIns/PacketTunnel.appex"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign --verify --strict --verbose=2 "$extension"
+
+          runner_entitlements="$RUNNER_TEMP/yuelink-runner-entitlements.plist"
+          tunnel_entitlements="$RUNNER_TEMP/yuelink-tunnel-entitlements.plist"
+          codesign -d --entitlements :- "$app" \
+            > "$runner_entitlements" 2>/dev/null
+          codesign -d --entitlements :- "$extension" \
+            > "$tunnel_entitlements" 2>/dev/null
+          for entitlements in "$runner_entitlements" "$tunnel_entitlements"; do
+            group=$(/usr/libexec/PlistBuddy \
+              -c 'Print :com.apple.security.application-groups:0' \
+              "$entitlements")
+            provider=$(/usr/libexec/PlistBuddy \
+              -c 'Print :com.apple.developer.networking.networkextension:0' \
+              "$entitlements")
+            [ "$group" = "group.com.yueto.yuelink" ] &&
+            [ "$provider" = "packet-tunnel-provider" ] || {
+              echo "::error::iOS VPN entitlement contract mismatch"
+              exit 1
+            }
+          done
+          echo "iOS app + PacketTunnel signatures and VPN entitlements verified"
 
       - name: Package iOS .ipa
         if: matrix.platform == 'ios'
@@ -404,7 +531,7 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────
       - name: Cache CocoaPods (macOS)
         if: matrix.platform == 'macos'
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ~/.cocoapods
@@ -427,8 +554,47 @@ jobs:
             --build-name=${{ env.APP_VERSION }} \
             --build-number=${{ env.BUILD_NUM }}
 
+      - name: Stable macOS signing and notarization gate
+        if: matrix.platform == 'macos'
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          signing_configured=0
+          notarization_configured=0
+          if [ -n "${APPLE_CERTIFICATE_BASE64:-}" ] &&
+             [ -n "${APPLE_CERTIFICATE_PASSWORD:-}" ] &&
+             [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+            signing_configured=1
+          fi
+          if [ "$signing_configured" -eq 1 ] &&
+             [ -n "${APPLE_ID:-}" ] &&
+             [ -n "${APPLE_PASSWORD:-}" ] &&
+             [ -n "${APPLE_TEAM_ID:-}" ]; then
+            notarization_configured=1
+          fi
+          echo "MAC_SIGNING_CONFIGURED=$signing_configured" >> "$GITHUB_ENV"
+          echo "MAC_NOTARIZATION_CONFIGURED=$notarization_configured" >> "$GITHUB_ENV"
+
+          if [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            missing=0
+            for var in APPLE_CERTIFICATE_BASE64 APPLE_CERTIFICATE_PASSWORD \
+              APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+              if [ -z "${!var:-}" ]; then
+                echo "::error::stable macOS release missing $var"
+                missing=$((missing + 1))
+              fi
+            done
+            [ "$missing" -eq 0 ] || exit 1
+          fi
+
       - name: Import signing certificate (macOS)
-        if: matrix.platform == 'macos' && env.APPLE_CERTIFICATE_BASE64 != ''
+        if: matrix.platform == 'macos' && env.MAC_SIGNING_CONFIGURED == '1'
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -449,7 +615,7 @@ jobs:
             -s -k "$KEYCHAIN_PASSWORD" build.keychain
 
       - name: Sign YueLink.app with hardened runtime
-        if: matrix.platform == 'macos' && env.APPLE_SIGNING_IDENTITY != ''
+        if: matrix.platform == 'macos' && env.MAC_SIGNING_CONFIGURED == '1'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
@@ -466,9 +632,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP"
 
       - name: Ad-hoc sign YueLink.app (no Apple account — free Gatekeeper relief)
-        if: matrix.platform == 'macos' && env.APPLE_SIGNING_IDENTITY == ''
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        if: matrix.platform == 'macos' && env.MAC_SIGNING_CONFIGURED != '1'
         run: |
           # Without a paid Developer ID we can't notarize, but an *ad-hoc*
           # signature (codesign --sign -) still gives every Mach-O a valid
@@ -493,7 +657,15 @@ jobs:
         if: matrix.platform == 'macos'
         shell: bash
         run: |
-          brew install create-dmg
+          CREATE_DMG_VERSION=1.3.0
+          CREATE_DMG_SHA256=c50d2bc97c3d6292642bac55f530d247eaf4bf65ee605f26b4caf339383e381c
+          curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
+            "https://github.com/create-dmg/create-dmg/archive/refs/tags/v${CREATE_DMG_VERSION}.tar.gz" \
+            -o /tmp/create-dmg.tar.gz
+          echo "${CREATE_DMG_SHA256}  /tmp/create-dmg.tar.gz" | shasum -a 256 -c -
+          tar -xzf /tmp/create-dmg.tar.gz -C /tmp
+          CREATE_DMG="/tmp/create-dmg-${CREATE_DMG_VERSION}/create-dmg"
+          test -x "$CREATE_DMG"
           DMG_SRC=dmg_source
           mkdir -p "$DMG_SRC" dist
           cp -R build/macos/Build/Products/Release/YueLink.app "$DMG_SRC/"
@@ -518,7 +690,7 @@ jobs:
 
           DMG_NAME="YueLink-${{ env.APP_VERSION }}-macos-universal.dmg"
           set +e
-          create-dmg \
+          "$CREATE_DMG" \
             --volname "YueLink" \
             --volicon "/tmp/yuelink_volicon.icns" \
             --background "assets/dmg_background.png" \
@@ -537,8 +709,19 @@ jobs:
           [ -f "dist/$DMG_NAME" ] || { echo "ERROR: DMG missing"; exit 1; }
           ls -lh "dist/$DMG_NAME"
 
+      - name: Sign and verify macOS DMG
+        if: matrix.platform == 'macos' && env.MAC_SIGNING_CONFIGURED == '1'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          DMG_NAME="YueLink-${{ env.APP_VERSION }}-macos-universal.dmg"
+          codesign --force --timestamp \
+            --sign "$APPLE_SIGNING_IDENTITY" "dist/$DMG_NAME"
+          codesign --verify --strict --verbose=2 "dist/$DMG_NAME"
+
       - name: Notarize DMG
-        if: matrix.platform == 'macos' && env.APPLE_ID != ''
+        if: matrix.platform == 'macos' && env.MAC_NOTARIZATION_CONFIGURED == '1'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
@@ -552,9 +735,7 @@ jobs:
           xcrun stapler validate "dist/$DMG_NAME"
 
       - name: Clean up signing keychain
-        if: matrix.platform == 'macos' && always() && env.APPLE_CERTIFICATE_BASE64 != ''
-        env:
-          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+        if: matrix.platform == 'macos' && always() && env.MAC_SIGNING_CONFIGURED == '1'
         run: security delete-keychain build.keychain 2>/dev/null || true
 
       # ─────────────────────────────────────────────────────────────────────
@@ -618,7 +799,19 @@ jobs:
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_BASE64)) {
-            Write-Host "WINDOWS_CERT_BASE64 not configured; shipping unsigned Windows binaries."
+            if ("$env:GITHUB_REF_NAME" -match '^v[0-9]+\.[0-9]+\.[0-9]+$') {
+              Write-Error "stable Windows release requires WINDOWS_CERT_BASE64"
+              exit 1
+            }
+            Write-Host "pre/test build has no Windows certificate; leaving binaries unsigned."
+            exit 0
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASSWORD)) {
+            if ("$env:GITHUB_REF_NAME" -match '^v[0-9]+\.[0-9]+\.[0-9]+$') {
+              Write-Error "stable Windows release requires WINDOWS_CERT_PASSWORD"
+              exit 1
+            }
+            Write-Host "pre/test build has no Windows certificate password; leaving binaries unsigned."
             exit 0
           }
           $certPath = Join-Path $env:RUNNER_TEMP "yuelink-codesign.pfx"
@@ -652,6 +845,12 @@ jobs:
           if (-not (Test-Path $vcRedist)) {
             Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" `
               -OutFile $vcRedist -UseBasicParsing
+          }
+          $expected = "cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b"
+          $actual = (Get-FileHash -Algorithm SHA256 $vcRedist).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) {
+            Write-Error "vc_redist.x64.exe SHA-256 mismatch: $actual"
+            exit 1
           }
           Get-Item $vcRedist | Select-Object Name, Length
 
@@ -720,6 +919,8 @@ jobs:
           # Fetch appimagetool and assemble the AppDir
           curl -fSL -o /usr/local/bin/appimagetool \
             "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+          echo "b90f4a8b18967545fda78a445b27680a1642f1ef9488ced28b65398f2be7add2  /usr/local/bin/appimagetool" \
+            | sha256sum -c -
           chmod +x /usr/local/bin/appimagetool
 
           VERSION="${{ env.APP_VERSION }}"
@@ -768,7 +969,9 @@ jobs:
           # but the alternative (require Ubuntu 22.04+) is a worse
           # user-side experience.
           curl -fSL -o /tmp/linuxdeploy.AppImage \
-            "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
+            "https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage"
+          echo "c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d  /tmp/linuxdeploy.AppImage" \
+            | sha256sum -c -
           chmod +x /tmp/linuxdeploy.AppImage
           # GitHub runners disable FUSE; --appimage-extract-and-run is
           # the documented workaround for AppImage tools in CI.
@@ -811,7 +1014,7 @@ jobs:
       # each platform attests its own artifact.
       - name: Attest build provenance
         if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: 'dist/*'
 
@@ -831,21 +1034,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
-            echo "::error::R2_KEY_ID/R2_APP_KEY 未配置 — 无法发布到 R2"; exit 1
-          fi
-          # 2026-06-01: 在 build job 里算好 .sha256 一并传 R2 —— release job 只下
-          # 这些 KB 级 .sha256(不再下 ~5GB 二进制),省 R2 下载带宽(Cloudflare 免费档
-          # 仅 1GB/天,release job 每次下 5GB 一发版就爆顶)。
-          ( cd dist
-            for f in *; do
-              [ -f "$f" ] || continue
-              case "$f" in *.sha256) ;; *) sha256sum "$f" | awk '{print $1}' > "$f.sha256" ;; esac
-            done )
-          # 安装包 + .sha256 传 R2。版本化路径永不变 → 长缓存,让前置 CDN(yuetong.app/
-          # 镜像 CF)缓存住,R2 origin 几乎不被回源命中,省下载带宽。
-          aws s3 sync dist/ "s3://$BUCKET/$TAG/" --endpoint-url "$R2_ENDPOINT" --no-progress \
-            --cache-control "public, max-age=31536000, immutable"
+          bash scripts/ci/publish_immutable_r2.sh
           echo "✓ 已上传本平台安装包+sha256 到 R2 ($BUCKET/$TAG/)"
 
       # ── 2026-06-01: 不再上传 GHA artifact。分发与 release job 取件全走 R2,
@@ -859,28 +1048,35 @@ jobs:
   release:
     name: Create Release
     # Tag-only guard: workflow_dispatch on a branch would otherwise run
-    # this job with GITHUB_REF_NAME=<branch>, which the manifest block
-    # below treats as "stable" (non-pre) and would happily overwrite
-    # update.json with the branch build. Restrict release/updater output
-    # strictly to tag pushes — branch dispatches stop at the build matrix.
+    # this job with GITHUB_REF_NAME=<branch>, which would otherwise publish a
+    # bogus immutable release candidate. Restrict distribution output strictly
+    # to tag pushes — branch dispatches stop at the build matrix.
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [build]
+    needs: [build, preflight]
     runs-on: ubuntu-latest
     permissions:
-      # contents: write          → publish the GitHub Release + assets
-      # id-token: write          → OIDC token used by attest-build-provenance
-      # attestations: write      → store the signed attestation against the binary
-      contents: write
-      id-token: write
-      attestations: write
+      contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
           ref: ${{ github.ref_name }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: false
+
+      - name: Set up Flutter for release-candidate verification
+        if: needs.preflight.outputs.tag_kind == 'stable'
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Resolve locked verification dependencies
+        if: needs.preflight.outputs.tag_kind == 'stable'
+        run: flutter pub get --enforce-lockfile
 
       # 2026-06-01: 只从 R2 下 .sha256(KB 级), 不下 ~5GB 二进制 —— 二进制 build job
       # 已传 R2, release job 只需 sha256 拼 manifest。省 R2 下载带宽(免费档 1GB/天,
@@ -903,6 +1099,36 @@ jobs:
           aws s3 sync "s3://$BUCKET/$TAG/" dist/ --endpoint-url "$R2_ENDPOINT" --no-progress \
             --exclude "*" --include "*.sha256"
           echo "下载的 sha256 sidecar:"; ls -1 dist/
+
+      - name: Validate complete release sidecar set
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' pubspec.yaml)"
+          [ -n "$version" ]
+          expected=(
+            "YueLink-${version}-android-arm64-v8a.apk"
+            "YueLink-${version}-android-armeabi-v7a.apk"
+            "YueLink-${version}-android-x86_64.apk"
+            "YueLink-${version}-android-universal.apk"
+            "YueLink-${version}-ios.ipa"
+            "YueLink-${version}-macos-universal.dmg"
+            "YueLink-${version}-windows-amd64-setup.exe"
+            "YueLink-${version}-windows-amd64-portable.zip"
+            "YueLink-${version}-linux-amd64.AppImage"
+          )
+          actual="$(find dist -maxdepth 1 -type f -name '*.sha256' | wc -l | tr -d ' ')"
+          [ "$actual" -eq "${#expected[@]}" ] || {
+            echo "::error::expected ${#expected[@]} sidecars, found $actual"
+            exit 1
+          }
+          for file in "${expected[@]}"; do
+            sidecar="dist/${file}.sha256"
+            test -f "$sidecar"
+            grep -Eq '^[0-9a-f]{64}[[:space:]]*$' "$sidecar" || {
+              echo "::error::invalid SHA-256 sidecar: $sidecar"
+              exit 1
+            }
+          done
 
       - name: List release assets
         run: ls -lh dist/
@@ -961,7 +1187,8 @@ jobs:
           # Prerelease detection must mirror the manifest / release-flag
           # branches above. `docs/releases/pre.md` is gone with the pre
           # channel — a `vX.Y.Z-pre` tag needs its own notes file.
-          if [[ "$TAG" == *-pre ]]; then
+          TAG_KIND="$(bash scripts/ci/release_tag.sh kind "$TAG")"
+          if [ "$TAG_KIND" = "prerelease" ]; then
             VERSION="${VERSION}-pre"
             TITLE="YueLink v${VERSION} Pre-release"
             [ -f "docs/releases/${TAG}.md" ] && NOTES_FILE="docs/releases/${TAG}.md"
@@ -976,7 +1203,7 @@ jobs:
           PREV_TAG=$(git tag --sort=-creatordate \
             | grep -E '^v[0-9]' \
             | grep -Fxv "$TAG" \
-            | grep -Ev '(^pre$|-pre$)' \
+            | grep -Ev '(^pre$|-pre(\.[0-9]+)?$)' \
             | head -1)
 
           if [ -n "$NOTES_FILE" ]; then
@@ -1072,8 +1299,8 @@ jobs:
       # where the file is still local. Verify post-release with
       # `gh attestation verify <binary> --owner onesyue`.
 
-      # ── Updater manifest published to fixed `updater` tag ────────────────
-      - name: Generate updater manifest
+      # ── Unsigned updater candidate for the private signing plane ─────────
+      - name: Generate updater manifest candidate
         run: |
           VERSION="${{ env.APP_VERSION }}"
           TAG="${GITHUB_REF_NAME}"
@@ -1082,12 +1309,13 @@ jobs:
           # publish a manifest at all: it still produces test artifacts and a
           # GitHub prerelease, but writing it into update.json would flip
           # every stable user onto an unreleased build.
-          if [[ "$TAG" == *-pre ]]; then
+          TAG_KIND="$(bash scripts/ci/release_tag.sh kind "$TAG")"
+          if [ "$TAG_KIND" = "prerelease" ]; then
             echo "::notice::$TAG is a prerelease tag — skipping manifest publish (no pre channel)"
             echo "SKIP_MANIFEST=1" >> "$GITHUB_ENV"
             exit 0
           fi
-          MANIFEST_NAME="update.json"
+          MANIFEST_NAME="update.candidate.json"
           CHANNEL="stable"
           # 2026-05-31 硬切:分发走自有 CDN yuetong.app (R2 origin),不再用
           # GitHub Releases。二进制上传到 R2 的 <tag>/ 前缀下。
@@ -1097,7 +1325,7 @@ jobs:
           # (iOS post-download, manifest-missing platforms). Point it at
           # the real download page.
           RELEASE_URL="https://yue.to/download.html"
-          NOTES=$(cat release_notes.md | head -100 | jq -Rs .)
+          NOTES=$(head -n 100 release_notes.md | jq -Rs .)
 
           sha() {
             [ -f "dist/$1.sha256" ] && cat "dist/$1.sha256" | tr -d '[:space:]' || echo ""
@@ -1128,15 +1356,30 @@ jobs:
             new=$(asset "$key" "$file")
             [ -n "$new" ] && PLATFORMS=$(echo "$PLATFORMS" | jq ". + $new")
           done
+          [ "$(echo "$PLATFORMS" | jq 'length')" -eq 9 ] || {
+            echo "::error::stable manifest must contain all 9 platform artifacts"
+            exit 1
+          }
+
+          # In the public yuelink-ci mirror GITHUB_SHA belongs to the mirror
+          # tag, while checkout points at the private source tag. Use the
+          # checked-out source commit so both repositories generate the same
+          # reproducible timestamps.
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          PUBLISHED_AT="$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)"
+          EXPIRES_AT="$(date -u -d "@$((SOURCE_DATE_EPOCH + 35 * 86400))" +%Y-%m-%dT%H:%M:%SZ)"
 
           jq -n \
+            --argjson schemaVersion 1 \
+            --arg keyId "update-manifest-2026-01" \
             --arg version "$VERSION" \
             --arg channel "$CHANNEL" \
-            --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg publishedAt "$PUBLISHED_AT" \
+            --arg expiresAt "$EXPIRES_AT" \
             --arg releaseUrl "$RELEASE_URL" \
             --argjson notes "$NOTES" \
             --argjson platforms "$PLATFORMS" \
-            '{version: $version, channel: $channel, publishedAt: $publishedAt, releaseUrl: $releaseUrl, notes: $notes, platforms: $platforms}' \
+            '{schemaVersion: $schemaVersion, keyId: $keyId, version: $version, channel: $channel, publishedAt: $publishedAt, expiresAt: $expiresAt, releaseUrl: $releaseUrl, notes: $notes, platforms: $platforms}' \
             > "$MANIFEST_NAME"
           echo "MANIFEST_NAME=$MANIFEST_NAME" >> $GITHUB_ENV
           cat "$MANIFEST_NAME" | jq .
@@ -1164,10 +1407,26 @@ jobs:
               done) || { echo "::error::manifest URL guard failed:"; echo "$ok"; exit 1; }
           echo "$ok"
 
-      # ── Publish binaries + manifest to Cloudflare R2 (yuetong.app CDN origin) ──
+      - name: Validate unsigned stable manifest candidate
+        if: env.SKIP_MANIFEST != '1'
+        run: |
+          set -euo pipefail
+          jq -e '
+            .schemaVersion == 1 and
+            .keyId == "update-manifest-2026-01" and
+            .channel == "stable" and
+            (has("sig") | not) and
+            (.platforms | length) == 9 and
+            all(.platforms[]; .sha256 | test("^[0-9a-f]{64}$"))
+          ' "$MANIFEST_NAME" >/dev/null
+          echo "unsigned candidate complete; private signer owns trust"
+
+      # ── Publish immutable candidate to Cloudflare R2 ─────────────────────
       # 2026-05-31 硬切:分发全部走 R2,不再用 GitHub Releases / updater tag。
       # 用 R2 的 S3 兼容端点 + aws-cli(runner 自带)。二进制传到 <tag>/ 前缀,
-      # manifest 传到桶根 (客户端拉 https://yuetong.app/update.json)。
+      # Public CI never receives the updater private key and never writes the
+      # bucket-root update.json. The private sign-release-manifest workflow
+      # promotes this candidate only after signing and archive verification.
       - name: Publish to R2 (yuetong.app CDN origin)
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
@@ -1185,87 +1444,47 @@ jobs:
           if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
             echo "::error::R2_KEY_ID/R2_APP_KEY secrets 未配置 — 无法发布到 R2"; exit 1
           fi
-          # 安装包 + SHA256SUMS 上传到 <tag>/ 前缀(跳过 .sha256 sidecar)。
-          shopt -s nullglob
-          for f in dist/YueLink-*; do
-            [ -f "$f" ] || continue
-            case "$f" in *.sha256) continue ;; esac
-            aws s3 cp "$f" "s3://$BUCKET/$TAG/$(basename "$f")" \
-              --endpoint-url "$R2_ENDPOINT" --no-progress
-          done
-          # manifest 传桶根,低 TTL 让新版本及时被发现。prerelease tag 不发
-          # manifest(pre 通道已下线),只把测试产物留在 <tag>/ 下。
+          # Build jobs already published every installer immutably. Archive the
+          # consolidated checksums and unsigned candidate under this immutable
+          # tag; clients never consume update.candidate.json.
+          if [ "${SKIP_MANIFEST:-0}" != "1" ]; then
+            cp "$MANIFEST_NAME" "dist/$MANIFEST_NAME"
+          fi
+          bash scripts/ci/publish_immutable_r2.sh
+          # Prerelease tags intentionally have no candidate. Stable candidates
+          # wait for the private signing plane; this job cannot move the root.
           if [ "${SKIP_MANIFEST:-0}" = "1" ]; then
             echo "✓ 已发布安装包到 R2 ($BUCKET/$TAG/) — prerelease, 未发布 manifest"
           else
-            aws s3 cp "$MANIFEST_NAME" "s3://$BUCKET/$MANIFEST_NAME" \
-              --endpoint-url "$R2_ENDPOINT" --no-progress \
-              --content-type application/json \
-              --cache-control "no-cache, max-age=60"
-            echo "✓ 已发布 $MANIFEST_NAME + 安装包到 R2 ($BUCKET/$TAG/)"
+            echo "✓ 已发布不可变 $TAG/$MANIFEST_NAME + 安装包"
+            {
+              echo "## Awaiting private manifest signature"
+              echo
+              echo "Public CI produced \`$TAG/$MANIFEST_NAME\` only."
+              echo "Run \`promote_signed_manifest.sh ${APP_VERSION}\` in the"
+              echo "protected local/private signing plane after this job succeeds."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Verify immutable candidate and all release artifacts
+        if: env.SKIP_MANIFEST != '1'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6 7 8; do
+            if dart run scripts/verify_release_artifacts.dart \
+                 --version "${{ env.APP_VERSION }}" --candidate; then
+              echo "release candidate verification passed on attempt $attempt"
+              exit 0
+            fi
+            echo "::notice::CDN has not converged yet (attempt $attempt/8)"
+            sleep 15
+          done
+          echo "::error::candidate verification failed after CDN propagation window"
+          exit 1
 
   # ───────────────────────────────────────────────────────────────────────────
   # 2026-06-02 旧版本清理已与发版解耦: 改由 prune-r2.yml 每日定时跑(+ 手动)。
   # 理由: prune 是发布后的"清理", 不该让它的失败把整次发版标红(曾因 aws s3 rm
-  # 不支持 --no-progress exit 252 误报"发版失败")。每日 prune 仍只保留 manifest
-  # 当前指向的版本 → R2 永远 ~1 个版本(~1.1GB), 远在免费档 10GB 之下。
+  # 不支持 --no-progress exit 252 误报"发版失败")。每日 prune 保留当前 + 最近
+  # 两个完整 stable 版本(约 3GB),既能回滚也远在免费档 10GB 之下。
   # ───────────────────────────────────────────────────────────────────────────
-
-  # ───────────────────────────────────────────────────────────────────────────
-  # Post-publish: store submissions (stable v* only). Failures here do NOT
-  # invalidate the release — package managers can be retried out-of-band.
-  # ───────────────────────────────────────────────────────────────────────────
-  submit-to-winget:
-    name: Submit to winget
-    # 2026-05-31 硬切停用:winget releaser 指向 github.com/releases/download
-    # 资产,分发已迁出 GitHub(走 yuetong.app/R2),该 URL 不复存在。
-    # 如需公共包管理器分发,改成指向 CDN 的 manifest 后再启用。
-    if: false
-    needs: [release]
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - name: Submit to winget-pkgs
-        if: env.WINGET_TOKEN != ''
-        env:
-          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
-        uses: vedantmgoyal9/winget-releaser@v2
-        with:
-          identifier: Yueto.YueLink
-          # Matches `YueLink-<version>-windows-amd64-setup.exe`. The artifact
-          # uses dash-separated segments throughout (see "Build Windows
-          # installer + portable zip" above), so the previous underscore
-          # prefix `_(amd64|...)` never matched any release asset.
-          installers-regex: '-windows-(amd64|arm64|x64)-setup\.exe$'
-          token: ${{ secrets.WINGET_TOKEN }}
-
-  submit-to-homebrew:
-    name: Submit to Homebrew
-    # 2026-05-31 硬切停用:download-url 指向 github.com/releases,分发已迁
-    # R2/yuetong.app。如需 Homebrew cask,改 download-url 指向 CDN 后再启用。
-    if: false
-    needs: [release]
-    runs-on: macos-latest
-    continue-on-error: true
-    steps:
-      - name: Compute version
-        id: ver
-        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
-
-      - name: Bump homebrew cask
-        if: env.HOMEBREW_TAP_TOKEN != ''
-        env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        uses: mislav/bump-homebrew-formula-action@v3
-        with:
-          formula-name: yuelink
-          formula-path: Casks/yuelink.rb
-          tap: onesyue/homebrew-tap
-          base-branch: main
-          download-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/YueLink-${{ steps.ver.outputs.version }}-macos-universal.dmg
-          commit-message: |
-            yuelink ${{ steps.ver.outputs.version }}
-
-            Auto-bumped by build.yml on tag ${{ github.ref_name }}.

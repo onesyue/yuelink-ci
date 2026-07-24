@@ -1,8 +1,8 @@
 name: Prune old versions from R2
 
-# 自动删除 R2 (yuelink-dist) 里的旧版本安装包, 只保留 manifest
-# (update.json) 当前指向的版本 → R2 永远只留当前版本(~1.1GB),
-# 远在免费档 10GB 存储之下(R2 egress 全免, 只需守住 storage)。
+# 自动删除 R2 (yuelink-dist) 里的旧版本安装包,保留当前 + 最近两个完整
+# stable 版本(默认 3 版,约 3GB)。回滚至少需要上一稳定版仍在;只留当前版
+# 会把“不可变发布”退化成不可恢复删除。
 #
 # 2026-06-02: 与发版解耦 —— 改为每日定时跑(原先挂在 release 之后, prune 一失败
 # 整次发版就标红, 误导成"发版失败")。发版只管发布, 清理交给这个定时任务。
@@ -49,25 +49,142 @@ jobs:
             echo "::error::R2_KEY_ID/R2_APP_KEY 未配置 — 无法 prune"; exit 1
           fi
 
-          # 1) 从 manifest 确定要保留的版本。读不到 → 中止。
-          #    只有一个通道(update.json); pre 通道已于 2026-07-20 下线。
-          KEEP=""
-          for m in update.json; do
-            v=$(aws s3 cp "s3://$BUCKET/$m" - --endpoint-url "$R2_ENDPOINT" 2>/dev/null \
-                | jq -r '.version // empty' 2>/dev/null || true)
-            [ -n "$v" ] && KEEP="$KEEP v$v"
-          done
-          KEEP=$(echo $KEEP | tr ' ' '\n' | grep -v '^$' | sort -u || true)
-          if [ -z "$KEEP" ]; then
-            echo "::error::无法从 manifest 读出要保留的版本 — 中止(绝不在不确定时删除)"
+          # 1) 当前版本必须来自 root manifest。每个可回滚候选还必须有归档
+          #    update.json、签名字段、精确九平台和对应二进制/sidecar 对象;
+          #    半截构建或被人工删坏的前缀不占回滚名额。
+          ROOT_MANIFEST=$(mktemp)
+          PREFIXES=$(mktemp)
+          COMPLETE=$(mktemp)
+          ARCHIVED=$(mktemp)
+          trap 'rm -f "$ROOT_MANIFEST" "$PREFIXES" "$COMPLETE" "$ARCHIVED"' EXIT
+          aws s3 cp "s3://$BUCKET/update.json" "$ROOT_MANIFEST" \
+            --endpoint-url "$R2_ENDPOINT" >/dev/null 2>&1 || {
+              echo "::error::无法读取 root update.json — 中止"
+              exit 1
+            }
+          CURRENT_VERSION=$(jq -er \
+            '.version | select(type == "string")' "$ROOT_MANIFEST" \
+            2>/dev/null || true)
+          if ! [[ "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::无法从 root update.json 读出稳定版本 — 中止(绝不在不确定时删除)"
             exit 1
           fi
-          echo "保留版本(manifest 当前指向):"; echo "$KEEP" | sed 's/^/  /'
+          CURRENT_PREFIX="v$CURRENT_VERSION"
 
-          # 2) 列出所有 vX.Y.Z/ 版本前缀, 删除不在保留集里的。
+          aws s3 ls "s3://$BUCKET/" --endpoint-url "$R2_ENDPOINT" \
+            | awk '/ PRE /{print $2}' | sed 's#/##' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' > "$PREFIXES" || true
+          while read -r prefix; do
+            [ -n "$prefix" ] || continue
+            if ! aws s3 cp "s3://$BUCKET/$prefix/update.json" "$ARCHIVED" \
+                --endpoint-url "$R2_ENDPOINT" >/dev/null 2>&1; then
+              continue
+            fi
+            if ! jq -e --arg prefix "$prefix" '
+                .schemaVersion == 1 and
+                (.keyId | type == "string" and
+                  test("^update-manifest-[0-9]{4}-[0-9]{2}$")) and
+                .channel == "stable" and
+                ("v" + .version) == $prefix and
+                (.sig | type == "string" and startswith("ed25519:")) and
+                (.platforms | keys | sort) == ([
+                  "android-arm64-v8a", "android-armeabi-v7a",
+                  "android-universal", "android-x86_64", "ios",
+                  "linux-amd64-appimage", "macos-universal",
+                  "windows-amd64-portable", "windows-amd64-setup"
+                ] | sort) and
+                all(.platforms[]; (
+                  .url | type == "string" and
+                  startswith("https://yuetong.app/" + $prefix + "/")
+                ) and (.sha256 | test("^[0-9a-f]{64}$")))
+              ' "$ARCHIVED" >/dev/null 2>&1; then
+              continue
+            fi
+            if [ "$prefix" = "$CURRENT_PREFIX" ] &&
+               ! cmp -s "$ROOT_MANIFEST" "$ARCHIVED"; then
+              echo "::error::root update.json 与 $prefix 归档不一致 — 中止"
+              exit 1
+            fi
+
+            complete=1
+            while IFS=$'\t' read -r url digest; do
+              key="${url#https://yuetong.app/}"
+              case "$key" in "$prefix/"*) ;; *) complete=0; break ;; esac
+              binary="${key##*/}"
+              if ! aws s3api head-object --bucket "$BUCKET" --key "$key" \
+                    --endpoint-url "$R2_ENDPOINT" >/dev/null 2>&1 ||
+                 ! sidecar=$(aws s3 cp "s3://$BUCKET/$key.sha256" - \
+                    --endpoint-url "$R2_ENDPOINT" 2>/dev/null) ||
+                 [ "$(printf '%s' "$sidecar" | awk 'NR == 1 {print tolower($1)}')" != "$digest" ]; then
+                echo "::warning::$prefix 不完整: $binary 或其 sidecar 缺失/不一致"
+                complete=0
+                break
+              fi
+            done < <(jq -r '.platforms[] | [.url, .sha256] | @tsv' "$ARCHIVED")
+            [ "$complete" -eq 1 ] && echo "$prefix" >> "$COMPLETE"
+          done < "$PREFIXES"
+
+          grep -qx "$CURRENT_PREFIX" "$COMPLETE" || {
+            echo "::error::当前版本 $CURRENT_PREFIX 没有完整归档 manifest — 中止"
+            exit 1
+          }
+
+          # Keep current plus the two highest complete stable versions other
+          # than current. Before the second retained version exists, abort
+          # instead of pretending rollback is available.
+          KEEP=$(
+            {
+              echo "$CURRENT_PREFIX"
+              { grep -vx "$CURRENT_PREFIX" "$COMPLETE" || true; } \
+                | sort -Vr | head -2
+            } | sort -u
+          )
+          KEEP_COUNT=$(printf '%s\n' "$KEEP" | grep -c . || true)
+          if [ "$KEEP_COUNT" -lt 2 ]; then
+            echo "::warning::只有 $KEEP_COUNT 个完整 stable 版本;至少 2 个才允许删除。跳过 prune。"
+            exit 0
+          fi
+          echo "保留完整 stable 版本($KEEP_COUNT):"
+          echo "$KEEP" | sed 's/^/  /'
+
+          # 2) 只删除可证明已经完成的发布前缀:
+          #    - stable 必须在上面的 COMPLETE 集合里。没有归档 manifest 的
+          #      前缀可能是正在上传的构建,也可能是历史半截构建;定时任务都
+          #      fail-safe 跳过,交给人工盘点,绝不和 release matrix 抢对象。
+          #    - prerelease 没有 manifest,以最终聚合 SHA256SUMS 作为完成标记,
+          #      且至少静置 6h 才可清理,避开 schedule 与仍在收尾的构建竞争。
+          #    - 任何不严格匹配发布 tag 的 v* 目录一律不碰。
+          #    完整 stable 始终至少保留当前 + 上一版。
           aws s3 ls "s3://$BUCKET/" --endpoint-url "$R2_ENDPOINT" \
             | awk '/ PRE /{print $2}' | sed 's#/##' | while read -r p; do
-            case "$p" in v[0-9]*) ;; *) continue ;; esac   # 只动 vX.Y.Z 前缀
+            if [[ "$p" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              if ! grep -qx "$p" "$COMPLETE"; then
+                echo "::warning::跳过未完成/无可信归档的 stable 前缀 $p"
+                continue
+              fi
+            elif [[ "$p" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-pre(\.[0-9]+)?$ ]]; then
+              base_version="${BASH_REMATCH[1]}"
+              sums_key="$p/YueLink-${base_version}-SHA256SUMS"
+              last_modified="$(
+                aws s3api head-object --bucket "$BUCKET" --key "$sums_key" \
+                  --endpoint-url "$R2_ENDPOINT" \
+                  --query LastModified --output text 2>/dev/null || true
+              )"
+              if [ -z "$last_modified" ] || [ "$last_modified" = "None" ]; then
+                echo "::warning::跳过无完成标记的 prerelease 前缀 $p"
+                continue
+              fi
+              sums_epoch="$(date -u -d "$last_modified" +%s 2>/dev/null || true)"
+              now_epoch="$(date -u +%s)"
+              if [ -z "$sums_epoch" ] ||
+                 [ $((now_epoch - sums_epoch)) -lt $((6 * 60 * 60)) ]; then
+                echo "✓ 保留仍在 6h 安全窗内的 prerelease $p"
+                continue
+              fi
+            else
+              echo "✓ 跳过非严格发布前缀 $p"
+              continue
+            fi
             if echo "$KEEP" | grep -qx "$p"; then
               echo "✓ 保留 $p"
             else
@@ -80,7 +197,7 @@ jobs:
           done
           echo "✓ prune 完成"
 
-          # 3) 存储用量报告 + 守护(免费档 10GB)。prune 后正常应 ~1.1GB。
+          # 3) 存储用量报告 + 守护(免费档 10GB)。三稳定版正常约 3GB。
           #    >8GB(80%)发 ::warning:: 提醒; 不 fail(避免噪音), 只示警。
           BYTES=$(aws s3 ls "s3://$BUCKET/" --recursive --endpoint-url "$R2_ENDPOINT" --summarize 2>/dev/null \
                   | awk '/Total Size:/{print $3}')
