@@ -32,6 +32,34 @@ command -v gh >/dev/null 2>&1 || {
   exit 1
 }
 
+# GitHub does not expose secret values, but it does expose configured names.
+# Check those before creating the immutable public tag: otherwise a missing
+# certificate is discovered only after the tag has fired, leaving a permanent
+# failed release that must be replaced by a new patch version.
+required_secrets=(SRC_DEPLOY_KEY R2_KEY_ID R2_APP_KEY)
+if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  required_secrets+=(
+    KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD
+    WINDOWS_CERT_BASE64 WINDOWS_CERT_PASSWORD
+    APPLE_CERTIFICATE_BASE64 APPLE_CERTIFICATE_PASSWORD
+    APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+  )
+fi
+configured_secrets="$(
+  gh secret list -R onesyue/yuelink-ci --json name --jq '.[].name'
+)"
+missing_secrets=0
+for secret_name in "${required_secrets[@]}"; do
+  if ! grep -Fxq "$secret_name" <<<"$configured_secrets"; then
+    echo "::error::yuelink-ci 缺少必需的 repository secret: $secret_name"
+    missing_secrets=$((missing_secrets + 1))
+  fi
+done
+[ "$missing_secrets" -eq 0 ] || {
+  echo "::error::发布前密钥门禁未通过；未创建任何 tag。"
+  exit 1
+}
+
 [ "$(git branch --show-current)" = "master" ] || {
   echo "::error::必须从 yuelink-ci/master 发版。"
   exit 1
