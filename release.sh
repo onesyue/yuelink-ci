@@ -5,9 +5,9 @@
 #   ./release.sh vX.Y.Z
 #   ./release.sh vX.Y.Z-pre.N
 #
-# One explicitly approved official-download exception exists for v1.2.99:
-#   YUELINK_OFFICIAL_UNSIGNED_CONFIRM=YUELINK_OFFICIAL_UNSIGNED_v1.2.99_2026-07-27 \
-#     ./release.sh v1.2.99
+# One explicitly approved official-download exception exists for v1.2.100:
+#   YUELINK_OFFICIAL_UNSIGNED_CONFIRM=YUELINK_OFFICIAL_UNSIGNED_v1.2.100_2026-07-27 \
+#     ./release.sh v1.2.100
 # It expires by UTC date and cannot authorize any other version.
 set -euo pipefail
 
@@ -44,9 +44,9 @@ command -v gh >/dev/null 2>&1 || {
   exit 1
 }
 
-readonly OFFICIAL_UNSIGNED_TAG="v1.2.99"
+readonly OFFICIAL_UNSIGNED_TAG="v1.2.100"
 readonly OFFICIAL_UNSIGNED_UTC_DATE="2026-07-27"
-readonly OFFICIAL_UNSIGNED_TOKEN="YUELINK_OFFICIAL_UNSIGNED_v1.2.99_2026-07-27"
+readonly OFFICIAL_UNSIGNED_TOKEN="YUELINK_OFFICIAL_UNSIGNED_v1.2.100_2026-07-27"
 OFFICIAL_UNSIGNED_MODE=0
 
 official_unsigned_confirmed() {
@@ -100,7 +100,7 @@ if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
       exit 1
     fi
     OFFICIAL_UNSIGNED_MODE=1
-    printf '::warning::v1.2.99 官网直发例外允许缺少 system-signing secret %s\n' \
+    printf '::warning::v1.2.100 官网直发例外允许缺少 system-signing secret %s\n' \
       "${missing_system_signing[@]}"
   fi
 fi
