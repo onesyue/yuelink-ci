@@ -6,7 +6,7 @@
 #   ./release.sh vX.Y.Z-pre.N
 #
 # One explicitly approved official-download exception exists for v1.2.100:
-#   YUELINK_OFFICIAL_UNSIGNED_CONFIRM=YUELINK_OFFICIAL_UNSIGNED_v1.2.100_2026-07-27 \
+#   YUELINK_OFFICIAL_UNSIGNED_CONFIRM=YUELINK_OFFICIAL_UNSIGNED_v1.2.101_2026-07-27 \
 #     ./release.sh v1.2.100
 # It expires by UTC date and cannot authorize any other version.
 set -euo pipefail
@@ -44,9 +44,9 @@ command -v gh >/dev/null 2>&1 || {
   exit 1
 }
 
-readonly OFFICIAL_UNSIGNED_TAG="v1.2.100"
+readonly OFFICIAL_UNSIGNED_TAG="v1.2.101"
 readonly OFFICIAL_UNSIGNED_UTC_DATE="2026-07-27"
-readonly OFFICIAL_UNSIGNED_TOKEN="YUELINK_OFFICIAL_UNSIGNED_v1.2.100_2026-07-27"
+readonly OFFICIAL_UNSIGNED_TOKEN="YUELINK_OFFICIAL_UNSIGNED_v1.2.101_2026-07-27"
 OFFICIAL_UNSIGNED_MODE=0
 
 official_unsigned_confirmed() {
