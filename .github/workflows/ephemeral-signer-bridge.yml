@@ -1,0 +1,59 @@
+name: Ephemeral Private Signer Bridge
+
+# Public hosted minutes are used only to provide a disposable runner process
+# for the private YueLink signing workflow. The bridge receives a short-lived
+# runner registration token, never the updater private key or R2 credentials.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yuelink-ephemeral-private-signer
+  cancel-in-progress: false
+
+jobs:
+  bridge:
+    name: One-job private signer bridge
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - name: Register and serve one private signing job
+        shell: bash
+        env:
+          REGISTRATION_TOKEN: ${{ secrets.YUELINK_SIGNER_REGISTRATION_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          ulimit -c 0 || true
+          [ -n "${REGISTRATION_TOKEN:-}" ] || {
+            echo "::error::short-lived private runner registration token is missing"
+            exit 1
+          }
+          echo "::add-mask::$REGISTRATION_TOKEN"
+
+          runner_version='2.336.0'
+          runner_sha256='04cf0be1aff4c3ec3554466c39124ca250e3effd8873bb7e8d68535aa9505d5d'
+          runner_dir="$RUNNER_TEMP/yuelink-private-signer"
+          archive="$RUNNER_TEMP/actions-runner-linux-x64-${runner_version}.tar.gz"
+          mkdir -p "$runner_dir"
+
+          curl --fail --location --retry 5 --silent --show-error \
+            --output "$archive" \
+            "https://github.com/actions/runner/releases/download/v${runner_version}/actions-runner-linux-x64-${runner_version}.tar.gz"
+          printf '%s  %s\n' "$runner_sha256" "$archive" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$runner_dir"
+
+          cd "$runner_dir"
+          ./config.sh --unattended --ephemeral \
+            --url 'https://github.com/onesyue/yuelink' \
+            --token "$REGISTRATION_TOKEN" \
+            --name "yuelink-signer-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --labels yuelink-signer \
+            --work _work
+          unset REGISTRATION_TOKEN
+
+          # An ephemeral runner accepts exactly one job and automatically
+          # unregisters after it. Bound the listener so a missing dispatch
+          # cannot consume a hosted runner indefinitely.
+          timeout --signal=TERM --kill-after=30s 4200 ./run.sh
