@@ -50,10 +50,6 @@ permissions:
 
 env:
   FLUTTER_VERSION: '3.44.7'
-  # Non-secret, release-specific operator attestation. The source-side helper
-  # accepts it only for one exact version and UTC date; absent/mismatched values
-  # leave stable system-signing gates fail-closed.
-  OFFICIAL_UNSIGNED_RELEASE_APPROVAL: ${{ vars.OFFICIAL_UNSIGNED_RELEASE_APPROVAL }}
   # Go 1.26.5 contains the July 2026 crypto/tls security fixes. Keep the
   # release builder and govulncheck on this exact patch release; using a
   # floating 1.26 selector can silently rebuild the same tag with a different
@@ -193,17 +189,6 @@ jobs:
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           submodules: recursive
           persist-credentials: false
-
-      - name: Resolve one-time official-download signing exception
-        shell: bash
-        run: |
-          set -euo pipefail
-          if bash scripts/ci/official_unsigned_release.sh "$GITHUB_REF_NAME"; then
-            echo "OFFICIAL_UNSIGNED_RELEASE=1" >> "$GITHUB_ENV"
-            echo "::warning::system publisher signatures may be absent; artifact SHA-256 and private updater-manifest signing remain mandatory"
-          else
-            echo "OFFICIAL_UNSIGNED_RELEASE=0" >> "$GITHUB_ENV"
-          fi
 
       # ── Toolchains (Go for core, Flutter for app, Java for android) ───────
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -605,13 +590,8 @@ jobs:
               fi
             done
             if [ "${#missing[@]}" -gt 0 ]; then
-              if [ "${OFFICIAL_UNSIGNED_RELEASE:-0}" = "1" ]; then
-                printf '::warning::official-download exception permits missing macOS signing value %s\n' \
-                  "${missing[@]}"
-              else
-                printf '::error::stable macOS release missing %s\n' "${missing[@]}"
-                exit 1
-              fi
+              printf '::error::stable macOS release missing %s\n' "${missing[@]}"
+              exit 1
             fi
           fi
 
@@ -821,8 +801,7 @@ jobs:
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_BASE64)) {
-            if (("$env:GITHUB_REF_NAME" -match '^v[0-9]+\.[0-9]+\.[0-9]+$') -and
-                ("$env:OFFICIAL_UNSIGNED_RELEASE" -ne "1")) {
+            if ("$env:GITHUB_REF_NAME" -match '^v[0-9]+\.[0-9]+\.[0-9]+$') {
               Write-Error "stable Windows release requires WINDOWS_CERT_BASE64"
               exit 1
             }
@@ -830,8 +809,7 @@ jobs:
             exit 0
           }
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASSWORD)) {
-            if (("$env:GITHUB_REF_NAME" -match '^v[0-9]+\.[0-9]+\.[0-9]+$') -and
-                ("$env:OFFICIAL_UNSIGNED_RELEASE" -ne "1")) {
+            if ("$env:GITHUB_REF_NAME" -match '^v[0-9]+\.[0-9]+\.[0-9]+$') {
               Write-Error "stable Windows release requires WINDOWS_CERT_PASSWORD"
               exit 1
             }
