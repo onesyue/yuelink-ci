@@ -4,12 +4,16 @@ This repository contains no application source. Its workflow is generated
 from the private `onesyue/yuelink` release workflow by `sync-build.sh`; each
 public tag checks out the private repository's exact same tag.
 
-Stable releases are fail-closed before a public tag is created. The release
-driver requires Android keystore values, Apple signing and notarization
-values, Windows publisher certificate values, R2 credentials, and the private
-source deploy key. There is no unsigned platform-binary exception.
+Stable releases are fail-closed on the Android upgrade key, immutable R2
+credentials, and private-source deploy key before a public tag is created.
+Apple Developer ID/notarization and Windows Authenticode are optional for
+direct sideload distribution: each platform publishes its exact signing mode
+and install notice. Missing or failed platforms never borrow an older binary,
+and a partial release cannot produce or promote an updater manifest.
 
-The public workflow publishes immutable binaries, checksums, provenance, and
+The public workflow publishes every successful current-tag platform
+independently with checksums, provenance, source-commit identity and truthful
+sideload notices. Only a complete five-platform / nine-artifact set can create
 an unsigned updater-manifest candidate. The updater signing seed remains in
 the private signing plane, which authenticates the current signed root, signs
 the candidate, enforces a monotonic version transition, publishes the signed
@@ -25,5 +29,5 @@ git diff -- .github/workflows/build.yml
 ```
 
 `release.sh` verifies the private tag exists, the public tag does not, the
-generated workflow exactly matches that private tag, and every stable signing
-secret is configured before it creates an immutable public tag.
+generated workflow exactly matches that private tag, and every mandatory
+sideload secret is configured before it creates an immutable public tag.

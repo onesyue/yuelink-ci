@@ -33,16 +33,15 @@ command -v gh >/dev/null 2>&1 || {
 }
 
 # GitHub does not expose secret values, but it does expose configured names.
-# Check those before creating the immutable public tag: otherwise a missing
-# certificate is discovered only after the tag has fired, leaving a permanent
-# failed release that must be replaced by a new patch version.
+# Require only identities that are structurally mandatory for a sideload
+# release: the source checkout, immutable R2 publisher, and (for stable tags)
+# Android's upgrade-compatible APK key. Apple Developer ID/notarization and
+# Windows Authenticode are optional publisher identities; each platform records
+# its actual mode and an unavailable platform never blocks unrelated artifacts.
 required_secrets=(SRC_DEPLOY_KEY R2_KEY_ID R2_APP_KEY)
 if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   required_secrets+=(
     KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD
-    WINDOWS_CERT_BASE64 WINDOWS_CERT_PASSWORD
-    APPLE_CERTIFICATE_BASE64 APPLE_CERTIFICATE_PASSWORD
-    APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
   )
 fi
 configured_secrets="$(

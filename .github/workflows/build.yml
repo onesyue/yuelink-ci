@@ -317,11 +317,10 @@ jobs:
           TAG_KIND="$(bash scripts/ci/release_tag.sh kind "$GITHUB_REF_NAME")"
           case "$TAG_KIND" in
             prerelease)
-              if [[ "$VERSION" == *-pre* ]]; then
-                APP_VERSION="${VERSION}"
-              else
-                APP_VERSION="${VERSION}-pre"
-              fi
+              # The tag is the artifact identity. Preserve a numbered
+              # prerelease suffix (`-pre.N`) instead of collapsing every
+              # attempt onto the same `-pre` object keys.
+              APP_VERSION="${GITHUB_REF_NAME#v}"
               ;;
             *)
               APP_VERSION="${VERSION}"
@@ -554,7 +553,7 @@ jobs:
             --build-name=${{ env.APP_VERSION }} \
             --build-number=${{ env.BUILD_NUM }}
 
-      - name: Stable macOS signing and notarization gate
+      - name: Resolve actual macOS signing and notarization mode
         if: matrix.platform == 'macos'
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
@@ -580,19 +579,14 @@ jobs:
           fi
           echo "MAC_SIGNING_CONFIGURED=$signing_configured" >> "$GITHUB_ENV"
           echo "MAC_NOTARIZATION_CONFIGURED=$notarization_configured" >> "$GITHUB_ENV"
-
-          if [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            missing=()
-            for var in APPLE_CERTIFICATE_BASE64 APPLE_CERTIFICATE_PASSWORD \
-              APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
-              if [ -z "${!var:-}" ]; then
-                missing+=("$var")
-              fi
-            done
-            if [ "${#missing[@]}" -gt 0 ]; then
-              printf '::error::stable macOS release missing %s\n' "${missing[@]}"
-              exit 1
-            fi
+          if [ "$notarization_configured" -eq 1 ]; then
+            echo "MAC_SIGNING_MODE=developer-id-notarized" >> "$GITHUB_ENV"
+          elif [ "$signing_configured" -eq 1 ]; then
+            echo "MAC_SIGNING_MODE=developer-id-not-notarized" >> "$GITHUB_ENV"
+            echo "::warning::macOS Developer ID is configured but notarization is not; publishing as direct sideload, not notarized"
+          else
+            echo "MAC_SIGNING_MODE=ad-hoc-not-notarized" >> "$GITHUB_ENV"
+            echo "::warning::macOS publisher identity is absent; publishing an ad-hoc signed, not notarized direct-sideload build"
           fi
 
       - name: Import signing certificate (macOS)
@@ -653,7 +647,7 @@ jobs:
           find "$APP/Contents/Frameworks" -type d -name '*.framework' \
             -exec codesign --force --timestamp=none --sign - {} \; 2>/dev/null || true
           codesign --force --timestamp=none --sign - "$APP"
-          codesign --verify --verbose=2 "$APP" || true
+          codesign --verify --deep --strict --verbose=2 "$APP"
 
       - name: Package macOS .dmg
         if: matrix.platform == 'macos'
@@ -801,24 +795,19 @@ jobs:
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_BASE64)) {
-            if ("$env:GITHUB_REF_NAME" -match '^v[0-9]+\.[0-9]+\.[0-9]+$') {
-              Write-Error "stable Windows release requires WINDOWS_CERT_BASE64"
-              exit 1
-            }
+            "WINDOWS_SIGNING_MODE=unsigned" | Out-File -FilePath $env:GITHUB_ENV -Append
             Write-Warning "Windows publisher certificate absent; binaries remain authentically reported as unsigned."
             exit 0
           }
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASSWORD)) {
-            if ("$env:GITHUB_REF_NAME" -match '^v[0-9]+\.[0-9]+\.[0-9]+$') {
-              Write-Error "stable Windows release requires WINDOWS_CERT_PASSWORD"
-              exit 1
-            }
+            "WINDOWS_SIGNING_MODE=unsigned" | Out-File -FilePath $env:GITHUB_ENV -Append
             Write-Warning "Windows publisher certificate password absent; binaries remain authentically reported as unsigned."
             exit 0
           }
           $certPath = Join-Path $env:RUNNER_TEMP "yuelink-codesign.pfx"
           [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERT_BASE64))
           "WINDOWS_CERT_PATH=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "WINDOWS_SIGNING_MODE=authenticode" | Out-File -FilePath $env:GITHUB_ENV -Append
 
           $releaseDir = "build\windows\x64\runner\Release"
           $targets = @(
@@ -880,6 +869,29 @@ jobs:
           $zipName = "dist\YueLink-$version-windows-amd64-portable.zip"
           Compress-Archive -Path "$releaseDir\*" -DestinationPath $zipName -Force
           Get-ChildItem dist\
+
+      - name: Verify actual Windows signing state
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $releaseDir = "build\windows\x64\runner\Release"
+          $targets = @(
+            "$releaseDir\yuelink.exe",
+            "$releaseDir\yuelink-service-helper.exe",
+            "$releaseDir\yuelink-mihomo.exe"
+          )
+          $installer = Get-ChildItem dist\YueLink-*-windows-amd64-setup.exe | Select-Object -First 1
+          if ($installer) { $targets += $installer.FullName }
+          foreach ($target in $targets) {
+            if (-not (Test-Path $target)) { Write-Error "signing target missing: $target"; exit 1 }
+            $status = (Get-AuthenticodeSignature $target).Status
+            if ($env:WINDOWS_SIGNING_MODE -eq "authenticode") {
+              if ($status -ne "Valid") { Write-Error "$target Authenticode status is $status, expected Valid"; exit 1 }
+            } elseif ($status -ne "NotSigned") {
+              Write-Error "$target is reported unsigned but Authenticode status is $status"; exit 1
+            }
+          }
+          Write-Host "Windows signing mode verified: $env:WINDOWS_SIGNING_MODE"
 
       # ─────────────────────────────────────────────────────────────────────
       # LINUX — AppImage only (drops .deb / .rpm — was sprawling for no win)
@@ -1008,7 +1020,65 @@ jobs:
       #    旧 artifact, 配额表仍显示满 → 所有 upload-artifact 失败(含构建产物)→ 卡发布。
       #    走 R2(本就是分发通道)彻底绕开这个计量滞后。aws s3 sync 跨 win/mac/linux 通用。
       # Provenance attestation runs HERE (build job), not in release: the
-      # release job downloads only .sha256 sidecars (binaries live in R2), so
+      # release job downloads sidecars + identity records (binaries live in R2).
+      - name: Record exact sideload identity
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${APP_VERSION}"
+          tag="${GITHUB_REF_NAME}"
+          source_commit="$(git rev-parse HEAD)"
+          tag_commit="$(git rev-list -n1 "$tag")"
+          [ "$source_commit" = "$tag_commit" ] || {
+            echo "::error::checked-out source commit $source_commit does not match $tag ($tag_commit)"
+            exit 1
+          }
+          [ "${tag#v}" = "$version" ] || {
+            echo "::error::artifact version $version does not match tag $tag"
+            exit 1
+          }
+
+          platform="${{ matrix.platform }}"
+          case "$platform" in
+            android) signing_mode=android-release-key; notarization=not-applicable ;;
+            ios) signing_mode=ad-hoc; notarization=not-notarized ;;
+            macos) signing_mode="${MAC_SIGNING_MODE:?}"; notarization=not-notarized
+              [ "$signing_mode" = developer-id-notarized ] && notarization=notarized ;;
+            windows) signing_mode="${WINDOWS_SIGNING_MODE:?}"; notarization=not-applicable ;;
+            linux) signing_mode=unsigned; notarization=not-applicable ;;
+            *) echo "::error::unknown release platform $platform"; exit 1 ;;
+          esac
+
+          # macOS runners still ship Bash 3.2, so keep this step free of
+          # mapfile/readarray. Every platform runner has jq.
+          artifacts_json="$(find dist -maxdepth 1 -type f -print \
+            | sed 's#^.*/##' | LC_ALL=C sort \
+            | jq -Rsc 'split("\n")[:-1]')"
+          [ "$(jq 'length' <<<"$artifacts_json")" -gt 0 ] || {
+            echo "::error::$platform produced no artifact"
+            exit 1
+          }
+          metadata="dist/YueLink-${version}-${platform}-RELEASE.json"
+          notice="dist/YueLink-${version}-${platform}-INSTALL-NOTICE.txt"
+          jq -n \
+            --arg tag "$tag" --arg version "$version" --arg sourceCommit "$source_commit" \
+            --arg platform "$platform" --arg signingMode "$signing_mode" \
+            --arg notarization "$notarization" --argjson artifacts "$artifacts_json" \
+            '{schemaVersion:1,distribution:"direct-sideload",tag:$tag,version:$version,sourceCommit:$sourceCommit,platform:$platform,signingMode:$signingMode,notarization:$notarization,storeSubmission:false,artifacts:$artifacts}' \
+            > "$metadata"
+          {
+            echo 'Distribution: direct sideload'
+            echo "Version: $version"
+            echo "Tag: $tag"
+            echo "Source commit: $source_commit"
+            echo "Publisher signing: $signing_mode"
+            echo "Apple notarization: $notarization"
+            echo 'Store submission: no'
+            echo 'No older binary was substituted for an unavailable platform.'
+          } > "$notice"
+          echo "::notice::$platform release identity: signing=$signing_mode notarization=$notarization"
+
       # `subject-path: dist/*` there matched nothing → "Could not find subject"
       # (was continue-on-error, so it silently produced NO attestation). At
       # this point dist/ holds exactly this platform's freshly-built binaries
@@ -1053,7 +1123,10 @@ jobs:
     # this job with GITHUB_REF_NAME=<branch>, which would otherwise publish a
     # bogus immutable release candidate. Restrict distribution output strictly
     # to tag pushes — branch dispatches stop at the build matrix.
-    if: startsWith(github.ref, 'refs/tags/')
+    if: >-
+      always() &&
+      startsWith(github.ref, 'refs/tags/') &&
+      needs.preflight.result == 'success'
     needs: [build, preflight]
     runs-on: ubuntu-latest
     permissions:
@@ -1098,39 +1171,49 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
+          VERSION="${TAG#v}"
           aws s3 sync "s3://$BUCKET/$TAG/" dist/ --endpoint-url "$R2_ENDPOINT" --no-progress \
-            --exclude "*" --include "*.sha256"
-          echo "下载的 sha256 sidecar:"; ls -1 dist/
+            --exclude "*" \
+            --include "YueLink-${VERSION}-android-*.apk.sha256" \
+            --include "YueLink-${VERSION}-ios.ipa.sha256" \
+            --include "YueLink-${VERSION}-macos-universal.dmg.sha256" \
+            --include "YueLink-${VERSION}-windows-amd64-setup.exe.sha256" \
+            --include "YueLink-${VERSION}-windows-amd64-portable.zip.sha256" \
+            --include "YueLink-${VERSION}-linux-amd64.AppImage.sha256" \
+            --include "YueLink-${VERSION}-*-RELEASE.json" \
+            --include "YueLink-${VERSION}-*-RELEASE.json.sha256" \
+            --include "YueLink-${VERSION}-*-INSTALL-NOTICE.txt" \
+            --include "YueLink-${VERSION}-*-INSTALL-NOTICE.txt.sha256"
+          echo "downloaded current-tag release evidence:"; ls -1 dist/
 
-      - name: Validate complete release sidecar set
+      - name: Validate current-tag sideload artifacts
+        id: sideload
         run: |
           set -euo pipefail
-          version="$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' pubspec.yaml)"
-          [ -n "$version" ]
-          expected=(
-            "YueLink-${version}-android-arm64-v8a.apk"
-            "YueLink-${version}-android-armeabi-v7a.apk"
-            "YueLink-${version}-android-x86_64.apk"
-            "YueLink-${version}-android-universal.apk"
-            "YueLink-${version}-ios.ipa"
-            "YueLink-${version}-macos-universal.dmg"
-            "YueLink-${version}-windows-amd64-setup.exe"
-            "YueLink-${version}-windows-amd64-portable.zip"
-            "YueLink-${version}-linux-amd64.AppImage"
-          )
-          actual="$(find dist -maxdepth 1 -type f -name '*.sha256' | wc -l | tr -d ' ')"
-          [ "$actual" -eq "${#expected[@]}" ] || {
-            echo "::error::expected ${#expected[@]} sidecars, found $actual"
-            exit 1
-          }
-          for file in "${expected[@]}"; do
-            sidecar="dist/${file}.sha256"
-            test -f "$sidecar"
-            grep -Eq '^[0-9a-f]{64}[[:space:]]*$' "$sidecar" || {
-              echo "::error::invalid SHA-256 sidecar: $sidecar"
-              exit 1
-            }
-          done
+          source_version="$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' pubspec.yaml)"
+          version="${GITHUB_REF_NAME#v}"
+          [ -n "$source_version" ] && [ -n "$version" ]
+          case "$version" in
+            "$source_version"|"$source_version"-pre|"$source_version"-pre.*) ;;
+            *) echo "::error::tag version $version does not match pubspec $source_version"; exit 1 ;;
+          esac
+          source_commit="$(git rev-parse HEAD)"
+          bash scripts/ci/validate_sideload_release.sh \
+            --version "$version" \
+            --tag "$GITHUB_REF_NAME" \
+            --source-commit "$source_commit" \
+            --dist dist
+          complete="$(jq -r '.complete' "dist/YueLink-${version}-RELEASE-STATUS.json")"
+          available="$(jq '[.platforms[] | select(.available)] | length' "dist/YueLink-${version}-RELEASE-STATUS.json")"
+          echo "complete=$complete" >> "$GITHUB_OUTPUT"
+          echo "available=$available" >> "$GITHUB_OUTPUT"
+          if [ "$complete" = true ]; then
+            echo "RELEASE_COMPLETE=1" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_COMPLETE=0" >> "$GITHUB_ENV"
+            echo "SKIP_MANIFEST=1" >> "$GITHUB_ENV"
+            echo "::warning::partial sideload release ($available/5 platforms); automatic updater candidate is disabled"
+          fi
 
       - name: List release assets
         run: ls -lh dist/
@@ -1168,13 +1251,16 @@ jobs:
           # Users verify everything with `sha256sum -c YueLink-*-SHA256SUMS`.
           # Standard pattern matched by mihomo / sing-box / Hashicorp /
           # Linux kernel releases.
-          VERSION=$(grep '^version:' ../pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          VERSION="${GITHUB_REF_NAME#v}"
           SUMS_FILE="YueLink-${VERSION}-SHA256SUMS"
           : > "$SUMS_FILE"
           # 2026-06-01: 二进制不在本地(只下了 .sha256 省带宽), 从 .sha256 sidecar 拼
           # 标准 `sha256sum -c` 格式的 SHA256SUMS(`<hash>  <binary>`)。
           for s in YueLink-*.sha256; do
             [ -f "$s" ] || continue
+            case "$s" in
+              *-RELEASE-STATUS*.sha256) continue ;;
+            esac
             bin="${s%.sha256}"
             printf '%s  %s\n' "$(tr -d '[:space:]' < "$s")" "$bin" >> "$SUMS_FILE"
           done
@@ -1191,7 +1277,7 @@ jobs:
           # channel — a `vX.Y.Z-pre` tag needs its own notes file.
           TAG_KIND="$(bash scripts/ci/release_tag.sh kind "$TAG")"
           if [ "$TAG_KIND" = "prerelease" ]; then
-            VERSION="${VERSION}-pre"
+            VERSION="${TAG#v}"
             TITLE="YueLink v${VERSION} Pre-release"
             [ -f "docs/releases/${TAG}.md" ] && NOTES_FILE="docs/releases/${TAG}.md"
           else
@@ -1263,6 +1349,21 @@ jobs:
           echo "RELEASE_TITLE=${TITLE}" >> $GITHUB_ENV
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
 
+      - name: Prepend truthful sideload status to release notes
+        run: |
+          set -euo pipefail
+          status="dist/YueLink-${APP_VERSION}-RELEASE-STATUS.md"
+          test -f "$status"
+          {
+            cat "$status"
+            echo
+            echo '---'
+            echo
+            cat release_notes.md
+          } > release_notes.with-status.md
+          mv release_notes.with-status.md release_notes.md
+          cat release_notes.md >> "$GITHUB_STEP_SUMMARY"
+
       # Release-asset guard. Two invariants we want CI to enforce
        # rather than rediscover via the support inbox:
        #   1. No per-binary SBOM/JSON detritus on the Release page —
@@ -1314,6 +1415,11 @@ jobs:
           TAG_KIND="$(bash scripts/ci/release_tag.sh kind "$TAG")"
           if [ "$TAG_KIND" = "prerelease" ]; then
             echo "::notice::$TAG is a prerelease tag — skipping manifest publish (no pre channel)"
+            echo "SKIP_MANIFEST=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          if [ "${RELEASE_COMPLETE:-0}" != "1" ]; then
+            echo "::warning::$TAG is a partial direct-sideload release — skipping automatic updater manifest candidate"
             echo "SKIP_MANIFEST=1" >> "$GITHUB_ENV"
             exit 0
           fi
@@ -1451,6 +1557,25 @@ jobs:
           # tag; clients never consume update.candidate.json.
           if [ "${SKIP_MANIFEST:-0}" != "1" ]; then
             cp "$MANIFEST_NAME" "dist/$MANIFEST_NAME"
+          fi
+          # Aggregate status can legitimately progress from a partial set to
+          # a complete set on a later retry of the same immutable tag. Archive
+          # each observed set under a deterministic name; never freeze a stale
+          # partial result at a canonical immutable key.
+          status="dist/YueLink-${APP_VERSION}-RELEASE-STATUS.json"
+          status_key="$(jq -r '[.platforms[] | select(.available) | .platform] | join("-")' "$status")"
+          [ -n "$status_key" ]
+          for extension in json md; do
+            current="dist/YueLink-${APP_VERSION}-RELEASE-STATUS.${extension}"
+            archived="dist/YueLink-${APP_VERSION}-RELEASE-STATUS-${status_key}.${extension}"
+            mv "$current" "$archived"
+            rm -f "${current}.sha256"
+          done
+          if [ "${RELEASE_COMPLETE:-0}" != "1" ]; then
+            # A partial checksum aggregate would also become stale as more
+            # platforms converge. Per-artifact sidecars remain available.
+            rm -f "dist/YueLink-${APP_VERSION}-SHA256SUMS" \
+              "dist/YueLink-${APP_VERSION}-SHA256SUMS.sha256"
           fi
           bash scripts/ci/publish_immutable_r2.sh
           # Prerelease tags intentionally have no candidate. Stable candidates
