@@ -331,6 +331,10 @@ jobs:
 
       - run: flutter pub get --enforce-lockfile
 
+      - name: Probe Windows durable credential storage
+        if: matrix.platform == 'windows'
+        run: dart run tool/windows_durability_probe.dart
+
       # ── Compile Go core (platform-aware) and copy into Flutter dirs ───────
       # Windows + Linux: setup.dart's default builds BOTH amd64 + arm64, but
       # the runners are x86_64 with no arm64 cross-toolchain, so the arm64
