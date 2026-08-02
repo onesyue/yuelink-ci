@@ -477,6 +477,15 @@ jobs:
             --build-name=${{ env.APP_VERSION }} \
             --build-number=${{ env.BUILD_NUM }}
 
+      # Lock freshness: the committed Podfile.lock is what
+      # scripts/check_cocoapods_residue.sh measures residue FROM. If the
+      # build just rewrote it (a new CocoaPods-only plugin slipped in, or
+      # SPM was silently off), the committed lock no longer describes the
+      # binary we ship and the residue guard is green against stale data.
+      - name: Assert iOS Podfile.lock is fresh
+        if: matrix.platform == 'ios'
+        run: git diff --exit-code ios/Podfile.lock
+
       - name: Validate iOS container and extension versions
         if: matrix.platform == 'ios'
         shell: bash
@@ -583,6 +592,12 @@ jobs:
           flutter build macos --release \
             --build-name=${{ env.APP_VERSION }} \
             --build-number=${{ env.BUILD_NUM }}
+
+      # Same lock-freshness assertion as the iOS job — see that step's
+      # comment. Guards the residue guard's input.
+      - name: Assert macOS Podfile.lock is fresh
+        if: matrix.platform == 'macos'
+        run: git diff --exit-code macos/Podfile.lock
 
       - name: Resolve actual macOS signing and notarization mode
         if: matrix.platform == 'macos'
