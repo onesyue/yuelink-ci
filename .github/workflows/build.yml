@@ -314,7 +314,19 @@ jobs:
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
-          TAG_KIND="$(bash scripts/ci/release_tag.sh kind "$GITHUB_REF_NAME")"
+          # `release_tag.sh kind` exits 2 on anything that is not vX.Y.Z[-pre.N],
+          # and a branch name never is. Calling it unconditionally therefore
+          # killed every `workflow_dispatch` run at this step — which is the
+          # whole "只构建某平台(测试用)" path the `only:` input advertises. It has
+          # never reached a single build step. Ask ref_type first.
+          #
+          # Deliberately keyed on ref_type, NOT on "does the name parse": a tag
+          # push with a malformed tag must still hard-fail here, exactly as
+          # before. Only non-tag refs take the dev branch.
+          TAG_KIND=dev
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            TAG_KIND="$(bash scripts/ci/release_tag.sh kind "$GITHUB_REF_NAME")"
+          fi
           case "$TAG_KIND" in
             prerelease)
               # The tag is the artifact identity. Preserve a numbered
