@@ -434,15 +434,29 @@ jobs:
           key: pods-ios-${{ hashFiles('ios/Podfile.lock') }}
           restore-keys: pods-ios-
 
-      - name: Disable Swift Package Manager (iOS + macOS — force CocoaPods)
-        # Flutter 3.44's experimental SPM can double-resolve an xcframework
-        # (flutter assemble + xcodebuild) and crash with "already exists in file
-        # system" — a deterministic flake that failed BOTH iOS and macOS. The
-        # xcframework that first triggered it (Sentry) is gone, but both targets
-        # are CocoaPods-based so pinning CocoaPods is functionally a no-op and
-        # keeps them deterministic; kept rather than re-testing SPM per plugin.
+      - name: Enable Swift Package Manager (iOS + macOS)
+        # This step used to be `--no-enable-swift-package-manager`. Its reason —
+        # an xcframework double-resolved by `flutter assemble` and `xcodebuild`,
+        # crashing with "already exists in file system" — was triggered by
+        # Sentry, which we no longer depend on. That comment ended with "kept
+        # rather than re-testing SPM per plugin"; the re-test is done (2026-08-02)
+        # and both targets build clean, so the pin goes.
+        #
+        # It has to go on a deadline anyway: CocoaPods' registry turns read-only
+        # 2026-12-02 and Flutter removes CocoaPods support after that. The
+        # migration is incremental, not a flag day — SPM-capable plugins move to
+        # the generated local Swift package and the rest keep going through
+        # CocoaPods in the same build. That is why this is worth doing now: it
+        # shrinks the December problem from "37 dependencies" to the exact four
+        # packages that have no `Package.swift` — 2 on iOS, 3 on macOS, with
+        # media_kit_video on both (see CLAUDE.md · Apple build, and
+        # scripts/check_cocoapods_residue.sh, which keeps that list honest).
+        #
+        # Set it explicitly rather than deleting the step. The default is a
+        # property of the Flutter release, and a silent default flip in either
+        # direction would change how release binaries are linked.
         if: matrix.platform == 'ios' || matrix.platform == 'macos'
-        run: flutter config --no-enable-swift-package-manager
+        run: flutter config --enable-swift-package-manager
 
       - name: Build iOS
         if: matrix.platform == 'ios'
