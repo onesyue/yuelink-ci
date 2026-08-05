@@ -454,8 +454,8 @@ jobs:
         # rather than re-testing SPM per plugin"; the re-test is done (2026-08-02)
         # and both targets build clean, so the pin goes.
         #
-        # It has to go on a deadline anyway: CocoaPods' registry turns read-only
-        # 2026-12-02 and Flutter removes CocoaPods support after that. The
+        # Flutter 3.44 uses SwiftPM by default and keeps CocoaPods in maintenance
+        # mode; its registry permanently turns read-only on 2026-12-02. The
         # migration is incremental, not a flag day — SPM-capable plugins move to
         # the generated local Swift package and the rest keep going through
         # CocoaPods in the same build. That is why this is worth doing now: it
