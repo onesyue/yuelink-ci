@@ -1,0 +1,68 @@
+# Updater-manifest freshness watchdog — lives HERE (public mirror repo, whose
+# Actions run free) because the equivalent nightly job in the private repo
+# stops running whenever the org's private-repo Actions billing freezes (it
+# has been dead since 2026-08-05, "account payments have failed"). The
+# manifest expires 35 days after publish and clients hard-reject an expired
+# root, so a release gap + a dead watchdog = the entire sideload update
+# channel goes dark silently. This is a shape/freshness check only (no
+# signature verification — that needs the private toolchain); it exists to
+# page a human BEFORE expiry, not to prove integrity.
+name: Manifest health
+
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  manifest_check:
+    name: Updater manifest freshness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate live update.json freshness
+        id: check
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp)"
+          code="$(curl --location --silent --show-error \
+            --output "$tmp" --write-out '%{http_code}' \
+            --max-time 30 "https://yuetong.app/update.json")"
+          if [ "$code" != "200" ]; then
+            echo "detail=root manifest fetch failed: HTTP $code" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          jq -e '.schemaVersion == 1 and .channel == "stable"' "$tmp" >/dev/null || {
+            echo "detail=root manifest shape unexpected (schemaVersion/channel)" >> "$GITHUB_OUTPUT"
+            exit 1
+          }
+          version="$(jq -er '.version' "$tmp")"
+          expires="$(jq -er '.expiresAt' "$tmp")"
+          expires_epoch="$(date -u -d "$expires" +%s)"
+          now_epoch="$(date -u +%s)"
+          days_left=$(( (expires_epoch - now_epoch) / 86400 ))
+          echo "live manifest: version=$version expiresAt=$expires (${days_left}d left)"
+          if [ "$days_left" -lt 7 ]; then
+            echo "detail=update.json v$version expires in ${days_left}d ($expires) — publish a release or re-stamp the manifest before clients reject it" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Open issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DETAIL: ${{ steps.check.outputs.detail }}
+        run: |
+          set -euo pipefail
+          title="updater manifest health check failed"
+          existing="$(gh issue list -R "$GITHUB_REPOSITORY" --state open \
+            --search "$title in:title" --json number --jq '.[0].number // empty')"
+          body="${DETAIL:-manifest health check failed (fetch/shape error)} — run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" -R "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi

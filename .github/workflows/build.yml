@@ -1342,6 +1342,13 @@ jobs:
 
           if [ -n "$NOTES_FILE" ]; then
             cp "$NOTES_FILE" release_notes.md
+            # In-app updater notes (manifest `notes`) = curated file minus the
+            # leading "# vX.Y.Z" H1 (the dialog already shows old→new version).
+            # Kept separate from release_notes.md, which gets the English
+            # RELEASE-STATUS block prepended below for the Release page —
+            # v1.2.123 shipped that signing table into every update dialog.
+            awk 'NR==1 && /^# / {next} {print}' "$NOTES_FILE" \
+              | sed '/./,$!d' > release_notes.app.md
           else
             # Fallback when docs/releases/<tag>.md is missing: emit a minimal
             # 2026-format body (## Changes + ## Downloads + Full Changelog),
@@ -1391,6 +1398,9 @@ jobs:
               # 2026-05-31 硬切:仓库已私有,GitHub compare 链接对用户 404。
               # 完整变更见随包 CHANGELOG / 官网,不再放 github 比较链接。
             } > release_notes.md
+            # In-app updater notes fallback: commit subjects only — no
+            # Downloads/Install tables, which are Release-page furniture.
+            printf '%s\n' "$CHANGES" > release_notes.app.md
           fi
           echo "RELEASE_TITLE=${TITLE}" >> $GITHUB_ENV
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
@@ -1479,7 +1489,11 @@ jobs:
           # (iOS post-download, manifest-missing platforms). Point it at
           # the real download page.
           RELEASE_URL="https://yue.to/download.html"
-          NOTES=$(head -n 100 release_notes.md | jq -Rs .)
+          # User-facing notes only (generated alongside release_notes.md).
+          # NEVER read release_notes.md here — by this point it carries the
+          # English RELEASE-STATUS preamble meant for the Release page.
+          test -s release_notes.app.md
+          NOTES=$(head -n 100 release_notes.app.md | jq -Rs .)
 
           sha() {
             [ -f "dist/$1.sha256" ] && cat "dist/$1.sha256" | tr -d '[:space:]' || echo ""
