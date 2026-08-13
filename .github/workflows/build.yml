@@ -1167,7 +1167,7 @@ jobs:
   # Release: download all yuelink-* artifacts, hash, publish, refresh manifest
   # ───────────────────────────────────────────────────────────────────────────
   release:
-    name: Create Release
+    name: Assemble R2 candidate
     # Tag-only guard: workflow_dispatch on a branch would otherwise run
     # this job with GITHUB_REF_NAME=<branch>, which would otherwise publish a
     # bogus immutable release candidate. Restrict distribution output strictly
@@ -1264,13 +1264,13 @@ jobs:
             echo "::warning::partial sideload release ($available/5 platforms); automatic updater candidate is disabled"
           fi
 
-      - name: List release assets
+      - name: List candidate evidence
         run: ls -lh dist/
 
       # ── SBOM generation removed (2026-05-10) ──────────────────────────
       # We used to generate per-binary CycloneDX SBOMs and upload them
       # alongside the binaries — N artifacts × `.sbom.cdx.json` doubled
-      # the Release page asset count for marginal user value. Three
+      # the published object count for marginal user value. Three
       # users in a row asked for it to be cleaned up. The Sigstore
       # provenance attestation below (gh attestation verify) covers
       # the supply-chain story; SBOM as an *uploaded* asset added
@@ -1285,9 +1285,9 @@ jobs:
           cd dist
           # Per-binary sidecars: kept because the updater-manifest step
           # downstream reads `dist/$file.sha256` to embed hashes in
-          # update.json. NOT uploaded to the Release
-          # page (excluded by the `files:` pattern in the Create Release
-          # step) — they used to clutter the page with N extra rows.
+          # update.json. The build jobs have already published the canonical
+          # binary sidecars to R2; this job reconstructs the aggregate without
+          # downloading roughly 1 GB of binaries.
           for f in *; do
             [ -f "$f" ] || continue
             case "$f" in
@@ -1296,7 +1296,7 @@ jobs:
             esac
           done
           # Consolidated checksum file in standard `sha256sum -c` format,
-          # uploaded as the only checksum asset on the Release page.
+          # published under the immutable R2 version prefix.
           # Users verify everything with `sha256sum -c YueLink-*-SHA256SUMS`.
           # Standard pattern matched by mihomo / sing-box / Hashicorp /
           # Linux kernel releases.
@@ -1348,7 +1348,7 @@ jobs:
             # In-app updater notes (manifest `notes`) = curated file minus the
             # leading "# vX.Y.Z" H1 (the dialog already shows old→new version).
             # Kept separate from release_notes.md, which gets the English
-            # RELEASE-STATUS block prepended below for the Release page —
+            # RELEASE-STATUS block prepended below for the job summary —
             # v1.2.123 shipped that signing table into every update dialog.
             awk 'NR==1 && /^# / {next} {print}' "$NOTES_FILE" \
               | sed '/./,$!d' > release_notes.app.md
@@ -1402,7 +1402,7 @@ jobs:
               # 完整变更见随包 CHANGELOG / 官网,不再放 github 比较链接。
             } > release_notes.md
             # In-app updater notes fallback: commit subjects only — no
-            # Downloads/Install tables, which are Release-page furniture.
+            # Downloads/Install tables, which belong in operator evidence.
             printf '%s\n' "$CHANGES" > release_notes.app.md
           fi
           echo "RELEASE_TITLE=${TITLE}" >> $GITHUB_ENV
@@ -1423,15 +1423,14 @@ jobs:
           mv release_notes.with-status.md release_notes.md
           cat release_notes.md >> "$GITHUB_STEP_SUMMARY"
 
-      # Release-asset guard. Two invariants we want CI to enforce
+      # Candidate-evidence guard. Two invariants we want CI to enforce
        # rather than rediscover via the support inbox:
-       #   1. No per-binary SBOM/JSON detritus on the Release page —
+       #   1. No per-binary SBOM/JSON detritus in the R2 prefix —
        #      the SBOM gen step was deleted but a future contributor
        #      could reintroduce it; this catches them.
-       #   2. Source archives (zip/tar.gz of the repo) never become
-       #      Release assets — softprops globs *.zip would otherwise
-       #      sweep them in if anyone dropped one in `dist/`.
-      - name: Release asset guard
+       #   2. Source archives (zip/tar.gz of the repo) never become R2
+       #      release objects if anyone drops one in `dist/`.
+      - name: Candidate evidence guard
         run: |
           set -euo pipefail
           cd dist
@@ -1447,7 +1446,7 @@ jobs:
             echo "$stray_src"
             exit 1
           fi
-          echo "release asset guard ok"
+          echo "candidate evidence guard ok"
 
       # 2026-05-31 硬切:删除 "Create GitHub Release" — 分发不再经 GitHub。
       # 二进制 + manifest 在下方 "Publish to R2" 步上传到 yuetong.app CDN origin。
@@ -1468,8 +1467,8 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           # There is exactly one channel now — stable/`update.json`. The
           # pre-release channel was retired, so a `vX.Y.Z-pre` tag must NOT
-          # publish a manifest at all: it still produces test artifacts and a
-          # GitHub prerelease, but writing it into update.json would flip
+          # publish a manifest at all: it still produces immutable R2 test
+          # artifacts, but writing it into update.json would flip
           # every stable user onto an unreleased build.
           TAG_KIND="$(bash scripts/ci/release_tag.sh kind "$TAG")"
           if [ "$TAG_KIND" = "prerelease" ]; then
@@ -1494,7 +1493,7 @@ jobs:
           RELEASE_URL="https://yue.to/download.html"
           # User-facing notes only (generated alongside release_notes.md).
           # NEVER read release_notes.md here — by this point it carries the
-          # English RELEASE-STATUS preamble meant for the Release page.
+          # English RELEASE-STATUS preamble meant for the operator job summary.
           test -s release_notes.app.md
           NOTES=$(head -n 100 release_notes.app.md | jq -Rs .)
 
