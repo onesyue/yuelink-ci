@@ -22,8 +22,8 @@ name: Build YueLink
 on:
   push:
     # The floating `pre` tag is gone with the pre-release update channel.
-    # `vX.Y.Z-pre` still builds (internal test artifacts + a GitHub
-    # prerelease) but no longer publishes any updater manifest.
+    # `vX.Y.Z-pre` still builds immutable R2 test artifacts, but no longer
+    # publishes any updater manifest.
     tags: ['v*']
   workflow_dispatch:
     inputs:
