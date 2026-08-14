@@ -113,4 +113,6 @@ if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
   echo "  构建绿仅代表 unsigned candidate 就绪；随后在受保护的私仓/本机签名平面运行:"
   echo "  bash scripts/ci/promote_signed_manifest.sh ${BASH_REMATCH[1]}"
   echo "  (private Actions 可用时也可 workflow_dispatch sign-release-manifest.yml)"
+  echo "  promotion 验收后:把精确签名根更新到 tests/fixtures/update-manifest-v1.json"
+  echo "  并把旧根保留为 replay regression fixture；不得从 CDN 动态学习地板。"
 fi

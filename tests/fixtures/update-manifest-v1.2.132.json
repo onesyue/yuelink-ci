@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.2.132",
+  "channel": "stable",
+  "publishedAt": "2026-08-13T22:30:39Z",
+  "expiresAt": "2026-09-17T22:30:39Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "暂停、到期提醒和桌面多开现在都更诚实：只有底层连接确实停净才会显示暂停，\n没有拿到主实例所有权的窗口也不能改动系统网络状态。\n\n### 暂停与桌面多开\n\n- **暂停会核验真实停机结果**：应用会同时确认内核、系统服务和原生 VPN 已停止。\n  如果某一层仍在运行，会保留异常提示，不会显示成功、写入暂停记录或开始倒计时\n- **第二个窗口默认只读**：端口被其他进程占用、无法证明自己是主实例时，窗口仍可用于\n  查看诊断，但不能启动或停止连接、TUN、系统代理、后台服务和开机启动；关闭它也不会\n  清掉主实例正在使用的代理\n\n### 到期与账号状态\n\n- **今天到期按本地日历判断**：今天稍后到期会显示「今天」，明天即使不足 24 小时也\n  仍归到明天；跨夏令时、刚刚过期和永久套餐不会再落入错误提醒档位\n- **缓存中的异常到期时间安全忽略**：毫秒时间戳、超大数、字符串或负值不会在恢复订阅\n  时造成异常；账号、订阅和首页使用同一套到期判据\n\n### 连接配置\n\n- **Hysteria2 块状配置继续受 iOS 内存保护**：注释、浅缩进、空值、引号以及行尾重复数字\n  都不会让窗口钳制静默失效或生成重复 YAML 键\n- **空的控制密钥不会吞掉下一行**：编辑中的 `secret:` 空值会留在本行处理，不再误删\n  后面的监听端口等配置\n- **内建策略不再冒充节点**：自动组里出现 DIRECT 等内建策略时，不会提示已手动钉住\n  一个并非真实线路的目标\n\n发布构建同步采用 Go 1.26.6 安全补丁，并在公开构建开始前校验私有源与公开构建逻辑\n完全一致。Android 固定发布证书、各平台校验和、来源证明和签名更新清单仍是发布硬门。\n",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.2.132/YueLink-1.2.132-android-arm64-v8a.apk",
+      "sha256": "f68145da0df3d1ae8bf670bde28d37079558751f6ccdc0e6792a3ff70d853a64"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.2.132/YueLink-1.2.132-android-armeabi-v7a.apk",
+      "sha256": "035f3636c3aece45a9af22ff20d0b079dc9c7af75e1b6583ea47bd456846ad8a"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.2.132/YueLink-1.2.132-android-x86_64.apk",
+      "sha256": "b04a9069fb590dcd4d66d26f1368f7013aae5b0f705c48f9032291628cb4eba7"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.2.132/YueLink-1.2.132-android-universal.apk",
+      "sha256": "67fe1436107da20e5148f6c2fd1dd8af8d4dfa5935399a12a13400d5014e16fb"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.2.132/YueLink-1.2.132-ios.ipa",
+      "sha256": "ff8e6c7a1a222268e17992ba89e05f5c2ff04f6d6ef608fc8af7bd36f52d8062"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.2.132/YueLink-1.2.132-macos-universal.dmg",
+      "sha256": "742c9c932d4bb251801760a88d777db8db0114a96245bf4880f71002c7ccd7dc"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.2.132/YueLink-1.2.132-windows-amd64-setup.exe",
+      "sha256": "c0fc5f194a9c08093caadcdd58ba42e740be3d6293dd161651076039b991851c"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.2.132/YueLink-1.2.132-windows-amd64-portable.zip",
+      "sha256": "e60c9cc0b87b101490b70211a4cf58279c660e9f2de6b16d15a6c15b0334eecf"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.2.132/YueLink-1.2.132-linux-amd64.AppImage",
+      "sha256": "aecaa3612ccabfc81209c3f0f90ff91d7f1be0b509daa8b994702b59e0ece357"
+    }
+  },
+  "sig": "ed25519:qEmrL31SeYYXzr+TVTG1RTzb7BRxG4FvkApXKtgwq4mGb1kTrPxl2Iq31hRBLjbbHkZrmE6/KNbgjikmoQ4DDQ=="
+}
