@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.json"
-OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.2.132.json"
+OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.2.133.json"
 SPEC = importlib.util.spec_from_file_location(
     "verify_update_manifest", ROOT / "scripts/verify-update-manifest.py"
 )
@@ -29,7 +29,7 @@ class UpdateManifestVerifierTests(unittest.TestCase):
     def test_real_dart_release_fixture_is_valid(self) -> None:
         """A production manifest signed by the YueLink release plane is the contract."""
         verified = verifier.verify(self.raw)
-        self.assertEqual(verified["version"], "1.2.133")
+        self.assertEqual(verified["version"], "1.2.134")
 
     def test_payload_tamper_is_rejected(self) -> None:
         tampered = dict(self.manifest)
@@ -49,7 +49,7 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         # Prove this reaches the monotonic floor rather than failing signature
         # verification: it is an authentic archived production root.
         signed = verifier._verify_signed_manifest(older)
-        self.assertEqual(signed["version"], "1.2.132")
+        self.assertEqual(signed["version"], "1.2.133")
         with self.assertRaisesRegex(verifier.ManifestError, "below the reviewed minimum"):
             verifier.verify(older)
 
@@ -90,7 +90,7 @@ class UpdateManifestVerifierTests(unittest.TestCase):
             reordered, ensure_ascii=False, indent=7, separators=(",", ": ")
         ).encode()
         self.assertNotEqual(reformatted, self.raw)
-        self.assertEqual(verifier.verify(reformatted)["version"], "1.2.133")
+        self.assertEqual(verifier.verify(reformatted)["version"], "1.2.134")
 
 
 if __name__ == "__main__":
