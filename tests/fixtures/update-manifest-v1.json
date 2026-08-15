@@ -1,49 +1,49 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.2.134",
+  "version": "1.2.135",
   "channel": "stable",
-  "publishedAt": "2026-08-14T16:23:54Z",
-  "expiresAt": "2026-09-18T16:23:54Z",
+  "publishedAt": "2026-08-15T23:13:30Z",
+  "expiresAt": "2026-09-19T23:13:30Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "Released 2026-08-15. Desktop proxy recovery now follows the operating\nsystem's observed state and keeps recovery evidence whenever cleanup is not\nconclusively complete.\n\n## Reliability and security\n\n- The desktop client clears its crash-recovery marker only after a fresh\n  operating-system read proves that HTTP, HTTPS, and SOCKS proxies are all\n  disabled. Failed, timed-out, partial, ambiguous, or localized responses\n  remain recoverable on the next launch.\n- macOS checks every network service, while KDE reads the active\n  `kioslaverc` backend instead of an unrelated settings source.\n- `github.com/klauspost/compress` is updated to 1.18.7, which includes the\n  upstream fix for GO-2026-5841.\n- Regression coverage now includes command failures, timeouts, duplicate or\n  unknown status fields, and cold-start recovery retries.\n",
+  "notes": "Released 2026-08-16. Diagnostic bundles no longer carry the subscription token, and\nswitching service mode from a degraded core is no longer a silent no-op.\n\n## Privacy\n\n- The panel mints subscription links in a **path** form —\n  `https://<host>/<subscribe_path>/<32 hex token>` — while all fifteen\n  redaction rules were written for the retired `?token=` query form. None of\n  them matched, so a failed subscription fetch wrote the full URL into the\n  event log through `HttpException`, and from there into the support bundle.\n  A new rule matches on the shape of a long credential rather than on any URL\n  layout, so a future panel-side path change cannot silently un-redact it.\n- The regression fixture now uses the shape production actually mints; the old\n  fixture used the retired one, which is why the guard stayed green over the\n  hole.\n\n## Reliability\n\n- Switching the service mode while the core is `degraded` (tunnel up, egress\n  impaired) took the `start()` path, where the core manager returns success\n  immediately because it is already running. The switch reported success, gave\n  no warning, and left the kernel in the previous mode. A degraded core is a\n  live core, and is now restarted like a running one.\n",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-android-arm64-v8a.apk",
-      "sha256": "13ffeba4e34515734d1f9cee1358d40342c30c078453b8714a1dbf1ba55f685d"
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-android-arm64-v8a.apk",
+      "sha256": "6a2ce6886029aff204459311450793306ea6e1969da1fbfde1fb585c9f502fe4"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-android-armeabi-v7a.apk",
-      "sha256": "790c81c63decbf4e42daead87778ad6269b408c4c9c3071c425ed935d4b5407b"
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-android-armeabi-v7a.apk",
+      "sha256": "f6da32644a8c0c248b553cd3e97254d26d5a97eb8a34b052e80a4fe4e1a2a61e"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-android-x86_64.apk",
-      "sha256": "7f453bf495881b0b54c41bf62eb5e5e1ead77b08b6e0c39ec35d98db0aceab94"
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-android-x86_64.apk",
+      "sha256": "bc490b5b4dc6c1f87df24303673511ed043ff5d23a6db9fd55bfa8f22296dc8b"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-android-universal.apk",
-      "sha256": "83d88ed68069e1630f133cef063ae9cd85ae50ac7cc33b63418707480b481e45"
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-android-universal.apk",
+      "sha256": "d6d990c59e4c1ac92daf2bd12ce1e02d84ef221f18c953fa0a77d5f6020619bd"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-ios.ipa",
-      "sha256": "fa4c9a914e96b369719590db1ea05f1453eef811d50ca0d854454bd970d93c7d"
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-ios.ipa",
+      "sha256": "ea8be935e4e1703c10e74d09f37c879e83ffc020c5465c67a01a22c0965e91bc"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-macos-universal.dmg",
-      "sha256": "ad3bacb2b5d4cb00ddbb7b180f1209f1f2269a0cef88f06bc3877f1827f2f322"
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-macos-universal.dmg",
+      "sha256": "7fca41f7a2f352ec5b8c193adde6b1f17d448c65ae5b7f6302e05d2a71af1365"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-windows-amd64-setup.exe",
-      "sha256": "d68ed98e8a2a016e75b63181b142715fbdf4f6cc6b8cb533db45ad71608a6b57"
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-windows-amd64-setup.exe",
+      "sha256": "8e068057d6add1cf0b2abb280f5266bca05a41cd8b31b5759a0a3f168b1fb9f5"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-windows-amd64-portable.zip",
-      "sha256": "e277cdf94e25a2bce91db6b43a933fdf0630de58293514d6cf27eaba25833c49"
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-windows-amd64-portable.zip",
+      "sha256": "01a9bf1ef347fd995561d1264988d2e68b9437d68c12ca81fdb4c84ef3888ccd"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-linux-amd64.AppImage",
-      "sha256": "d1af514872fa21b91c35f683a808e4bc730d8fe0a4903dd592a189d0e63ff5bb"
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-linux-amd64.AppImage",
+      "sha256": "dfd444bec44a3332453d549b4482092bc8fce06e1563264d51ac8db8e2f0cd3b"
     }
   },
-  "sig": "ed25519:pvYue462t3qN9BzFIYP0m+ZQgN+Jb+M1NrpvZX6PPg0crReK1wvBdN1b2DGAOIx/j9OLH5tG1oXzvk3pA8MfBA=="
+  "sig": "ed25519:nNiU75rcb9aZCJ/yCy1cQhl422BAL9TAn19NwK6PBgdZtthbQgxwSdZtVXoavnflcJx1BIbc9VSSqtelYB9/AA=="
 }

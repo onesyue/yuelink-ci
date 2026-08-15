@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.2.134",
+  "channel": "stable",
+  "publishedAt": "2026-08-14T16:23:54Z",
+  "expiresAt": "2026-09-18T16:23:54Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "Released 2026-08-15. Desktop proxy recovery now follows the operating\nsystem's observed state and keeps recovery evidence whenever cleanup is not\nconclusively complete.\n\n## Reliability and security\n\n- The desktop client clears its crash-recovery marker only after a fresh\n  operating-system read proves that HTTP, HTTPS, and SOCKS proxies are all\n  disabled. Failed, timed-out, partial, ambiguous, or localized responses\n  remain recoverable on the next launch.\n- macOS checks every network service, while KDE reads the active\n  `kioslaverc` backend instead of an unrelated settings source.\n- `github.com/klauspost/compress` is updated to 1.18.7, which includes the\n  upstream fix for GO-2026-5841.\n- Regression coverage now includes command failures, timeouts, duplicate or\n  unknown status fields, and cold-start recovery retries.\n",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-android-arm64-v8a.apk",
+      "sha256": "13ffeba4e34515734d1f9cee1358d40342c30c078453b8714a1dbf1ba55f685d"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-android-armeabi-v7a.apk",
+      "sha256": "790c81c63decbf4e42daead87778ad6269b408c4c9c3071c425ed935d4b5407b"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-android-x86_64.apk",
+      "sha256": "7f453bf495881b0b54c41bf62eb5e5e1ead77b08b6e0c39ec35d98db0aceab94"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-android-universal.apk",
+      "sha256": "83d88ed68069e1630f133cef063ae9cd85ae50ac7cc33b63418707480b481e45"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-ios.ipa",
+      "sha256": "fa4c9a914e96b369719590db1ea05f1453eef811d50ca0d854454bd970d93c7d"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-macos-universal.dmg",
+      "sha256": "ad3bacb2b5d4cb00ddbb7b180f1209f1f2269a0cef88f06bc3877f1827f2f322"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-windows-amd64-setup.exe",
+      "sha256": "d68ed98e8a2a016e75b63181b142715fbdf4f6cc6b8cb533db45ad71608a6b57"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-windows-amd64-portable.zip",
+      "sha256": "e277cdf94e25a2bce91db6b43a933fdf0630de58293514d6cf27eaba25833c49"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.2.134/YueLink-1.2.134-linux-amd64.AppImage",
+      "sha256": "d1af514872fa21b91c35f683a808e4bc730d8fe0a4903dd592a189d0e63ff5bb"
+    }
+  },
+  "sig": "ed25519:pvYue462t3qN9BzFIYP0m+ZQgN+Jb+M1NrpvZX6PPg0crReK1wvBdN1b2DGAOIx/j9OLH5tG1oXzvk3pA8MfBA=="
+}
