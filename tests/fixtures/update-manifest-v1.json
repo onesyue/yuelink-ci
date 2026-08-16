@@ -1,49 +1,49 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.2.135",
+  "version": "1.2.136",
   "channel": "stable",
-  "publishedAt": "2026-08-15T23:13:30Z",
-  "expiresAt": "2026-09-19T23:13:30Z",
+  "publishedAt": "2026-08-16T01:38:10Z",
+  "expiresAt": "2026-09-20T01:38:10Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "Released 2026-08-16. Diagnostic bundles no longer carry the subscription token, and\nswitching service mode from a degraded core is no longer a silent no-op.\n\n## Privacy\n\n- The panel mints subscription links in a **path** form —\n  `https://<host>/<subscribe_path>/<32 hex token>` — while all fifteen\n  redaction rules were written for the retired `?token=` query form. None of\n  them matched, so a failed subscription fetch wrote the full URL into the\n  event log through `HttpException`, and from there into the support bundle.\n  A new rule matches on the shape of a long credential rather than on any URL\n  layout, so a future panel-side path change cannot silently un-redact it.\n- The regression fixture now uses the shape production actually mints; the old\n  fixture used the retired one, which is why the guard stayed green over the\n  hole.\n\n## Reliability\n\n- Switching the service mode while the core is `degraded` (tunnel up, egress\n  impaired) took the `start()` path, where the core manager returns success\n  immediately because it is already running. The switch reported success, gave\n  no warning, and left the kernel in the previous mode. A degraded core is a\n  live core, and is now restarted like a running one.\n",
+  "notes": "全端界面统一打磨，三页补齐英文。\n\n2026-08-16 发布。本版以界面质量为主：一次全页面审计后的集中收口，另带两处诊断/桌面修正。\n\n## 界面\n\n- **三页补齐双语**：设备管理、礼品卡、服务状态此前对英文用户整页中文，现已全量双语；礼品卡页不再同屏出现两个实心主按钮。\n- **桌面弹层自适应**：钱包划转、暂停、通知详情在宽窗口改为对话框呈现，与连接列表一致；划转按钮上的白色转圈在浅色主题下不可见已修。\n- **触控达标**：一批低于 44dp 的触控目标（优惠券操作、注册页条款链接、Emby 各处小按钮、字幕字号档等）统一加到 44dp 热区。\n- **防误触**：连接详情页路由模式改为三选项明选，不再「点击轮转」——两次误点会静默落到直连而状态仍显示保护中。\n- **视觉统一**：Emby 播放器三种红收进主题记号；商店/会员中心/媒体库加载改为内容形骨架屏；10pt 微字号提到 11pt；公告未读点改用主题强调色。\n- **无障碍**：主题色圆点可读屏播报、可键盘操作；强更弹窗复制按钮有了成功反馈。\n\n## 诊断与桌面\n\n- **脱敏更准**：长令牌脱敏三处边界修正——纯字母长域名不再被误脱敏（保住日志里 domain:port 行的排障价值）、超长裸凭据不再逃逸、全数字形态令牌不再漏网。\n- **KDE 清理验证**：清理系统代理现要求 gsettings（存在时）也读净才摘除标记，GTK 应用残留不再被误判为已清理。\n",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-android-arm64-v8a.apk",
-      "sha256": "6a2ce6886029aff204459311450793306ea6e1969da1fbfde1fb585c9f502fe4"
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-android-arm64-v8a.apk",
+      "sha256": "5de397c3449140950d7055400e83a777be7aed0ecd097875dad883e2a421078b"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-android-armeabi-v7a.apk",
-      "sha256": "f6da32644a8c0c248b553cd3e97254d26d5a97eb8a34b052e80a4fe4e1a2a61e"
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-android-armeabi-v7a.apk",
+      "sha256": "553eab77b049c27fec43fc138d6cc45505f5be2649d14b6f40f179714f6bfa51"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-android-x86_64.apk",
-      "sha256": "bc490b5b4dc6c1f87df24303673511ed043ff5d23a6db9fd55bfa8f22296dc8b"
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-android-x86_64.apk",
+      "sha256": "278e28a6240a20c1be821e726289b4349da76d25b739dc9e0ef066d340e73969"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-android-universal.apk",
-      "sha256": "d6d990c59e4c1ac92daf2bd12ce1e02d84ef221f18c953fa0a77d5f6020619bd"
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-android-universal.apk",
+      "sha256": "b444df1ea2a8b6a7bd1ed77f6fe8093b174cf7b01b06323cbfe630fc7f97615a"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-ios.ipa",
-      "sha256": "ea8be935e4e1703c10e74d09f37c879e83ffc020c5465c67a01a22c0965e91bc"
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-ios.ipa",
+      "sha256": "e89eb6cc0f98ed9af969ca47e4d0a9fdda645b9e05ffd13e7eba2d2bdc5788d5"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-macos-universal.dmg",
-      "sha256": "7fca41f7a2f352ec5b8c193adde6b1f17d448c65ae5b7f6302e05d2a71af1365"
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-macos-universal.dmg",
+      "sha256": "3e7e60e04610762fb1bd19e35d64694c7b532e68f59827df72af27e9214ed592"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-windows-amd64-setup.exe",
-      "sha256": "8e068057d6add1cf0b2abb280f5266bca05a41cd8b31b5759a0a3f168b1fb9f5"
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-windows-amd64-setup.exe",
+      "sha256": "e3585ab1ecb421f0eb0eb6cb7378e98e5c93465b2e5c0c5f1044ff926ba8290e"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-windows-amd64-portable.zip",
-      "sha256": "01a9bf1ef347fd995561d1264988d2e68b9437d68c12ca81fdb4c84ef3888ccd"
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-windows-amd64-portable.zip",
+      "sha256": "bc72eda89021d5ba033d739ace43685a49ff9db77c320ae49a8119cf69389c0a"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-linux-amd64.AppImage",
-      "sha256": "dfd444bec44a3332453d549b4482092bc8fce06e1563264d51ac8db8e2f0cd3b"
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-linux-amd64.AppImage",
+      "sha256": "a700c26fd3c6f506f6976e4fd7d31c8ab1b421bd65ce1fae88ba64faa83e5dc3"
     }
   },
-  "sig": "ed25519:nNiU75rcb9aZCJ/yCy1cQhl422BAL9TAn19NwK6PBgdZtthbQgxwSdZtVXoavnflcJx1BIbc9VSSqtelYB9/AA=="
+  "sig": "ed25519:Ajis4sg4bqrTXFg456gZIAG62P/LRy4jhIRSIWV9e7iJ1S835OHDRUII60FXevyjzPb2v/AORHB0dQSOf/ujDA=="
 }

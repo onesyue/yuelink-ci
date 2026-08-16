@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.2.135",
+  "channel": "stable",
+  "publishedAt": "2026-08-15T23:13:30Z",
+  "expiresAt": "2026-09-19T23:13:30Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "Released 2026-08-16. Diagnostic bundles no longer carry the subscription token, and\nswitching service mode from a degraded core is no longer a silent no-op.\n\n## Privacy\n\n- The panel mints subscription links in a **path** form —\n  `https://<host>/<subscribe_path>/<32 hex token>` — while all fifteen\n  redaction rules were written for the retired `?token=` query form. None of\n  them matched, so a failed subscription fetch wrote the full URL into the\n  event log through `HttpException`, and from there into the support bundle.\n  A new rule matches on the shape of a long credential rather than on any URL\n  layout, so a future panel-side path change cannot silently un-redact it.\n- The regression fixture now uses the shape production actually mints; the old\n  fixture used the retired one, which is why the guard stayed green over the\n  hole.\n\n## Reliability\n\n- Switching the service mode while the core is `degraded` (tunnel up, egress\n  impaired) took the `start()` path, where the core manager returns success\n  immediately because it is already running. The switch reported success, gave\n  no warning, and left the kernel in the previous mode. A degraded core is a\n  live core, and is now restarted like a running one.\n",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-android-arm64-v8a.apk",
+      "sha256": "6a2ce6886029aff204459311450793306ea6e1969da1fbfde1fb585c9f502fe4"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-android-armeabi-v7a.apk",
+      "sha256": "f6da32644a8c0c248b553cd3e97254d26d5a97eb8a34b052e80a4fe4e1a2a61e"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-android-x86_64.apk",
+      "sha256": "bc490b5b4dc6c1f87df24303673511ed043ff5d23a6db9fd55bfa8f22296dc8b"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-android-universal.apk",
+      "sha256": "d6d990c59e4c1ac92daf2bd12ce1e02d84ef221f18c953fa0a77d5f6020619bd"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-ios.ipa",
+      "sha256": "ea8be935e4e1703c10e74d09f37c879e83ffc020c5465c67a01a22c0965e91bc"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-macos-universal.dmg",
+      "sha256": "7fca41f7a2f352ec5b8c193adde6b1f17d448c65ae5b7f6302e05d2a71af1365"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-windows-amd64-setup.exe",
+      "sha256": "8e068057d6add1cf0b2abb280f5266bca05a41cd8b31b5759a0a3f168b1fb9f5"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-windows-amd64-portable.zip",
+      "sha256": "01a9bf1ef347fd995561d1264988d2e68b9437d68c12ca81fdb4c84ef3888ccd"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.2.135/YueLink-1.2.135-linux-amd64.AppImage",
+      "sha256": "dfd444bec44a3332453d549b4482092bc8fce06e1563264d51ac8db8e2f0cd3b"
+    }
+  },
+  "sig": "ed25519:nNiU75rcb9aZCJ/yCy1cQhl422BAL9TAn19NwK6PBgdZtthbQgxwSdZtVXoavnflcJx1BIbc9VSSqtelYB9/AA=="
+}
