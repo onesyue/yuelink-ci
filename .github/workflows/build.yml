@@ -53,16 +53,19 @@ env:
   # 用户画像正中）+ Xcode 27 工具链 lipo 构建失败；3.44.9 只有 tooling 修复。
   # Dart 仍是 3.12.2，无语言侧变化。
   FLUTTER_VERSION: '3.44.9'
-  # Go 1.26.6 (2026-08-13) closes 10 CVEs, of which these reach a client that
-  # terminates TLS and parses untrusted wire data: CVE-2026-56862 (crypto/tls
-  # unbounded post-handshake messages), CVE-2026-33818 / CVE-2026-56859
-  # (asn1 / xml stack exhaustion). Same MINOR as the previous pin, so the
-  # `metacubex/gvisor` linkname contract is untouched — see CLAUDE.md for why
-  # a 1.27 bump is a different, gated decision.
+  # Go pinned BACK to 1.26.5 (2026-08-17): 1.26.6 ships an h2c regression
+  # (golang/go#80876) and mihomo upstream deliberately stays on 1.26.5 for
+  # v1.19.30. CVE-2026-56862 (crypto/tls unbounded post-handshake messages)
+  # is mitigated inside mihomo v1.19.30 itself (commit 33154579), so the
+  # rollback does not reopen it; the asn1/xml stack-exhaustion pair returns
+  # to pre-1.26.6 state until Go 1.26.7 — re-raise GO_VERSION as soon as
+  # 1.26.7 lands. Same MINOR as before, so the `metacubex/gvisor` linkname
+  # contract is untouched — see CLAUDE.md for why a 1.27 bump is a
+  # different, gated decision.
   # Keep the release builder and govulncheck on this exact patch release;
   # a floating 1.26 selector can silently rebuild the same tag against a
   # different standard library.
-  GO_VERSION: '1.26.6'
+  GO_VERSION: '1.26.5'
   # Production builds consume the reviewed module graph exactly. `core/go.mod`
   # and go.sum are tidy against the pinned mihomo submodule; dependency drift
   # must fail the build instead of being resolved implicitly on a runner.
