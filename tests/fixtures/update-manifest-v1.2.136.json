@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.2.136",
+  "channel": "stable",
+  "publishedAt": "2026-08-16T01:38:10Z",
+  "expiresAt": "2026-09-20T01:38:10Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "全端界面统一打磨，三页补齐英文。\n\n2026-08-16 发布。本版以界面质量为主：一次全页面审计后的集中收口，另带两处诊断/桌面修正。\n\n## 界面\n\n- **三页补齐双语**：设备管理、礼品卡、服务状态此前对英文用户整页中文，现已全量双语；礼品卡页不再同屏出现两个实心主按钮。\n- **桌面弹层自适应**：钱包划转、暂停、通知详情在宽窗口改为对话框呈现，与连接列表一致；划转按钮上的白色转圈在浅色主题下不可见已修。\n- **触控达标**：一批低于 44dp 的触控目标（优惠券操作、注册页条款链接、Emby 各处小按钮、字幕字号档等）统一加到 44dp 热区。\n- **防误触**：连接详情页路由模式改为三选项明选，不再「点击轮转」——两次误点会静默落到直连而状态仍显示保护中。\n- **视觉统一**：Emby 播放器三种红收进主题记号；商店/会员中心/媒体库加载改为内容形骨架屏；10pt 微字号提到 11pt；公告未读点改用主题强调色。\n- **无障碍**：主题色圆点可读屏播报、可键盘操作；强更弹窗复制按钮有了成功反馈。\n\n## 诊断与桌面\n\n- **脱敏更准**：长令牌脱敏三处边界修正——纯字母长域名不再被误脱敏（保住日志里 domain:port 行的排障价值）、超长裸凭据不再逃逸、全数字形态令牌不再漏网。\n- **KDE 清理验证**：清理系统代理现要求 gsettings（存在时）也读净才摘除标记，GTK 应用残留不再被误判为已清理。\n",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-android-arm64-v8a.apk",
+      "sha256": "5de397c3449140950d7055400e83a777be7aed0ecd097875dad883e2a421078b"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-android-armeabi-v7a.apk",
+      "sha256": "553eab77b049c27fec43fc138d6cc45505f5be2649d14b6f40f179714f6bfa51"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-android-x86_64.apk",
+      "sha256": "278e28a6240a20c1be821e726289b4349da76d25b739dc9e0ef066d340e73969"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-android-universal.apk",
+      "sha256": "b444df1ea2a8b6a7bd1ed77f6fe8093b174cf7b01b06323cbfe630fc7f97615a"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-ios.ipa",
+      "sha256": "e89eb6cc0f98ed9af969ca47e4d0a9fdda645b9e05ffd13e7eba2d2bdc5788d5"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-macos-universal.dmg",
+      "sha256": "3e7e60e04610762fb1bd19e35d64694c7b532e68f59827df72af27e9214ed592"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-windows-amd64-setup.exe",
+      "sha256": "e3585ab1ecb421f0eb0eb6cb7378e98e5c93465b2e5c0c5f1044ff926ba8290e"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-windows-amd64-portable.zip",
+      "sha256": "bc72eda89021d5ba033d739ace43685a49ff9db77c320ae49a8119cf69389c0a"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.2.136/YueLink-1.2.136-linux-amd64.AppImage",
+      "sha256": "a700c26fd3c6f506f6976e4fd7d31c8ab1b421bd65ce1fae88ba64faa83e5dc3"
+    }
+  },
+  "sig": "ed25519:Ajis4sg4bqrTXFg456gZIAG62P/LRy4jhIRSIWV9e7iJ1S835OHDRUII60FXevyjzPb2v/AORHB0dQSOf/ujDA=="
+}

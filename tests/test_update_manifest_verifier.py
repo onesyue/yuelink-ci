@@ -8,13 +8,21 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.json"
-OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.2.135.json"
+OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.2.136.json"
 SPEC = importlib.util.spec_from_file_location(
     "verify_update_manifest", ROOT / "scripts/verify-update-manifest.py"
 )
 assert SPEC and SPEC.loader
 verifier = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(verifier)
+
+
+def _later_than(iso: str) -> str:
+    """比给定 ISO 时间晚一天 —— 供「更高版本不能洗白更早发布时间」那条用。"""
+    from datetime import datetime, timedelta, timezone
+
+    dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(timezone.utc)
+    return (dt + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class UpdateManifestVerifierTests(unittest.TestCase):
@@ -29,7 +37,7 @@ class UpdateManifestVerifierTests(unittest.TestCase):
     def test_real_dart_release_fixture_is_valid(self) -> None:
         """A production manifest signed by the YueLink release plane is the contract."""
         verified = verifier.verify(self.raw)
-        self.assertEqual(verified["version"], "1.2.136")
+        self.assertEqual(verified["version"], self.manifest["version"])
 
     def test_payload_tamper_is_rejected(self) -> None:
         tampered = dict(self.manifest)
@@ -49,7 +57,7 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         # Prove this reaches the monotonic floor rather than failing signature
         # verification: it is an authentic archived production root.
         signed = verifier._verify_signed_manifest(older)
-        self.assertEqual(signed["version"], "1.2.135")
+        self.assertEqual(signed["version"], "1.2.136")
         with self.assertRaisesRegex(verifier.ManifestError, "below the reviewed minimum"):
             verifier.verify(older)
 
@@ -58,8 +66,11 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         # higher version cannot legitimize an older source/publication epoch.
         candidate = dict(self.manifest)
         floor = dict(self.manifest)
-        floor["version"] = "1.2.132"
-        floor["publishedAt"] = "2026-08-16T04:34:31Z"
+        # 🚨 两个值都从夹具**派生**，不写死。写死会随发版腐烂：原先钉的
+        # publishedAt 是 2026-08-16，等夹具换成更新的根之后，候选反而比"地板"
+        # 还新，`publishedAt is below` 永远不会触发 —— 断言看着在，其实空转。
+        floor["version"] = "0.0.1"                      # 版本一定更低
+        floor["publishedAt"] = _later_than(self.manifest["publishedAt"])  # 时间一定更晚
         with self.assertRaisesRegex(verifier.ManifestError, "publishedAt is below"):
             verifier._enforce_minimum(candidate, floor)
 
@@ -90,7 +101,9 @@ class UpdateManifestVerifierTests(unittest.TestCase):
             reordered, ensure_ascii=False, indent=7, separators=(",", ": ")
         ).encode()
         self.assertNotEqual(reformatted, self.raw)
-        self.assertEqual(verifier.verify(reformatted)["version"], "1.2.136")
+        self.assertEqual(
+            verifier.verify(reformatted)["version"], self.manifest["version"]
+        )
 
 
 if __name__ == "__main__":
