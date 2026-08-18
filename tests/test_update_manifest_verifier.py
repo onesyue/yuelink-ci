@@ -9,9 +9,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.json"
 # 归档的旧签名根，用来证明「签名合法但版本更旧」会被单调地板拒绝。
-# 指向**最近**的那一个而不是最老的：1.3.4 的重放比 1.2.136 的重放现实得多
-# （它就是上一版真正在 CDN 上服役过的根）。1.2.136 那份仍留在仓里。
-OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.3.4.json"
+# 指向**最近**的那一个而不是最老的：1.3.5 的重放比更早版本的重放现实得多
+# （它就是上一版真正在 CDN 上服役过的根）。更早的那些仍留在仓里。
+OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.3.5.json"
 SPEC = importlib.util.spec_from_file_location(
     "verify_update_manifest", ROOT / "scripts/verify-update-manifest.py"
 )

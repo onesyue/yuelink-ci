@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.5",
+  "channel": "stable",
+  "publishedAt": "2026-08-18T02:09:44Z",
+  "expiresAt": "2026-09-22T02:09:44Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "Released 2026-08-18. 佣金现在能在 app 里直接提现。\n\n## 新增\n\n### 佣金提现（会员 → 邀请返利 →「佣金提现」）\n\n服务端的提现接口一直是活的 —— 生产上已经有 15 笔打过款 —— 但客户端从来没接过，\n之前只能靠「在浏览器打开完整面板」外跳过去。**本版**把那条外跳链接删掉时，提现是\n全 app **唯一**只能靠它到达的功能。正确的修法是补上原生页，不是把链接放回来。\n\n它放在「佣金」分区而不是钱包页，是为了和「可划转佣金」同屏：**站内花掉**（划转到\n余额买套餐）和**提到站外**（USDT）两条出口一次看全 —— 两者扣的是同一笔佣金余额。\n\n页面形状完全跟着服务端语义走，没有为了好看简化掉任何一条：\n\n- **申请即冻结**：提交成功的那一刻佣金就被扣下了，所以页面会立刻刷新，可提现余额\n  当场变少 —— 不是\"等审核通过才扣\"。\n- **同时只能有一笔待审核**：有在审的单子时整张表单不渲染，只说明原因，而不是让你\n  填完再被拒。\n- **撤销或被驳回会原子返还**，所以文案是「退回」而不是「取消请求」。\n- **最低 100 元**（以面板配置为准）。\n- **目前只支持 USDT (TRC20)**：因为只有一种方式，页面直接陈述而不是给你一个只有\n  一项的下拉框。地址必须是 TRC20（T 开头）—— 客户端会先拦一次，因为**打错链的\n  转账不可逆**；最终判定仍在服务端。\n- **记录不静默截断**：一次只拉一页，超出部分会在卡片脚注写明「共 N 条，此处显示\n  最近 M 条」。\n\n## 精简\n\n### 「我的」页：三条小字/链接\n\n- 设备行的副标题「在线设备、超限提示、重置所有设备」——它在描述目的地里有什么，\n  而不是这一行的状态；标题同时从「设备在线」改成独立成立的「设备管理」。\n- 「检查更新」行的「上次检查: X」——行的状态是右侧那个版本号 /「有新版本」角标，\n  副标题讲的是「检查」这个动作的历史。\n- 页尾的「在浏览器打开完整面板」——全 app 已经原生化，留一条通往网页面板的次级\n  出口只是把用户推出 app；墙内没连代理时，它和被删掉的「官网」行一样只会给你一个\n  转圈的浏览器。挂在它上面的最后一个功能（佣金提现）由本版的原生页接管。\n\n### 删掉一批「只是在描述目的地」的灰色小字\n\n签到日历、连接详情、流量统计、流量明细、钱包、订单记录、商店、套餐详情、自助诊断、\n我的工单 —— 这些页面的标题下面原本都有一行灰字，内容是把标题换个说法再讲一遍\n（点进「订单记录」，下面写着\"查看你的历史订单\"）。它们不提供任何新信息，只是把\n真正的内容往下推。\n\n### 「我的」页改用下拉刷新\n\n和 app 里其余页面一致。\n\n## 判据\n\n这一轮删小字的取舍只有一句：**显示状态的留下，描述目的地的删掉**。两份主流规范\n写的是同一条 —— Android Settings「If the label is sufficient on its own, don't add\nsecondary text… show the setting status instead of describing the setting」、\nMaterial settings pattern「secondary text should only show the current status of a\nsetting」。所以状态、数据、空态解释、以及「这一下会删掉什么」（连接修复页那 6 条\n提示）全部留着一条没动。\n",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.5/YueLink-1.3.5-android-arm64-v8a.apk",
+      "sha256": "500ed09ba1aecc04bbc917f7a0d9c56adc969b0ade4c923958eec4c365660b22"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.5/YueLink-1.3.5-android-armeabi-v7a.apk",
+      "sha256": "8ee3a61c64cc5502926da409526c2966e8163e4f8afbfcc6708f911235851ba6"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.5/YueLink-1.3.5-android-x86_64.apk",
+      "sha256": "4441a7379afa8794f1c332af0fca8758613f5b8b29eb27dc16e601e9e54d2d33"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.5/YueLink-1.3.5-android-universal.apk",
+      "sha256": "2bffa4c2ceb9b7a7db118637878383fbd82c8009d0fdc628f477c8719c4e441c"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.5/YueLink-1.3.5-ios.ipa",
+      "sha256": "ffc9caf13aee52a7890f998c2bcf53d27533ef03d23524762bf68035e37196b3"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.5/YueLink-1.3.5-macos-universal.dmg",
+      "sha256": "86f0a84f0a2725d2e7acdba79aa2feb98d8e5af46be7a41f45a3e2f11b9d96c5"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.5/YueLink-1.3.5-windows-amd64-setup.exe",
+      "sha256": "39778fa7e16df97df92d53319cec8c87d364926a385cade18debbe8f42ede4d1"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.5/YueLink-1.3.5-windows-amd64-portable.zip",
+      "sha256": "f8925c6c50edc69dd4fdf1d80162e54057f76f80bd5f362aa71b7c969b469289"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.5/YueLink-1.3.5-linux-amd64.AppImage",
+      "sha256": "89a46a4304ae870813b5284f16e68dee18440d085803ed95514de8d2fd066d50"
+    }
+  },
+  "sig": "ed25519:ZUQnJzRzeU4ZSwIIGmP0RFIvStejIFyfGDBR+TpL8iU6chQC6lP1t9ET2cz+cz7bV+6xqnTavfFlXqH5+BBdDg=="
+}
