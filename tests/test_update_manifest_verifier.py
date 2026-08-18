@@ -8,7 +8,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.json"
-OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.2.136.json"
+# 归档的旧签名根，用来证明「签名合法但版本更旧」会被单调地板拒绝。
+# 指向**最近**的那一个而不是最老的：1.3.4 的重放比 1.2.136 的重放现实得多
+# （它就是上一版真正在 CDN 上服役过的根）。1.2.136 那份仍留在仓里。
+OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.3.4.json"
 SPEC = importlib.util.spec_from_file_location(
     "verify_update_manifest", ROOT / "scripts/verify-update-manifest.py"
 )
@@ -57,7 +60,14 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         # Prove this reaches the monotonic floor rather than failing signature
         # verification: it is an authentic archived production root.
         signed = verifier._verify_signed_manifest(older)
-        self.assertEqual(signed["version"], "1.2.136")
+        # 期望值从夹具派生，不写死版本号 —— 换夹具时不必再改这一行，
+        # 也就不会出现「改了夹具、忘了改断言」的假红/假绿。
+        self.assertEqual(signed["version"], json.loads(older)["version"])
+        # 但必须真的比当前地板旧，否则这条测试会在某次换夹具后悄悄变成空转。
+        self.assertLess(
+            tuple(int(x) for x in signed["version"].split(".")),
+            tuple(int(x) for x in self.manifest["version"].split(".")),
+        )
         with self.assertRaisesRegex(verifier.ManifestError, "below the reviewed minimum"):
             verifier.verify(older)
 
