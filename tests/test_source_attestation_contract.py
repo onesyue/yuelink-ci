@@ -26,7 +26,7 @@ WORKFLOW_MARKERS = (
     "dart run tool/automation/manifest_guard.dart --self-check",
     "Checkout exact attestation parser",
     "ref: ${{ github.sha }}",
-    "flutter test --coverage --machine",
+    "flutter test --no-pub --coverage --machine",
     ".source-attestation-tools/scripts/count-flutter-machine-tests.py",
     "/tmp/flutter-tests.jsonl --minimum 2044",
     "gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e",

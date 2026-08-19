@@ -15,6 +15,8 @@ class ProtocolError(ValueError):
 
 def count_test_starts(lines: Iterable[str]) -> int:
     count = 0
+    started = False
+    done = False
     for line_number, line in enumerate(lines, start=1):
         stripped = line.strip()
         if not stripped:
@@ -22,13 +24,42 @@ def count_test_starts(lines: Iterable[str]) -> int:
         try:
             event = json.loads(stripped)
         except json.JSONDecodeError as error:
+            # Flutter tooling may print dependency/build-hook status before the
+            # machine protocol starts. Once the authenticated protocol stream
+            # begins, any non-JSON line is corruption and must fail closed.
+            if not started:
+                continue
             raise ProtocolError(
                 f"malformed Flutter machine JSON at line {line_number}: {error.msg}"
             ) from error
+        if not started:
+            if not isinstance(event, dict) or event.get("type") != "start":
+                raise ProtocolError(
+                    f"JSON record before Flutter protocol start at line {line_number}"
+                )
+            started = True
+            continue
+        if done:
+            raise ProtocolError(
+                f"record after Flutter protocol done at line {line_number}"
+            )
         # Flutter also emits valid JSON arrays for VM service-extension events.
         # They are protocol records, but not testStart records.
-        if isinstance(event, dict) and event.get("type") == "testStart":
+        if not isinstance(event, dict):
+            continue
+        event_type = event.get("type")
+        if event_type == "start":
+            raise ProtocolError(f"duplicate Flutter protocol start at line {line_number}")
+        if event_type == "testStart":
             count += 1
+        elif event_type == "done":
+            if event.get("success") is not True:
+                raise ProtocolError("Flutter protocol completed without success=true")
+            done = True
+    if not started:
+        raise ProtocolError("Flutter protocol start record is missing")
+    if not done:
+        raise ProtocolError("Flutter protocol done record is missing")
     return count
 
 

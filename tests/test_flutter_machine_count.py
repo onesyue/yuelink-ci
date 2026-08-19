@@ -16,13 +16,56 @@ SPEC.loader.exec_module(counter)
 
 
 class FlutterMachineCountTests(unittest.TestCase):
-    def test_array_protocol_events_are_valid_but_not_tests(self) -> None:
+    def test_tool_preamble_and_array_protocol_events_are_accepted(self) -> None:
         with FIXTURE.open(encoding="utf-8") as stream:
             self.assertEqual(counter.count_test_starts(stream), 2)
 
-    def test_malformed_nonempty_json_fails_closed(self) -> None:
+    def test_malformed_record_after_start_fails_closed(self) -> None:
         with self.assertRaisesRegex(counter.ProtocolError, "malformed Flutter machine JSON"):
-            counter.count_test_starts(io.StringIO('{"type":"testStart"\n'))
+            counter.count_test_starts(
+                io.StringIO('{"type":"start"}\n{"type":"testStart"\n')
+            )
+
+    def test_json_record_before_start_is_rejected(self) -> None:
+        with self.assertRaisesRegex(counter.ProtocolError, "before Flutter protocol start"):
+            counter.count_test_starts(
+                io.StringIO('{"type":"testStart","test":{"id":1}}\n')
+            )
+
+    def test_missing_start_is_rejected(self) -> None:
+        with self.assertRaisesRegex(counter.ProtocolError, "start record is missing"):
+            counter.count_test_starts(io.StringIO("Resolving dependencies...\n"))
+
+    def test_missing_done_is_rejected(self) -> None:
+        with self.assertRaisesRegex(counter.ProtocolError, "done record is missing"):
+            counter.count_test_starts(
+                io.StringIO(
+                    '{"type":"start"}\n'
+                    '{"type":"testStart","test":{"id":1}}\n'
+                )
+            )
+
+    def test_unsuccessful_done_is_rejected(self) -> None:
+        with self.assertRaisesRegex(counter.ProtocolError, "without success=true"):
+            counter.count_test_starts(
+                io.StringIO('{"type":"start"}\n{"type":"done","success":false}\n')
+            )
+
+    def test_duplicate_start_is_rejected(self) -> None:
+        with self.assertRaisesRegex(counter.ProtocolError, "duplicate Flutter protocol start"):
+            counter.count_test_starts(
+                io.StringIO('{"type":"start"}\n{"type":"start"}\n')
+            )
+
+    def test_record_after_done_is_rejected(self) -> None:
+        with self.assertRaisesRegex(counter.ProtocolError, "after Flutter protocol done"):
+            counter.count_test_starts(
+                io.StringIO(
+                    '{"type":"start"}\n'
+                    '{"type":"done","success":true}\n'
+                    '[{"event":"late"}]\n'
+                )
+            )
 
     def test_floor_accepts_equal_or_higher_count(self) -> None:
         counter.enforce_floor(2044, 2044)

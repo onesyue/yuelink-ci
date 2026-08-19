@@ -175,7 +175,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          flutter test --coverage --machine | tee /tmp/flutter-tests.jsonl
+          flutter test --no-pub --coverage --machine | tee /tmp/flutter-tests.jsonl
           python3 .source-attestation-tools/scripts/count-flutter-machine-tests.py \
             /tmp/flutter-tests.jsonl --minimum 2044
 
