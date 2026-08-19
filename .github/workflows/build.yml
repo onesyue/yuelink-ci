@@ -1368,6 +1368,19 @@ jobs:
             | grep -Ev '(^pre$|-pre(\.[0-9]+)?$)' \
             | head -1)
 
+          # English twin of NOTES_FILE. A curated Chinese release without its
+          # twin is a release error: otherwise every English install silently
+          # receives Chinese notes through the client's compatibility fallback.
+          NOTES_FILE_EN=""
+          if [ -n "$NOTES_FILE" ]; then
+            EN_CANDIDATE="${NOTES_FILE%.md}.en.md"
+            [ -f "$EN_CANDIDATE" ] && NOTES_FILE_EN="$EN_CANDIDATE"
+            if [ -z "$NOTES_FILE_EN" ]; then
+              echo "::error::missing English release notes: $EN_CANDIDATE"
+              exit 1
+            fi
+          fi
+
           if [ -n "$NOTES_FILE" ]; then
             cp "$NOTES_FILE" release_notes.md
             # In-app updater notes (manifest `notes`) = curated file minus the
@@ -1377,6 +1390,9 @@ jobs:
             # v1.2.123 shipped that signing table into every update dialog.
             awk 'NR==1 && /^# / {next} {print}' "$NOTES_FILE" \
               | sed '/./,$!d' > release_notes.app.md
+            # Same treatment for the required English twin.
+            awk 'NR==1 && /^# / {next} {print}' "$NOTES_FILE_EN" \
+              | sed '/./,$!d' > release_notes.app.en.md
           else
             # Fallback when docs/releases/<tag>.md is missing: emit a minimal
             # 2026-format body (## Changes + ## Downloads + Full Changelog),
@@ -1428,7 +1444,12 @@ jobs:
             } > release_notes.md
             # In-app updater notes fallback: commit subjects only — no
             # Downloads/Install tables, which belong in operator evidence.
-            printf '%s\n' "$CHANGES" > release_notes.app.md
+            printf '%s\n' "$CHANGES" > release_notes.app.app_tmp
+            mv release_notes.app.app_tmp release_notes.app.md
+            # Commit subjects are already written in English in this repo, so
+            # the fallback body is its own English twin. Emitting it keeps the
+            # manifest shape identical on both branches.
+            cp release_notes.app.md release_notes.app.en.md
           fi
           echo "RELEASE_TITLE=${TITLE}" >> $GITHUB_ENV
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
@@ -1520,7 +1541,16 @@ jobs:
           # NEVER read release_notes.md here — by this point it carries the
           # English RELEASE-STATUS preamble meant for the operator job summary.
           test -s release_notes.app.md
+          test -s release_notes.app.en.md
           NOTES=$(head -n 100 release_notes.app.md | jq -Rs .)
+          # English release notes. `update.json` is the ONLY channel that
+          # reaches an installed client (R2-only distribution, no GitHub
+          # Releases), so without this an English-locale user gets Chinese
+          # Markdown in the update dialog on every update.
+          #
+          # Same `head -n 100` truncation as `notes` — deliberately, so the
+          # two halves can't diverge in length and the manifest stays small.
+          NOTES_EN=$(head -n 100 release_notes.app.en.md | jq -Rs .)
 
           sha() {
             [ -f "dist/$1.sha256" ] && cat "dist/$1.sha256" | tr -d '[:space:]' || echo ""
@@ -1573,8 +1603,9 @@ jobs:
             --arg expiresAt "$EXPIRES_AT" \
             --arg releaseUrl "$RELEASE_URL" \
             --argjson notes "$NOTES" \
+            --argjson notesEn "$NOTES_EN" \
             --argjson platforms "$PLATFORMS" \
-            '{schemaVersion: $schemaVersion, keyId: $keyId, version: $version, channel: $channel, publishedAt: $publishedAt, expiresAt: $expiresAt, releaseUrl: $releaseUrl, notes: $notes, platforms: $platforms}' \
+            '{schemaVersion: $schemaVersion, keyId: $keyId, version: $version, channel: $channel, publishedAt: $publishedAt, expiresAt: $expiresAt, releaseUrl: $releaseUrl, notes: $notes, notesEn: $notesEn, platforms: $platforms}' \
             > "$MANIFEST_NAME"
           echo "MANIFEST_NAME=$MANIFEST_NAME" >> $GITHUB_ENV
           cat "$MANIFEST_NAME" | jq .
