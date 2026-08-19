@@ -264,14 +264,13 @@ class UpdateManifestVerifierTests(unittest.TestCase):
 
     def assert_manifest_health_uses_bounded_get(self, workflow: str) -> None:
         self.assertNotRegex(workflow, r"(?m)^\s*--head(?:\s|$)")
-        self.assertIn("release_url=\"$(jq -er '.releaseUrl' \"$tmp\")\"", workflow)
-        self.assertIn("command -v google-chrome", workflow)
-        self.assertIn("timeout --signal=TERM --kill-after=5s 35s", workflow)
-        self.assertIn("--virtual-time-budget=10000", workflow)
-        self.assertIn("max_dom_bytes = 1048576", workflow)
-        self.assertIn("Cloudflare challenge DOM returned", workflow)
-        self.assertIn("parsed.canonical != expected or parsed.og_url != expected", workflow)
-        self.assertIn("release browser probe: {expected}", workflow)
+        self.assertIn(
+            'health_url="https://yuetong.app/health/yue-to-download.json"', workflow
+        )
+        self.assertIn("python3 scripts/verify-release-page-health.py", workflow)
+        self.assertNotIn("command -v google-chrome", workflow)
+        self.assertNotIn("--headless=new", workflow)
+        self.assertNotIn("--dump-dom", workflow)
         self.assertNotIn("setup-chrome", workflow)
         self.assertNotIn("apt-get", workflow)
         self.assertIn('done < <(jq -r \'.platforms[].url\' "$tmp")', workflow)
@@ -301,11 +300,8 @@ class UpdateManifestVerifierTests(unittest.TestCase):
     def test_manifest_health_rejects_release_page_probe_mutations(self) -> None:
         workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
         for required in (
-            "timeout --signal=TERM --kill-after=5s 35s",
-            "--virtual-time-budget=10000",
-            "max_dom_bytes = 1048576",
-            "Cloudflare challenge DOM returned",
-            "parsed.canonical != expected or parsed.og_url != expected",
+            'health_url="https://yuetong.app/health/yue-to-download.json"',
+            "python3 scripts/verify-release-page-health.py",
         ):
             with self.subTest(required=required):
                 mutated = workflow.replace(required, "", 1)
