@@ -10,10 +10,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 SOURCE_SNAPSHOT=""
+ATTESTATION_SNAPSHOT=""
 cleanup() {
   if [[ "$SOURCE_SNAPSHOT" == */yuelink-ci-source-tag.* ]] &&
      [ -d "$SOURCE_SNAPSHOT" ]; then
     rm -rf -- "$SOURCE_SNAPSHOT"
+  fi
+  if [[ "$ATTESTATION_SNAPSHOT" == */yuelink-ci-source-attestation.* ]] &&
+     [ -d "$ATTESTATION_SNAPSHOT" ]; then
+    rm -rf -- "$ATTESTATION_SNAPSHOT"
   fi
 }
 trap cleanup EXIT
@@ -84,6 +89,93 @@ if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; the
   echo "::error::公开 CI tag '$TAG' 已存在；release tag 不允许覆盖。"
   exit 1
 fi
+
+# Private-repository Actions can be prevented from starting by account billing,
+# producing a red check with no steps or logs. A release must still have a
+# machine-verifiable source gate; a maintainer's local test claim is not an
+# acceptable substitute. Require the successful public source-attestation
+# workflow produced by this exact yuelink-ci revision for the exact private
+# commit behind the immutable source tag, then authenticate its proof artifact.
+SOURCE_COMMIT="$(
+  gh api "repos/onesyue/yuelink/commits/$TAG" --jq '.sha'
+)"
+if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "::error::无法把私仓 tag $TAG 解析为完整 40 位 source commit。"
+  exit 1
+fi
+BUILDER_COMMIT="$(git rev-parse HEAD)"
+ATTESTATION_TITLE="Source attestation $SOURCE_COMMIT"
+ATTESTATION_RUN_ID="$(
+  gh api \
+    'repos/onesyue/yuelink-ci/actions/workflows/source-attestation.yml/runs?event=workflow_dispatch&status=success&per_page=100' \
+    --jq ".workflow_runs
+      | map(select(
+          .display_title == \"$ATTESTATION_TITLE\" and
+          .head_sha == \"$BUILDER_COMMIT\" and
+          .conclusion == \"success\"
+        ))
+      | sort_by(.created_at)
+      | last
+      | .id // empty"
+)"
+if [[ ! "$ATTESTATION_RUN_ID" =~ ^[0-9]+$ ]]; then
+  echo "::error::缺少 source $SOURCE_COMMIT 在 builder $BUILDER_COMMIT 上的成功公共 source attestation；拒绝用本地声明替代。"
+  echo "触发: gh workflow run source-attestation.yml -R onesyue/yuelink-ci -f source_sha=$SOURCE_COMMIT"
+  exit 1
+fi
+
+ATTESTATION_SNAPSHOT="$(mktemp -d "${TMPDIR:-/tmp}/yuelink-ci-source-attestation.XXXXXX")"
+ATTESTATION_NAME="yuelink-source-attestation-$SOURCE_COMMIT"
+gh run download "$ATTESTATION_RUN_ID" \
+  -R onesyue/yuelink-ci \
+  --name "$ATTESTATION_NAME" \
+  --dir "$ATTESTATION_SNAPSHOT"
+ATTESTATION_PROOF="$ATTESTATION_SNAPSHOT/source-attestation.json"
+[ -s "$ATTESTATION_PROOF" ] || {
+  echo "::error::source attestation run $ATTESTATION_RUN_ID 缺少 $ATTESTATION_NAME/source-attestation.json。"
+  exit 1
+}
+jq -e \
+  --arg source "$SOURCE_COMMIT" \
+  --arg release "$TAG" \
+  --arg builder "$BUILDER_COMMIT" \
+  --arg run "$ATTESTATION_RUN_ID" \
+  '.schemaVersion == 1 and
+   .sourceRepository == "onesyue/yuelink" and
+   .sourceSha == $source and
+   .releaseTag == $release and
+   .builderRepository == "onesyue/yuelink-ci" and
+   .workflowSha == $builder and
+   .runId == $run and
+   (.gates | sort) == ([
+     "source-master-ancestry",
+     "android-release-signing-contract",
+     "unreleased-dart-format",
+     "flutter-analyze",
+     "architecture-imports",
+     "cocoapods-residue",
+     "workflow-policy",
+     "security-scan",
+     "wintun-bundle",
+     "release-metadata",
+     "manifest-schema",
+     "flutter-tests-floor-2044",
+     "gitleaks-full-history",
+     "govulncheck-core-service",
+     "macos-integration",
+     "windows-durability"
+   ] | sort)' "$ATTESTATION_PROOF" >/dev/null || {
+  echo "::error::source attestation proof 与 tag/source/builder/run 或完整 gate 集合不一致。"
+  exit 1
+}
+gh attestation verify "$ATTESTATION_PROOF" \
+  --repo onesyue/yuelink-ci \
+  --signer-workflow onesyue/yuelink-ci/.github/workflows/source-attestation.yml \
+  --source-digest "$BUILDER_COMMIT" >/dev/null || {
+  echo "::error::source attestation provenance 验证失败。"
+  exit 1
+}
+echo "✓ source attestation 已验真: run $ATTESTATION_RUN_ID, source $SOURCE_COMMIT"
 
 # 对比远端私仓同名 tag 中的精确 workflow，而不是旁边 ../yuelink 当前
 # 工作区。后者可能有尚未进入 tag 的修改；用它做 sync check 会让公开 tag

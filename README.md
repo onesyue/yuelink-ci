@@ -35,9 +35,35 @@ From a clean, up-to-date `master` checkout:
 ./sync-build.sh ../yuelink
 git diff -- .github/workflows/build.yml
 ./sync-build.sh --check ../yuelink
+
+# Before the private source tag is cut, attest its exact 40-character master
+# commit on public runners. This is the canonical source gate when private
+# Actions cannot start because of billing; local test output is never accepted.
+SOURCE_SHA=$(git -C ../yuelink rev-parse HEAD)
+gh workflow run source-attestation.yml -R onesyue/yuelink-ci \
+  -f source_sha="$SOURCE_SHA"
+# Wait for every source gate and the final provenance job to succeed.
+
+# Then create/push the private source tag and mirror it. release.sh downloads
+# the proof, checks source/tag/builder/run/gate identity, and verifies its
+# GitHub artifact attestation before it can create the public tag.
 ./release.sh vX.Y.Z
 ```
 
 `release.sh` verifies the private tag exists, the public tag does not, the
-generated workflow exactly matches that private tag, and every mandatory
-sideload secret is configured before it creates an immutable public tag.
+generated workflow exactly matches that private tag, every mandatory sideload
+secret is configured, and a successful source attestation from the exact
+current yuelink-ci workflow commit binds all canonical gates to the private
+tag's peeled commit before it creates an immutable public tag.
+
+The source attestation is equal to or stronger than the private source jobs:
+it checks master ancestry, the complete unreleased Dart format delta, Android
+release-signing contract, Flutter analysis, architecture imports, CocoaPods
+residue, workflow policy, the full Flutter suite with a reviewed floor of 2044
+tests, the release security scanner, Wintun hashes, release metadata and
+manifest schema, full-history Gitleaks, core and service production-target
+govulncheck, macOS integration tests, and the Windows durability probe. The
+final JSON proof is uploaded under the exact source SHA and receives GitHub
+build-provenance attestation. Updater signing material is intentionally not
+copied into this public repository; the protected promotion step verifies the
+real key and remains independently mandatory.

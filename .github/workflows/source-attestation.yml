@@ -1,0 +1,373 @@
+name: Source attestation
+run-name: Source attestation ${{ inputs.source_sha }}
+
+# Billing-independent projection of the private source repository's canonical
+# CI, Security, release-gate and release-preflight checks. The public builder
+# receives only its existing read-only deploy key; updater and R2 signing
+# material remain in their protected release planes.
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact 40-character commit SHA from onesyue/yuelink/master
+        required: true
+        type: string
+
+concurrency:
+  group: source-attestation-${{ inputs.source_sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: '3.44.7'
+  GO_VERSION: '1.26.6'
+
+jobs:
+  source_contract:
+    name: Analyze, tests and release contracts
+    runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.identity.outputs.source_sha }}
+      release_tag: ${{ steps.identity.outputs.release_tag }}
+    steps:
+      - name: Validate source SHA input
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::source_sha must be exactly 40 lowercase hexadecimal characters"
+            exit 1
+          fi
+
+      - name: Checkout exact private source with full history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ inputs.source_sha }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Bind source identity and release metadata
+        id: identity
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          [ "$actual" = "$SOURCE_SHA" ] || {
+            echo "::error::checkout resolved $actual, expected $SOURCE_SHA"
+            exit 1
+          }
+          git fetch --no-tags origin \
+            '+refs/heads/master:refs/remotes/origin/master'
+          git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/master || {
+            echo "::error::$SOURCE_SHA is not reachable from onesyue/yuelink master"
+            exit 1
+          }
+          version="$(sed -nE 's/^version:[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+)\+[0-9]+$/\1/p' pubspec.yaml)"
+          [ -n "$version" ] || {
+            echo "::error::pubspec.yaml must contain a stable X.Y.Z+N version"
+            exit 1
+          }
+          printf 'source_sha=%s\nrelease_tag=v%s\n' "$SOURCE_SHA" "$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Set up Java 17
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Resolve locked Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Android release signing contract
+        run: bash scripts/ci/test_android_release_signing.sh
+
+      - name: Format check for the complete unreleased delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 HEAD^ 2>/dev/null || true)"
+          if [ -n "$base" ]; then
+            mapfile -t changed_files < <(
+              git diff --name-only --diff-filter=ACM "$base"...HEAD \
+                | grep '\.dart$' \
+                | grep -v 'lib/i18n/strings_g.dart' || true
+            )
+          else
+            echo "no prior stable tag; checking every tracked Dart file"
+            mapfile -t changed_files < <(
+              git ls-files '*.dart' \
+                | grep -v 'lib/i18n/strings_g.dart' || true
+            )
+          fi
+          if [ "${#changed_files[@]}" -eq 0 ]; then
+            echo "no Dart files changed since ${base:-repository root}"
+          else
+            printf '%s\n' "${changed_files[@]}"
+            dart format --output=none --set-exit-if-changed "${changed_files[@]}"
+          fi
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Architecture import guard
+        run: bash scripts/check_imports.sh
+
+      - name: CocoaPods residue guard
+        run: bash scripts/check_cocoapods_residue.sh
+
+      - name: Workflow least-privilege and pin guard
+        run: dart run tool/automation/workflow_guard.dart
+
+      - name: Release security scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/security_scan.sh --json | tee /tmp/security-scan.json
+          [ "$(jq -r '.fail' /tmp/security-scan.json)" -eq 0 ]
+
+      - name: Wintun release gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f windows/third_party/wintun/wintun.sha256
+          test -f windows/third_party/wintun/README.md
+          count="$(grep -c '^[0-9a-f]\{64\}' windows/third_party/wintun/wintun.sha256 || true)"
+          [ "$count" -ge 3 ] || {
+            echo "::error::expected at least 3 pinned Wintun hashes, found $count"
+            exit 1
+          }
+
+      - name: Release metadata guard
+        env:
+          RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}
+        run: dart run tool/automation/release_guard.dart --tag "$RELEASE_TAG"
+
+      - name: Manifest schema self-check
+        run: dart run tool/automation/manifest_guard.dart --self-check
+
+      - name: Run complete Flutter suite and enforce reviewed floor
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter test --coverage --machine | tee /tmp/flutter-tests.jsonl
+          count="$(python3 - <<'PY'
+          import json
+
+          count = 0
+          with open('/tmp/flutter-tests.jsonl', encoding='utf-8') as stream:
+              for line in stream:
+                  try:
+                      event = json.loads(line)
+                  except json.JSONDecodeError:
+                      continue
+                  if event.get('type') == 'testStart':
+                      count += 1
+          print(count)
+          PY
+          )"
+          echo "Flutter tests observed: $count"
+          [ "$count" -ge 2044 ] || {
+            echo "::error::reviewed Flutter test floor is 2044; observed $count"
+            exit 1
+          }
+
+  gitleaks:
+    name: Gitleaks full history
+    needs: source_contract
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact private source with full history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ needs.source_contract.outputs.source_sha }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+      - name: Scan all reachable history
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
+
+  govulncheck:
+    name: govulncheck (${{ matrix.module }})
+    needs: source_contract
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [core, service]
+    steps:
+      - name: Checkout exact private source with recursive modules
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ needs.source_contract.outputs.source_sha }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Scan production target graphs
+        run: bash scripts/ci/govulncheck_targets.sh "${{ matrix.module }}"
+
+  macos_integration:
+    name: Integration tests (macOS)
+    needs: source_contract
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact private source with full history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ needs.source_contract.outputs.source_sha }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter config --enable-macos-desktop
+      - run: flutter pub get --enforce-lockfile
+      - name: Run integration tests on macOS host
+        run: flutter test integration_test/ -d macos --reporter expanded
+
+  windows_durability:
+    name: Windows durability probe
+    needs: source_contract
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact private source with full history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ needs.source_contract.outputs.source_sha }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: dart run tool/windows_durability_probe.dart
+
+  attest:
+    name: Bind green gates to source SHA
+    needs: [source_contract, gitleaks, govulncheck, macos_integration, windows_durability]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Write canonical source proof
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ needs.source_contract.outputs.source_sha }}
+          RELEASE_TAG: ${{ needs.source_contract.outputs.release_tag }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          jq -S -n \
+            --arg sourceSha "$SOURCE_SHA" \
+            --arg releaseTag "$RELEASE_TAG" \
+            --arg workflowSha "$WORKFLOW_SHA" \
+            --arg runId "$RUN_ID" \
+            --arg runAttempt "$RUN_ATTEMPT" \
+            '{
+              schemaVersion: 1,
+              sourceRepository: "onesyue/yuelink",
+              sourceSha: $sourceSha,
+              releaseTag: $releaseTag,
+              builderRepository: "onesyue/yuelink-ci",
+              workflowSha: $workflowSha,
+              runId: $runId,
+              runAttempt: $runAttempt,
+              gates: [
+                "source-master-ancestry",
+                "android-release-signing-contract",
+                "unreleased-dart-format",
+                "flutter-analyze",
+                "architecture-imports",
+                "cocoapods-residue",
+                "workflow-policy",
+                "security-scan",
+                "wintun-bundle",
+                "release-metadata",
+                "manifest-schema",
+                "flutter-tests-floor-2044",
+                "gitleaks-full-history",
+                "govulncheck-core-service",
+                "macos-integration",
+                "windows-durability"
+              ]
+            }' > source-attestation.json
+          jq -e --arg sha "$SOURCE_SHA" \
+            '.sourceSha == $sha and (.gates | length) == 16' \
+            source-attestation.json >/dev/null
+          cat source-attestation.json
+
+      - name: Upload source proof
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: yuelink-source-attestation-${{ needs.source_contract.outputs.source_sha }}
+          path: source-attestation.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Sign source proof provenance
+        id: provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: source-attestation.json
+
+      - name: Record verification coordinates
+        env:
+          ATTESTATION_URL: ${{ steps.provenance.outputs.attestation-url }}
+        run: |
+          {
+            echo "### YueLink source attestation"
+            echo "- source: \`${{ needs.source_contract.outputs.source_sha }}\`"
+            echo "- release: \`${{ needs.source_contract.outputs.release_tag }}\`"
+            echo "- provenance: $ATTESTATION_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
