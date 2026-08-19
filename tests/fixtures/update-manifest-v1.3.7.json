@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.7",
+  "channel": "stable",
+  "publishedAt": "2026-08-19T09:58:20Z",
+  "expiresAt": "2026-09-23T09:58:20Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "2026-08-19 发布。中英文、节点名与跨页面导航现在真正连成一条完整体验。\n\n## 新功能\n\n- **完整中英文界面**：首次启动、登录、连接、节点、会员、商店、订单、设备、诊断、客服、悦视频与更新提示均跟随显式语言或系统语言；“跟随系统”不会再被永久钉在切换当时的语言。\n- **英文节点与订阅**：英文界面刷新订阅时请求英文节点名、分组名和信息节点；切回中文会同步刷新。跨设备登录会采用账号的显式语言偏好。\n- **深链直达真实页面**：工单、支付结果与指定订单链接均可直接打开；需要登录时会在登录后继续，不再停在列表页或未知路由。\n- **关联业务可直接互跳**：订单可前往流量、设备或带订单号的客服工单；流量和设备页可直达诊断与带上下文工单。\n- **宽屏订单主从布局**：平板和桌面同时展示订单列表与详情，手机继续使用原生页面栈与系统返回。\n\n## 修复与体验\n\n- 修正 `tickets`、`payment/result?trade_no=`、`order/{tradeNo}` 三类已发布链接的解析与返回行为。\n- 底栏、连接按钮、节点搜索清除、订单号复制、悦视频海报与媒体入口支持键盘、可见焦点和读屏语义；触摸入口至少 44dp。\n- 更新弹窗按当前语言读取双语发布说明，英文说明缺失或含占位符时发布流程会直接失败。\n- 发布准备与 promote 继续使用签名清单、来源 revision 与双语说明守卫；凭据只记录存放位置，不进入仓库或日志。\n",
+  "notesEn": "Released 2026-08-19. English, localized node names, and cross-page navigation now work as one complete experience.\n\n## What's new\n\n- **Complete Chinese and English UI:** onboarding, sign-in, connection, nodes, membership, store, orders, devices, diagnostics, support, Yue Video, and updates follow your explicit or system language. System mode no longer stores a one-time OS language as a permanent choice.\n- **Localized nodes and subscriptions:** refreshing in English requests English node, group, and information labels; switching back to Chinese refreshes them again. Explicit account preferences follow you across devices.\n- **Deep links reach the intended screen:** ticket, payment-result, and exact-order links open their real destinations. If authentication is required, YueLink resumes the destination after sign-in.\n- **Related tasks are connected:** an order can open usage, devices, or a prefilled support ticket. Usage and device pages link directly to diagnostics and contextual support.\n- **Adaptive order history:** tablets and desktops use a list-detail layout, while phones retain the native navigation stack and system back behavior.\n\n## Fixes and usability\n\n- Fixed the published `tickets`, `payment/result?trade_no=`, and `order/{tradeNo}` link contracts and their return behavior.\n- Bottom navigation, the connection control, node-search clearing, order-number copying, Yue Video posters, and media entries now support keyboard activation, visible focus, screen-reader semantics, and 44 dp touch targets.\n- The updater selects release notes by language. The release pipeline rejects a stable manifest when English notes are missing, contain placeholders, or contain Chinese text.\n- Release preparation and promotion remain guarded by signed manifests, exact source revisions, and bilingual notes. Credentials are referenced by location only and never stored in the repository or release logs.\n",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.7/YueLink-1.3.7-android-arm64-v8a.apk",
+      "sha256": "68a2c18b7e5cb96c2d90f71e2f24257eea0e5766f1ad52a2aab99d5798988c2c"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.7/YueLink-1.3.7-android-armeabi-v7a.apk",
+      "sha256": "4cf57013bbbad1c82d13d7f1f3841e77edeb7c5b741b309683192edb2d7661d1"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.7/YueLink-1.3.7-android-x86_64.apk",
+      "sha256": "01a1df3891f5b3d2c80dd0b11313521d990ac5e5cbe38ce1d94bc51aa78dd34a"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.7/YueLink-1.3.7-android-universal.apk",
+      "sha256": "dbae24237e619c809c152a13182de6e0bbc6ff2a319267203104eb47f5f58c1a"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.7/YueLink-1.3.7-ios.ipa",
+      "sha256": "3c5e58a094681c24ae5c2cffb666ec77bc57a3567d62a0a77921ecaa4e6d9383"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.7/YueLink-1.3.7-macos-universal.dmg",
+      "sha256": "f3be245aa260906ab6e077f3c5dd0d4f524df5ec60265097dbdac73e66b99a10"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.7/YueLink-1.3.7-windows-amd64-setup.exe",
+      "sha256": "dfbbb8cab4185273c2c868eb2bf047636fa56848af03dbb80e608c3eb66fa39e"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.7/YueLink-1.3.7-windows-amd64-portable.zip",
+      "sha256": "57014b5e5e8ae73445753a93ee4d111bfe170406d411f098461aecd4a9363381"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.7/YueLink-1.3.7-linux-amd64.AppImage",
+      "sha256": "94b8392e56d3ba46b572a090847bafa76ce4c8442951c322356b0efebaca2fe9"
+    }
+  },
+  "sig": "ed25519:bVqmEt3CGfUIJA7M/ZOKBP5WnEeYjnJNOMMS1MRZSwAeG2Zhbfkcp9Y2msRV9rtw5wJmljvilyCz5PUHZ+CqBw=="
+}

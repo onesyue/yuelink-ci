@@ -12,9 +12,14 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.json"
 MANIFEST_HEALTH = ROOT / ".github/workflows/manifest-health.yml"
 # 归档的旧签名根，用来证明「签名合法但版本更旧」会被单调地板拒绝。
-# 指向**最近**的那一个而不是最老的：1.3.6 的重放比更早版本的重放现实得多
+# 指向**最近**的那一个而不是最老的：1.3.7 的重放比更早版本的重放现实得多
 # （它就是上一版真正在 CDN 上服役过的根）。更早的那些仍留在仓里。
-OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.3.6.json"
+OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.3.7.json"
+# 1.3.6 是最后一个没有可选 `notesEn` 的真实签名根。它单独覆盖旧 schema
+# 兼容性；不能复用紧邻 replay fixture，因为 1.3.7 起该字段已经存在。
+LEGACY_WITHOUT_OPTIONAL_FIXTURE = (
+    ROOT / "tests/fixtures/update-manifest-v1.3.6.json"
+)
 SPEC = importlib.util.spec_from_file_location(
     "verify_update_manifest", ROOT / "scripts/verify-update-manifest.py"
 )
@@ -135,8 +140,8 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         self.assertIn("signature", str(caught.exception))
 
     def test_optional_key_absence_is_fine(self) -> None:
-        """可选键缺席不算错——上一版真实签名根里没有 notesEn。"""
-        raw = OLDER_FIXTURE.read_bytes()
+        """可选键缺席不算错——1.3.6 真实签名根里没有 notesEn。"""
+        raw = LEGACY_WITHOUT_OPTIONAL_FIXTURE.read_bytes()
         manifest = json.loads(raw)
         self.assertNotIn("notesEn", manifest)
         self.assertEqual(
@@ -257,9 +262,29 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         self.assertIn('if [ "$sidecar" != "$expected" ]; then', workflow)
         self.assertIn("checksum sidecar disagrees with signed root", workflow)
 
+    def assert_manifest_health_uses_bounded_get(self, workflow: str) -> None:
+        self.assertNotIn("--head", workflow)
+        self.assertIn("--range 0-0 --output /dev/null \"$url\"", workflow)
+        self.assertIn("manifest references an unreachable release URL", workflow)
+
     def test_manifest_health_compares_every_signed_checksum_sidecar(self) -> None:
         workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
         self.assert_manifest_health_compares_signed_sidecars(workflow)
+
+    def test_manifest_health_probes_urls_with_bounded_get(self) -> None:
+        workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
+        self.assert_manifest_health_uses_bounded_get(workflow)
+
+    def test_manifest_health_rejects_unbounded_get_mutation(self) -> None:
+        workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
+        mutated = workflow.replace(
+            '--range 0-0 --output /dev/null "$url"',
+            '--output /dev/null "$url"',
+            1,
+        )
+        self.assertNotEqual(mutated, workflow)
+        with self.assertRaises(AssertionError):
+            self.assert_manifest_health_uses_bounded_get(mutated)
 
     def test_manifest_health_rejects_sidecar_comparison_mutation(self) -> None:
         workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")

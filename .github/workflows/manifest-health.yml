@@ -69,10 +69,15 @@ jobs:
             exit 1
           fi
           while IFS= read -r url; do
-            if ! curl --fail --location --silent --show-error --head \
+            # Some production/WAF paths reject HEAD from GitHub-hosted runners
+            # even though the client GET is healthy. Use a bounded GET: R2
+            # returns one byte (206), while the small release page may ignore
+            # Range and return its full ~22 KiB body. This exercises the same
+            # method clients use without downloading installer payloads.
+            if ! curl --fail --location --silent --show-error \
               --proto '=https' --proto-redir '=https' --tlsv1.2 \
               --connect-timeout 5 --max-time 20 --retry 2 --retry-all-errors \
-              "$url" >/dev/null; then
+              --range 0-0 --output /dev/null "$url"; then
               echo "detail=manifest references an unreachable release URL: $url" >> "$GITHUB_OUTPUT"
               exit 1
             fi
