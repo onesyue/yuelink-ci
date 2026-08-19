@@ -96,9 +96,51 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         self.assert_untrusted(duplicated)
 
     def test_unknown_top_level_key_is_rejected(self) -> None:
+        """未登记的顶层字段必须被 **schema 门** 拒掉。
+
+        🚨 2026-08-19 变异测试发现：这条原先只断言 `assert_untrusted`，而往已签名的
+        清单里加任何字段都会让**签名**先对不上——于是把 schema 门整个短路掉
+        （`unknown = set()`），这条测试**照样全绿**。也就是说「未知顶层字段一律拒绝」
+        这个安全属性此前从未被真正测到，它一直是被签名检查顺带挡住的。
+
+        判据因此必须落在异常**文案**上：确认是 schema 门说的话，不是签名门说的。
+        """
         tampered = dict(self.manifest)
         tampered["unreviewedTrustHint"] = True
-        self.assert_untrusted(json.dumps(tampered, ensure_ascii=False).encode())
+        raw = json.dumps(tampered, ensure_ascii=False).encode()
+        with self.assertRaises(verifier.ManifestError) as caught:
+            verifier.verify(raw)
+        self.assertIn("unknown top-level", str(caught.exception))
+
+    def test_allowlisted_optional_key_passes_the_schema_gate(self) -> None:
+        """`notesEn`（英文发版说明）必须能过顶层 schema 这一关。
+
+        判据刻意做成「**哪一道门拦下的**」而不是「有没有报错」：往已签名的清单里加
+        任何字段都会让签名对不上，所以「加了 notesEn 之后 verify() 抛异常」这个观测
+        对「schema 是否接受它」**完全没有信息量**——白名单删掉它，这个观测一模一样。
+        所以断言必须落在异常**文案**上：被签名门拦下 = schema 放行了。
+        """
+        with_optional = dict(self.manifest)
+        with_optional["notesEn"] = "- English release notes\n"
+        raw = json.dumps(with_optional, ensure_ascii=False).encode()
+        with self.assertRaises(verifier.ManifestError) as caught:
+            verifier.verify(raw)
+        self.assertNotIn("unknown top-level", str(caught.exception))
+        self.assertIn("signature", str(caught.exception))
+
+    def test_optional_key_absence_is_fine(self) -> None:
+        """可选键缺席不算错——存量 fixture 里就没有 notesEn。"""
+        self.assertNotIn("notesEn", self.manifest)
+        self.assertEqual(verifier.verify(self.raw)["version"], self.manifest["version"])
+
+    def test_required_key_removal_is_rejected(self) -> None:
+        """放宽成「必需子集 + 白名单」之后，必需键少一个仍然必须拒。"""
+        stripped = dict(self.manifest)
+        del stripped["releaseUrl"]
+        raw = json.dumps(stripped, ensure_ascii=False).encode()
+        with self.assertRaises(verifier.ManifestError) as caught:
+            verifier.verify(raw)
+        self.assertIn("missing required keys", str(caught.exception))
 
     def test_wrong_key_id_is_rejected(self) -> None:
         tampered = dict(self.manifest)

@@ -23,7 +23,7 @@ CURRENT_KEY_ID = "update-manifest-2026-01"
 CURRENT_PUBLIC_KEY_B64 = "cE530BJZ2rpNcn5bNAduC/uaCfgU6JLJoGZdYV7uypE="
 # RFC 8410 SubjectPublicKeyInfo prefix for a 32-byte Ed25519 raw public key.
 ED25519_SPKI_PREFIX = bytes.fromhex("302a300506032b6570032100")
-TOP_LEVEL_KEYS = {
+REQUIRED_TOP_LEVEL_KEYS = {
     "schemaVersion",
     "keyId",
     "version",
@@ -35,6 +35,30 @@ TOP_LEVEL_KEYS = {
     "platforms",
     "sig",
 }
+# 显式登记的可选顶层键。
+#
+# 这里必须是**白名单**而不是「随便多什么都行」：这个检查的价值在于「未知顶层字段
+# 一律拒绝」，那是防止有人往已签名的清单里塞东西。放开成任意扩展等于把这条看门狗
+# 拆了。
+#
+# 但也不能维持成精确集合。2026-08-19 全项目国际化：`notes` 是**单一中文** Markdown
+# 串，被应用内更新弹窗逐字渲染——英文用户每次更新都看到中文发版说明，而这是 R2 独家
+# 分发渠道，任何应用内 i18n 都够不着它。加 `notesEn` 是唯一的修法。
+#
+# 🚨 与之配套的两条硬约束（都是历史踩过的坑）：
+#   1. **不许动 schemaVersion。** 客户端 update_manifest_verifier.dart 对
+#      `schemaVersion != 1` 是硬拒绝的；为了「标记现在有多语言了」而把它 +1，会让
+#      **所有已装机的版本从此停止更新**，而且表现是静默的「已是最新版本」。
+#   2. 客户端那侧对已签名清单用的是**子集**校验（它自己的注释写明了：精确相等会让
+#      每一个存量安装拒收清单）。所以加键对老客户端是安全的；不安全的是这里——
+#      这个精确集合会让公开的 manifest-health 夜巡当场变红。
+#
+# 新增可选键时：加进这个集合、更新 tests/test_update_manifest_verifier.py 的
+# test_unknown_top_level_key_is_rejected，并确认客户端 _candidateTopLevelKeys 也认它。
+OPTIONAL_TOP_LEVEL_KEYS = {
+    "notesEn",
+}
+TOP_LEVEL_KEYS = REQUIRED_TOP_LEVEL_KEYS | OPTIONAL_TOP_LEVEL_KEYS
 MINIMUM_MANIFEST = (
     Path(__file__).resolve().parents[1]
     / "tests/fixtures/update-manifest-v1.json"
@@ -83,8 +107,18 @@ def _verify_signed_manifest(raw: bytes) -> dict[str, Any]:
         raise ManifestError("manifest is not valid JSON") from exc
     if not isinstance(manifest, dict):
         raise ManifestError("manifest must be a JSON object")
-    if set(manifest) != TOP_LEVEL_KEYS:
-        raise ManifestError("manifest top-level schema is not exact")
+    present = set(manifest)
+    missing = REQUIRED_TOP_LEVEL_KEYS - present
+    if missing:
+        raise ManifestError(
+            "manifest top-level schema is missing required keys: "
+            + ", ".join(sorted(missing))
+        )
+    unknown = present - TOP_LEVEL_KEYS
+    if unknown:
+        raise ManifestError(
+            "manifest has unknown top-level keys: " + ", ".join(sorted(unknown))
+        )
     if manifest.get("keyId") != CURRENT_KEY_ID:
         raise ManifestError("manifest signing key is not trusted")
 
