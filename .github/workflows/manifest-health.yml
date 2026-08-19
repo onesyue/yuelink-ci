@@ -37,7 +37,10 @@ jobs:
         run: |
           set -euo pipefail
           tmp="$(mktemp)"
-          trap 'rm -f -- "$tmp"' EXIT
+          release_dom="$(mktemp)"
+          release_log="$(mktemp)"
+          release_profile="$(mktemp -d)"
+          trap 'rm -f -- "$tmp" "$release_dom" "$release_log"; rm -rf -- "$release_profile"' EXIT
           if ! code="$(curl --fail --location --silent --show-error \
             --proto '=https' --proto-redir '=https' --tlsv1.2 \
             --connect-timeout 5 --max-time 30 --retry 2 --retry-all-errors \
@@ -68,31 +71,105 @@ jobs:
             echo "detail=update.json v$version expires in ${days_left}d ($expires) — publish a release or re-stamp the manifest before clients reject it" >> "$GITHUB_OUTPUT"
             exit 1
           fi
-          # The release landing page sits behind a browser-oriented WAF which
-          # rejects GitHub-hosted runner HEAD/Range probes. Exercise the real
-          # browser GET contract with an explicit 1 MiB ceiling so an upstream
-          # routing mistake cannot make the watchdog download unbounded data.
+          # Cloudflare Bot Fight Mode deliberately challenges GitHub-hosted
+          # curl traffic and cannot be bypassed by a custom WAF skip rule.
+          # Exercise the release URL with the Chrome already present on the
+          # official runner image. Wall time, virtual time and output size are
+          # all bounded; no browser is downloaded at runtime.
           release_url="$(jq -er '.releaseUrl' "$tmp")"
-          if ! release_code="$(curl --fail --location --silent --show-error --compressed \
-            --proto '=https' --proto-redir '=https' --tlsv1.2 \
-            --connect-timeout 5 --max-time 20 --retry 2 --retry-all-errors \
-            --max-filesize 1048576 --output /dev/null \
-            --write-out '%{http_code}' \
-            --user-agent 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Safari/537.36 YueLinkManifestHealth/1.0' \
-            --header 'Accept: text/html,application/xhtml+xml' \
-            "$release_url")"; then
-            detail="manifest references an unreachable release URL: $release_url (HTTP ${release_code:-000})"
+          browser="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$browser" ]; then
+            detail="official runner image has no system Chrome/Chromium"
             echo "::error::$detail"
             echo "detail=$detail" >> "$GITHUB_OUTPUT"
             exit 1
           fi
-          [ "$release_code" = "200" ] || {
-            detail="release URL returned unexpected success status: $release_url (HTTP $release_code)"
+          if ! timeout --signal=TERM --kill-after=5s 35s "$browser" \
+            --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --disable-background-networking --disable-component-update \
+            --disable-default-apps --disable-extensions --disable-sync \
+            --metrics-recording-only --no-first-run \
+            --user-data-dir="$release_profile" --virtual-time-budget=10000 \
+            --dump-dom "$release_url" >"$release_dom" 2>"$release_log"; then
+            detail="real-browser release URL probe failed or exceeded 35s: $release_url"
             echo "::error::$detail"
             echo "detail=$detail" >> "$GITHUB_OUTPUT"
+            tail -n 20 "$release_log" || true
             exit 1
-          }
-          echo "release URL probe: $release_url HTTP $release_code"
+          fi
+          python3 - "$release_dom" "$release_url" <<'PY'
+          import sys
+          from html.parser import HTMLParser
+          from pathlib import Path
+
+          dom_path = Path(sys.argv[1])
+          expected = sys.argv[2]
+          raw = dom_path.read_bytes()
+          min_dom_bytes = 1024
+          max_dom_bytes = 1048576
+          if not min_dom_bytes <= len(raw) <= max_dom_bytes:
+              raise SystemExit(
+                  f"release page DOM size outside [{min_dom_bytes}, {max_dom_bytes}]: {len(raw)}"
+              )
+          try:
+              text = raw.decode("utf-8")
+          except UnicodeDecodeError as exc:
+              raise SystemExit("release page DOM is not UTF-8") from exc
+
+          challenge_markers = (
+              "just a moment",
+              "cf-chl",
+              "challenge-platform",
+              "enable javascript and cookies",
+              "attention required! | cloudflare",
+          )
+          lowered = text.lower()
+          found = [marker for marker in challenge_markers if marker in lowered]
+          if found:
+              raise SystemExit(f"Cloudflare challenge DOM returned: {', '.join(found)}")
+
+          class DownloadPageParser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.canonical = None
+                  self.og_url = None
+                  self.description = None
+                  self.in_title = False
+                  self.title_parts = []
+
+              def handle_starttag(self, tag, attrs):
+                  values = dict(attrs)
+                  if tag == "link" and values.get("rel") == "canonical":
+                      self.canonical = values.get("href")
+                  if tag == "meta" and values.get("property") == "og:url":
+                      self.og_url = values.get("content")
+                  if tag == "meta" and values.get("name") == "description":
+                      self.description = values.get("content")
+                  if tag == "title":
+                      self.in_title = True
+
+              def handle_endtag(self, tag):
+                  if tag == "title":
+                      self.in_title = False
+
+              def handle_data(self, data):
+                  if self.in_title:
+                      self.title_parts.append(data)
+
+          parsed = DownloadPageParser()
+          parsed.feed(text)
+          title = "".join(parsed.title_parts).strip()
+          if parsed.canonical != expected or parsed.og_url != expected:
+              raise SystemExit(
+                  "release page final URL identity mismatch: "
+                  f"canonical={parsed.canonical!r} og:url={parsed.og_url!r} expected={expected!r}"
+              )
+          if "Yue.to" not in title or "下载客户端" not in title:
+              raise SystemExit(f"release page title is not the YueLink download page: {title!r}")
+          if not parsed.description or "YueLink" not in parsed.description:
+              raise SystemExit("release page description is missing the YueLink product marker")
+          print(f"release browser probe: {expected} DOM={len(raw)} bytes title={title!r}")
+          PY
           while IFS= read -r url; do
             # R2 honors Range and returns one byte (206), avoiding downloads
             # of the nine large installer payloads.
