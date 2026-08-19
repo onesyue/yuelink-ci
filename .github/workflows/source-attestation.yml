@@ -65,8 +65,10 @@ jobs:
             echo "::error::checkout resolved $actual, expected $SOURCE_SHA"
             exit 1
           }
-          git fetch --no-tags origin \
-            '+refs/heads/master:refs/remotes/origin/master'
+          git show-ref --verify --quiet refs/remotes/origin/master || {
+            echo "::error::full-history checkout did not materialize origin/master"
+            exit 1
+          }
           git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/master || {
             echo "::error::$SOURCE_SHA is not reachable from onesyue/yuelink master"
             exit 1

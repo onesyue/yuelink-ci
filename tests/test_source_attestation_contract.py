@@ -12,6 +12,7 @@ README = ROOT / "README.md"
 WORKFLOW_MARKERS = (
     "run-name: Source attestation ${{ inputs.source_sha }}",
     '[[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]',
+    "git show-ref --verify --quiet refs/remotes/origin/master",
     'git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/master',
     "bash scripts/ci/test_android_release_signing.sh",
     'dart format --output=none --set-exit-if-changed "${changed_files[@]}"',
