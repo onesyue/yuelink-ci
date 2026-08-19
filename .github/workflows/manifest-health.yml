@@ -68,6 +68,28 @@ jobs:
             echo "detail=update.json v$version expires in ${days_left}d ($expires) — publish a release or re-stamp the manifest before clients reject it" >> "$GITHUB_OUTPUT"
             exit 1
           fi
+          while IFS= read -r url; do
+            if ! curl --fail --location --silent --show-error --head \
+              --proto '=https' --proto-redir '=https' --tlsv1.2 \
+              --connect-timeout 5 --max-time 20 --retry 2 --retry-all-errors \
+              "$url" >/dev/null; then
+              echo "detail=manifest references an unreachable release URL: $url" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+          done < <(jq -r '[.releaseUrl, (.platforms[].url)] | .[]' "$tmp")
+          while IFS=$'\t' read -r url expected; do
+            sidecar="$(curl --fail --location --silent --show-error \
+              --proto '=https' --proto-redir '=https' --tlsv1.2 \
+              --connect-timeout 5 --max-time 20 --retry 2 --retry-all-errors \
+              "${url}.sha256")" || {
+                echo "detail=manifest checksum sidecar is unreachable: ${url}.sha256" >> "$GITHUB_OUTPUT"
+                exit 1
+              }
+            if [ "$sidecar" != "$expected" ]; then
+              echo "detail=manifest checksum sidecar disagrees with signed root: ${url}.sha256" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+          done < <(jq -r '.platforms[] | [.url, .sha256] | @tsv' "$tmp")
 
       - name: Open issue on failure
         if: failure()

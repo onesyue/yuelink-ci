@@ -14,7 +14,7 @@ import json
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +59,21 @@ OPTIONAL_TOP_LEVEL_KEYS = {
     "notesEn",
 }
 TOP_LEVEL_KEYS = REQUIRED_TOP_LEVEL_KEYS | OPTIONAL_TOP_LEVEL_KEYS
+EXPECTED_PLATFORM_ARTIFACTS = {
+    "android-arm64-v8a": "android-arm64-v8a.apk",
+    "android-armeabi-v7a": "android-armeabi-v7a.apk",
+    "android-x86_64": "android-x86_64.apk",
+    "android-universal": "android-universal.apk",
+    "ios": "ios.ipa",
+    "macos-universal": "macos-universal.dmg",
+    "windows-amd64-setup": "windows-amd64-setup.exe",
+    "windows-amd64-portable": "windows-amd64-portable.zip",
+    "linux-amd64-appimage": "linux-amd64.AppImage",
+}
+ASSET_HOST = "yuetong.app"
+RELEASE_URL = "https://yue.to/download.html"
+MAX_MANIFEST_LIFETIME = timedelta(days=45)
+MAX_PUBLISH_CLOCK_SKEW = timedelta(hours=6)
 MINIMUM_MANIFEST = (
     Path(__file__).resolve().parents[1]
     / "tests/fixtures/update-manifest-v1.json"
@@ -186,16 +201,74 @@ def _stable_version(raw: Any) -> tuple[int, int, int]:
     return tuple(int(part) for part in parts)  # type: ignore[return-value]
 
 
-def _published_at(raw: Any) -> datetime:
+def _utc_timestamp(raw: Any, field: str) -> datetime:
     if not isinstance(raw, str) or not raw.endswith("Z"):
-        raise ManifestError("publishedAt must be an ISO-8601 UTC timestamp")
+        raise ManifestError(f"{field} must be an ISO-8601 UTC timestamp")
     try:
         parsed = datetime.fromisoformat(raw[:-1] + "+00:00")
     except ValueError as exc:
-        raise ManifestError("publishedAt is not a valid timestamp") from exc
+        raise ManifestError(f"{field} is not a valid timestamp") from exc
     if parsed.tzinfo != timezone.utc:
-        raise ManifestError("publishedAt must use UTC")
+        raise ManifestError(f"{field} must use UTC")
     return parsed
+
+
+def _published_at(raw: Any) -> datetime:
+    return _utc_timestamp(raw, "publishedAt")
+
+
+def _validate_manifest_policy(
+    manifest: dict[str, Any], *, now: datetime | None = None
+) -> None:
+    if manifest.get("schemaVersion") != 1 or isinstance(
+        manifest.get("schemaVersion"), bool
+    ):
+        raise ManifestError("schemaVersion must be integer 1")
+    if manifest.get("channel") != "stable":
+        raise ManifestError("channel must be stable")
+    version = manifest.get("version")
+    _stable_version(version)
+    if manifest.get("releaseUrl") != RELEASE_URL:
+        raise ManifestError("releaseUrl is outside the reviewed release page")
+    if not isinstance(manifest.get("notes"), str) or not manifest["notes"].strip():
+        raise ManifestError("notes must be a non-empty string")
+    if "notesEn" in manifest and (
+        not isinstance(manifest["notesEn"], str) or not manifest["notesEn"].strip()
+    ):
+        raise ManifestError("notesEn must be a non-empty string when present")
+
+    published = _utc_timestamp(manifest.get("publishedAt"), "publishedAt")
+    expires = _utc_timestamp(manifest.get("expiresAt"), "expiresAt")
+    if expires <= published:
+        raise ManifestError("expiresAt must be later than publishedAt")
+    if expires - published > MAX_MANIFEST_LIFETIME:
+        raise ManifestError("manifest lifetime exceeds 45 days")
+    effective_now = now or datetime.now(timezone.utc)
+    if published > effective_now + MAX_PUBLISH_CLOCK_SKEW:
+        raise ManifestError("publishedAt is implausibly far in the future")
+
+    platforms = manifest.get("platforms")
+    if not isinstance(platforms, dict) or set(platforms) != set(
+        EXPECTED_PLATFORM_ARTIFACTS
+    ):
+        raise ManifestError("platforms must contain exactly the reviewed 9 targets")
+    for platform, artifact_name in EXPECTED_PLATFORM_ARTIFACTS.items():
+        asset = platforms[platform]
+        if not isinstance(asset, dict) or set(asset) != {"url", "sha256"}:
+            raise ManifestError(f"platform {platform} must contain only url and sha256")
+        digest = asset.get("sha256")
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(ch not in "0123456789abcdef" for ch in digest)
+        ):
+            raise ManifestError(f"platform {platform} has invalid SHA-256")
+        expected_path = f"/v{version}/YueLink-{version}-{artifact_name}"
+        url = asset.get("url")
+        if not isinstance(url, str):
+            raise ManifestError(f"platform {platform} URL is missing")
+        if url != f"https://{ASSET_HOST}{expected_path}":
+            raise ManifestError(f"platform {platform} URL is outside the reviewed CDN path")
 
 
 def _enforce_minimum(manifest: dict[str, Any], floor: dict[str, Any]) -> None:
@@ -220,6 +293,7 @@ def verify(raw: bytes, *, minimum_raw: bytes | None = None) -> dict[str, Any]:
     """
 
     manifest = _verify_signed_manifest(raw)
+    _validate_manifest_policy(manifest)
     try:
         floor_raw = minimum_raw if minimum_raw is not None else MINIMUM_MANIFEST.read_bytes()
     except OSError as exc:

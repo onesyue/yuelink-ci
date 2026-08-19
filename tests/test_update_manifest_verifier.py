@@ -4,10 +4,13 @@ import base64
 import importlib.util
 import json
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.json"
+MANIFEST_HEALTH = ROOT / ".github/workflows/manifest-health.yml"
 # 归档的旧签名根，用来证明「签名合法但版本更旧」会被单调地板拒绝。
 # 指向**最近**的那一个而不是最老的：1.3.6 的重放比更早版本的重放现实得多
 # （它就是上一版真正在 CDN 上服役过的根）。更早的那些仍留在仓里。
@@ -22,10 +25,13 @@ SPEC.loader.exec_module(verifier)
 
 def _later_than(iso: str) -> str:
     """比给定 ISO 时间晚一天 —— 供「更高版本不能洗白更早发布时间」那条用。"""
-    from datetime import datetime, timedelta, timezone
-
     dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(timezone.utc)
     return (dt + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _days_after(iso: str, days: int) -> str:
+    dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(timezone.utc)
+    return (dt + timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class UpdateManifestVerifierTests(unittest.TestCase):
@@ -160,6 +166,111 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         self.assertEqual(
             verifier.verify(reformatted)["version"], self.manifest["version"]
         )
+
+    def assert_policy_rejects(self, message: str, mutate) -> None:
+        candidate = json.loads(self.raw)
+        mutate(candidate)
+        with self.assertRaisesRegex(verifier.ManifestError, message):
+            verifier._validate_manifest_policy(candidate)
+
+    def test_platform_set_is_exact(self) -> None:
+        self.assert_policy_rejects(
+            "exactly the reviewed 9 targets",
+            lambda candidate: candidate["platforms"].pop("ios"),
+        )
+
+    def test_platform_record_cannot_gain_an_unreviewed_field(self) -> None:
+        self.assert_policy_rejects(
+            "only url and sha256",
+            lambda candidate: candidate["platforms"]["ios"].update(
+                {"installCommand": "curl | sh"}
+            ),
+        )
+
+    def test_asset_url_host_path_and_extension_are_exact(self) -> None:
+        for bad_url in (
+            "http://yuetong.app/v1.3.7/YueLink-1.3.7-ios.ipa",
+            "https://evil.example/v1.3.7/YueLink-1.3.7-ios.ipa",
+            "https://yuetong.app/v1.3.7/YueLink-1.3.7-ios.zip",
+            "https://yuetong.app/v1.3.7/YueLink-1.3.7-ios.ipa?next=evil",
+            " https://yuetong.app/v1.3.7/YueLink-1.3.7-ios.ipa",
+            "https://yuetong.app/v1.3.7/YueLink-1.3.7-ios.ipa\t",
+            "https://yuetong.app:bad/v1.3.7/YueLink-1.3.7-ios.ipa",
+            "https://[yuetong.app/v1.3.7/YueLink-1.3.7-ios.ipa",
+        ):
+            with self.subTest(url=bad_url):
+                self.assert_policy_rejects(
+                    "outside the reviewed CDN path",
+                    lambda candidate, url=bad_url: candidate["platforms"]["ios"].update(
+                        {"url": url}
+                    ),
+                )
+
+    def test_sha256_is_canonical_lowercase_hex(self) -> None:
+        self.assert_policy_rejects(
+            "invalid SHA-256",
+            lambda candidate: candidate["platforms"]["ios"].update(
+                {"sha256": "A" * 64}
+            ),
+        )
+
+    def test_release_url_is_pinned(self) -> None:
+        self.assert_policy_rejects(
+            "reviewed release page",
+            lambda candidate: candidate.update({"releaseUrl": "https://evil.example/"}),
+        )
+
+    def test_manifest_lifetime_is_bounded(self) -> None:
+        self.assert_policy_rejects(
+            "lifetime exceeds 45 days",
+            lambda candidate: candidate.update(
+                {"expiresAt": _days_after(candidate["publishedAt"], 46)}
+            ),
+        )
+
+    def test_future_publication_is_bounded(self) -> None:
+        candidate = json.loads(self.raw)
+        published = datetime.fromisoformat(
+            candidate["publishedAt"].replace("Z", "+00:00")
+        )
+        with self.assertRaisesRegex(verifier.ManifestError, "far in the future"):
+            verifier._validate_manifest_policy(
+                candidate, now=published - timedelta(hours=7)
+            )
+
+    def test_verify_wires_the_signed_payload_into_policy_validation(self) -> None:
+        candidate = json.loads(self.raw)
+        candidate["platforms"]["ios"]["sha256"] = "not-a-digest"
+        floor = json.loads(self.raw)
+        with mock.patch.object(
+            verifier, "_verify_signed_manifest", side_effect=[candidate, floor]
+        ):
+            with self.assertRaisesRegex(verifier.ManifestError, "invalid SHA-256"):
+                verifier.verify(b"candidate", minimum_raw=b"floor")
+
+    def assert_manifest_health_compares_signed_sidecars(self, workflow: str) -> None:
+        self.assertIn(
+            "done < <(jq -r '.platforms[] | [.url, .sha256] | @tsv' \"$tmp\")",
+            workflow,
+        )
+        self.assertIn('"${url}.sha256"', workflow)
+        self.assertIn('if [ "$sidecar" != "$expected" ]; then', workflow)
+        self.assertIn("checksum sidecar disagrees with signed root", workflow)
+
+    def test_manifest_health_compares_every_signed_checksum_sidecar(self) -> None:
+        workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
+        self.assert_manifest_health_compares_signed_sidecars(workflow)
+
+    def test_manifest_health_rejects_sidecar_comparison_mutation(self) -> None:
+        workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
+        mutated = workflow.replace(
+            'if [ "$sidecar" != "$expected" ]; then',
+            'if false; then',
+            1,
+        )
+        self.assertNotEqual(mutated, workflow)
+        with self.assertRaises(AssertionError):
+            self.assert_manifest_health_compares_signed_sidecars(mutated)
 
 
 if __name__ == "__main__":
