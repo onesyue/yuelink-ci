@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.6",
+  "channel": "stable",
+  "publishedAt": "2026-08-18T12:59:45Z",
+  "expiresAt": "2026-09-22T12:59:45Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "Released 2026-08-18. 切换网络更稳，桌面能刷新了。\n\n## 修复\n\n### 切换 Wi-Fi / 蜂窝后的自愈可能整条失效（Android）\n\n隧道停了再起、或者中途换过网之后，一个**已经消失的**网络句柄可能被留在候选集合里\n并被推举成\"当前主网络\"。之后真正的主网络再发生变化（换 Wi-Fi 热点、DHCP 换了 DNS、\nIPv6 前缀续期）时，那套\"关掉旧连接 + 清 DNS 缓存 + 重新握手\"的自愈动作会被静默跳过\n—— 表现就是切完网络之后一直卡着，而不是自己恢复。国内 ROM 上更容易中：系统的联网\n探测目标本身被墙，\"已验证\"的网络常年为空，于是恰好一直用着那个含有死句柄的集合。\n\n进程常驻时这个集合还会一直变大。本版在停隧道、停网络监听、重新登记监听三处都把它\n清干净。\n\n### 桌面端（Windows / Linux / 接鼠标的 Mac）刷不了\n\n下拉刷新在鼠标上**从来不会触发**——滚轮走的是另一条代码路径，产生不了\"往下拽过头\"\n这个动作。上一版把商店、订单记录、公告、服务状态四个页面顶栏的刷新按钮删掉了，理由\n是\"下拉已经能刷\"，在桌面上等于把刷新能力整个删掉了；服务状态页甚至还留着一句\"下拉\n刷新重试\"——一句桌面用户执行不了的指令。付款回来看订单状态恰恰最需要刷新。\n\n本版起，凡是支持下拉刷新的页面，桌面上一定有一个能点的刷新入口：有顶栏的补在顶栏；\n首页 / 节点 / 会员 / 我的这四个没有顶栏的，并进它们本来就有的位置（节点页右上角那排\n操作图标、「我的」账号卡右上角的 ⋯ 菜单），实在没有落点的就用一个贴在右下角的小圆钮\n——**不占用任何版面高度**。服务状态页那两句文案也改了。\n\n### 佣金提现：四处会让你白填一次表单的地方\n\n- **提现记录还没加载出来 / 加载失败时，表单照样给你填**。\"同时只能有一笔待审核\"这道\n  门因此形同虚设：填完提交，被服务端拒。现在记录没到位就不给表单，取不到就明说\n  \"暂时无法确认你是否已有待审核的申请\"。\n- **下拉刷新和提交成功后，整页会闪一下骨架屏**。现在刷新期间保住已有内容。\n- **下拉刷新的转圈在数据回来之前就收起了**（它其实没等任何东西），现在会等。\n- **管理员在你停留期间下线了某种提现方式时**，客户端仍会把那个已失效的方式发出去并\n  被拒。现在会重新对照一次服务端的可用列表。\n\n### 支付结果页只有一串订单号\n\n不显示套餐名，也不显示金额——没有任何东西能让你确认\"这就是我刚才选的那个\"。本版在\n标题下补上「套餐名 · 周期 · 金额」。用了优惠券时不显示标价（标价不等于实付，写出来\n就是错的），改说「金额以支付页为准」；万一套餐信息一时取不到，也会明说是信息缺失、\n不影响这笔订单，而不是留一片空白让你猜页面是不是坏了。\n\n## 新增\n\n### 「我的」页多了一行「联系客服」\n\n在此之前，工单入口只藏在 我的 → 连接修复 → 智能诊断 → 页尾，四层深，而且要先跑一次\nAI 诊断才出现直达按钮。工单不是只为连接故障存在的——提现被驳回想申诉的人，不该先去\n点「连接修复」。\n",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.6/YueLink-1.3.6-android-arm64-v8a.apk",
+      "sha256": "0f5c685d1c5f350dbd1e2f2602ff918884fc15a38d286b73f4f433c64b1773f1"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.6/YueLink-1.3.6-android-armeabi-v7a.apk",
+      "sha256": "ae44955e736e8b11d6c20d9f75d7f1754e1767eb40d8fbe4a950816bf80302b3"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.6/YueLink-1.3.6-android-x86_64.apk",
+      "sha256": "fa10db4cc83fe51b6631390da2d051f88e9e77aa006a57dd48717461730ea906"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.6/YueLink-1.3.6-android-universal.apk",
+      "sha256": "3e2fc5ce0a2e58e02e5068d76f79493c3620b1961fe441389e33ca22216432aa"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.6/YueLink-1.3.6-ios.ipa",
+      "sha256": "3844a41fbf0e5085e9dd9bd7a08f54f09fd146d8c08814a3e949c3a5ce1ba5d7"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.6/YueLink-1.3.6-macos-universal.dmg",
+      "sha256": "afe3137b31519c4b3a35260ba422344da802b7d4726967794cd5384033b35ba5"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.6/YueLink-1.3.6-windows-amd64-setup.exe",
+      "sha256": "a7170f4f76f0ebab4b669b820a84d08e1bd750c56dfdb94019bff0044cc6296d"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.6/YueLink-1.3.6-windows-amd64-portable.zip",
+      "sha256": "f31a49c9bd3019b23434eb15e6318f36951aa1face338e50b03e4981753dbdb1"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.6/YueLink-1.3.6-linux-amd64.AppImage",
+      "sha256": "375b6f5b5055b98e434fcaad9bc0fd4237c21d47d7ac19874a1f48aa6f76dee0"
+    }
+  },
+  "sig": "ed25519:eeUkl5Ta8g5EMZU/qeIHvuWsqzZrEGUa7+qNzL8Uim7kNS/oU84MLsdRhRBr1jdrMtZtb5i5dHBb8ElCU4dVAA=="
+}

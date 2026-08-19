@@ -9,9 +9,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.json"
 # 归档的旧签名根，用来证明「签名合法但版本更旧」会被单调地板拒绝。
-# 指向**最近**的那一个而不是最老的：1.3.5 的重放比更早版本的重放现实得多
+# 指向**最近**的那一个而不是最老的：1.3.6 的重放比更早版本的重放现实得多
 # （它就是上一版真正在 CDN 上服役过的根）。更早的那些仍留在仓里。
-OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.3.5.json"
+OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.3.6.json"
 SPEC = importlib.util.spec_from_file_location(
     "verify_update_manifest", ROOT / "scripts/verify-update-manifest.py"
 )
@@ -129,9 +129,13 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         self.assertIn("signature", str(caught.exception))
 
     def test_optional_key_absence_is_fine(self) -> None:
-        """可选键缺席不算错——存量 fixture 里就没有 notesEn。"""
-        self.assertNotIn("notesEn", self.manifest)
-        self.assertEqual(verifier.verify(self.raw)["version"], self.manifest["version"])
+        """可选键缺席不算错——上一版真实签名根里没有 notesEn。"""
+        raw = OLDER_FIXTURE.read_bytes()
+        manifest = json.loads(raw)
+        self.assertNotIn("notesEn", manifest)
+        self.assertEqual(
+            verifier._verify_signed_manifest(raw)["version"], manifest["version"]
+        )
 
     def test_required_key_removal_is_rejected(self) -> None:
         """放宽成「必需子集 + 白名单」之后，必需键少一个仍然必须拒。"""
