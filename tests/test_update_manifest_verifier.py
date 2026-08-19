@@ -263,8 +263,14 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         self.assertIn("checksum sidecar disagrees with signed root", workflow)
 
     def assert_manifest_health_uses_bounded_get(self, workflow: str) -> None:
-        self.assertNotIn("--head", workflow)
-        self.assertIn("--range 0-0 --output /dev/null \"$url\"", workflow)
+        self.assertNotRegex(workflow, r"(?m)^\s*--head(?:\s|$)")
+        self.assertIn("release_url=\"$(jq -er '.releaseUrl' \"$tmp\")\"", workflow)
+        self.assertIn("--max-filesize 1048576 --output /dev/null", workflow)
+        self.assertIn("YueLinkManifestHealth/1.0", workflow)
+        self.assertIn("release URL probe: $release_url HTTP $release_code", workflow)
+        self.assertIn('done < <(jq -r \'.platforms[].url\' "$tmp")', workflow)
+        self.assertIn("--range 0-0 --output /dev/null --write-out '%{http_code}' \"$url\"", workflow)
+        self.assertIn("release asset probe: $url HTTP $asset_code", workflow)
         self.assertIn("manifest references an unreachable release URL", workflow)
 
     def test_manifest_health_compares_every_signed_checksum_sidecar(self) -> None:
@@ -278,13 +284,25 @@ class UpdateManifestVerifierTests(unittest.TestCase):
     def test_manifest_health_rejects_unbounded_get_mutation(self) -> None:
         workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
         mutated = workflow.replace(
-            '--range 0-0 --output /dev/null "$url"',
-            '--output /dev/null "$url"',
+            '--range 0-0 --output /dev/null --write-out \'%{http_code}\' "$url"',
+            '--output /dev/null --write-out \'%{http_code}\' "$url"',
             1,
         )
         self.assertNotEqual(mutated, workflow)
         with self.assertRaises(AssertionError):
             self.assert_manifest_health_uses_bounded_get(mutated)
+
+    def test_manifest_health_rejects_release_page_probe_mutations(self) -> None:
+        workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
+        for required in (
+            "--max-filesize 1048576 ",
+            "YueLinkManifestHealth/1.0",
+        ):
+            with self.subTest(required=required):
+                mutated = workflow.replace(required, "", 1)
+                self.assertNotEqual(mutated, workflow)
+                with self.assertRaises(AssertionError):
+                    self.assert_manifest_health_uses_bounded_get(mutated)
 
     def test_manifest_health_rejects_sidecar_comparison_mutation(self) -> None:
         workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")

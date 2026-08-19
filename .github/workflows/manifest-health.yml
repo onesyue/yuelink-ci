@@ -68,20 +68,54 @@ jobs:
             echo "detail=update.json v$version expires in ${days_left}d ($expires) — publish a release or re-stamp the manifest before clients reject it" >> "$GITHUB_OUTPUT"
             exit 1
           fi
+          # The release landing page sits behind a browser-oriented WAF which
+          # rejects GitHub-hosted runner HEAD/Range probes. Exercise the real
+          # browser GET contract with an explicit 1 MiB ceiling so an upstream
+          # routing mistake cannot make the watchdog download unbounded data.
+          release_url="$(jq -er '.releaseUrl' "$tmp")"
+          if ! release_code="$(curl --fail --location --silent --show-error --compressed \
+            --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --connect-timeout 5 --max-time 20 --retry 2 --retry-all-errors \
+            --max-filesize 1048576 --output /dev/null \
+            --write-out '%{http_code}' \
+            --user-agent 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0 Safari/537.36 YueLinkManifestHealth/1.0' \
+            --header 'Accept: text/html,application/xhtml+xml' \
+            "$release_url")"; then
+            detail="manifest references an unreachable release URL: $release_url (HTTP ${release_code:-000})"
+            echo "::error::$detail"
+            echo "detail=$detail" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          [ "$release_code" = "200" ] || {
+            detail="release URL returned unexpected success status: $release_url (HTTP $release_code)"
+            echo "::error::$detail"
+            echo "detail=$detail" >> "$GITHUB_OUTPUT"
+            exit 1
+          }
+          echo "release URL probe: $release_url HTTP $release_code"
           while IFS= read -r url; do
-            # Some production/WAF paths reject HEAD from GitHub-hosted runners
-            # even though the client GET is healthy. Use a bounded GET: R2
-            # returns one byte (206), while the small release page may ignore
-            # Range and return its full ~22 KiB body. This exercises the same
-            # method clients use without downloading installer payloads.
-            if ! curl --fail --location --silent --show-error \
+            # R2 honors Range and returns one byte (206), avoiding downloads
+            # of the nine large installer payloads.
+            if ! asset_code="$(curl --fail --location --silent --show-error \
               --proto '=https' --proto-redir '=https' --tlsv1.2 \
               --connect-timeout 5 --max-time 20 --retry 2 --retry-all-errors \
-              --range 0-0 --output /dev/null "$url"; then
-              echo "detail=manifest references an unreachable release URL: $url" >> "$GITHUB_OUTPUT"
+              --range 0-0 --output /dev/null --write-out '%{http_code}' "$url")"; then
+              detail="manifest references an unreachable release URL: $url (HTTP ${asset_code:-000})"
+              echo "::error::$detail"
+              echo "detail=$detail" >> "$GITHUB_OUTPUT"
               exit 1
             fi
-          done < <(jq -r '[.releaseUrl, (.platforms[].url)] | .[]' "$tmp")
+            case "$asset_code" in
+              200|206) ;;
+              *)
+                detail="release asset returned unexpected success status: $url (HTTP $asset_code)"
+                echo "::error::$detail"
+                echo "detail=$detail" >> "$GITHUB_OUTPUT"
+                exit 1
+                ;;
+            esac
+            echo "release asset probe: $url HTTP $asset_code"
+          done < <(jq -r '.platforms[].url' "$tmp")
           while IFS=$'\t' read -r url expected; do
             sidecar="$(curl --fail --location --silent --show-error \
               --proto '=https' --proto-redir '=https' --tlsv1.2 \
