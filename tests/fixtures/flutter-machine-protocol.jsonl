@@ -1,0 +1,5 @@
+{"test":{"id":1,"name":"first"},"type":"testStart","time":1}
+[{"event":"test.startedProcess","params":{"vmServiceUri":"http://127.0.0.1/"}}]
+{"testID":1,"result":"success","type":"testDone","time":2}
+{"test":{"id":2,"name":"second"},"type":"testStart","time":3}
+{"success":true,"type":"done","time":4}

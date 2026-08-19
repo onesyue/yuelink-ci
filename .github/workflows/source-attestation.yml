@@ -163,31 +163,21 @@ jobs:
       - name: Manifest schema self-check
         run: dart run tool/automation/manifest_guard.dart --self-check
 
+      - name: Checkout exact attestation parser
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.sha }}
+          path: .source-attestation-tools
+          persist-credentials: false
+
       - name: Run complete Flutter suite and enforce reviewed floor
         shell: bash
         run: |
           set -euo pipefail
           flutter test --coverage --machine | tee /tmp/flutter-tests.jsonl
-          count="$(python3 - <<'PY'
-          import json
-
-          count = 0
-          with open('/tmp/flutter-tests.jsonl', encoding='utf-8') as stream:
-              for line in stream:
-                  try:
-                      event = json.loads(line)
-                  except json.JSONDecodeError:
-                      continue
-                  if event.get('type') == 'testStart':
-                      count += 1
-          print(count)
-          PY
-          )"
-          echo "Flutter tests observed: $count"
-          [ "$count" -ge 2044 ] || {
-            echo "::error::reviewed Flutter test floor is 2044; observed $count"
-            exit 1
-          }
+          python3 .source-attestation-tools/scripts/count-flutter-machine-tests.py \
+            /tmp/flutter-tests.jsonl --minimum 2044
 
   gitleaks:
     name: Gitleaks full history

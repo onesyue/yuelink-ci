@@ -24,8 +24,11 @@ WORKFLOW_MARKERS = (
     "test -f windows/third_party/wintun/wintun.sha256",
     'dart run tool/automation/release_guard.dart --tag "$RELEASE_TAG"',
     "dart run tool/automation/manifest_guard.dart --self-check",
+    "Checkout exact attestation parser",
+    "ref: ${{ github.sha }}",
     "flutter test --coverage --machine",
-    '[ "$count" -ge 2044 ]',
+    ".source-attestation-tools/scripts/count-flutter-machine-tests.py",
+    "/tmp/flutter-tests.jsonl --minimum 2044",
     "gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e",
     "module: [core, service]",
     'bash scripts/ci/govulncheck_targets.sh "${{ matrix.module }}"',
@@ -80,7 +83,10 @@ def contract_issues(workflow: str, release: str, readme: str) -> list[str]:
         if marker not in readme:
             issues.append(f"policy missing {marker!r}")
 
-    if workflow.count("repository: onesyue/yuelink") != 5:
+    source_checkouts = re.findall(
+        r"(?m)^\s*repository:\s*onesyue/yuelink\s*$", workflow
+    )
+    if len(source_checkouts) != 5:
         issues.append("every one of the five source jobs must checkout yuelink")
     if workflow.count("fetch-depth: 0") != 5:
         issues.append("every source checkout must use full history")
