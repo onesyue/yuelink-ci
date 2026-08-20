@@ -1,50 +1,50 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.8",
+  "version": "1.3.9",
   "channel": "stable",
-  "publishedAt": "2026-08-19T20:41:45Z",
-  "expiresAt": "2026-09-23T20:41:45Z",
+  "publishedAt": "2026-08-20T09:58:13Z",
+  "expiresAt": "2026-09-24T09:58:13Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "2026-08-19 发布。核心快速停启现在会完整释放控制端口，连接恢复不再被上一轮残留生命周期拖住。\n\n## 修复与体验\n\n- **立即重启更可靠**：停止核心后会等控制服务与监听完整退出，再启动新一轮；快速重连、切换网络或自动恢复时，不再因旧端口仍被占用而启动失败。\n- **多平台控制通道一起收敛**：普通 HTTP、TLS、Unix socket 与 Windows named pipe 都遵循同一套关闭顺序，避免只释放部分监听后留下后台任务。\n\n## 安全与可靠性\n\n- 发布安全扫描只放行经过精确文件、规则与内容三重匹配的已知测试夹具，其他位置或相似内容仍会被拦截。\n- 构建依赖固定到审核过的不可变版本，并把发布与包写权限限制在实际需要的任务内。\n",
-  "notesEn": "Released 2026-08-19. Rapid core restarts now release every controller endpoint before the next lifecycle begins.\n\n## Fixes and usability\n\n- **More reliable immediate restarts:** stopping the core now waits for controller services and listeners to exit before starting the next generation. Fast reconnects, network changes, and automatic recovery no longer fail because an old endpoint still owns the port.\n- **One shutdown contract across platforms:** HTTP, TLS, Unix sockets, and Windows named pipes now follow the same close-and-wait sequence, preventing partial shutdowns from leaving background tasks behind.\n\n## Security and reliability\n\n- Secret scanning only accepts known test fixtures when file, rule, and content all match exactly; copies or similar material elsewhere remain blocked.\n- Build dependencies use reviewed immutable revisions, and release or package write access is limited to the jobs that require it.\n",
+  "notes": "2026-08-20 发布。跨网络卡顿治理改为端到端自适应，并补齐恢复链路的可观测性。\n\n## 修复与体验\n\n- **Hysteria 2 自适应拥塞控制**：订阅与客户端不再提供容易失真的固定带宽提示，节点按真实链路的丢包、时延和可用吞吐动态调整，避免高估带宽后持续丢包与抖动。\n- **网络问题可以准确归因**：延迟探测会携带当前网络类型，API 救援与热重载会记录明确重启原因，能够区分 Wi-Fi、蜂窝、路由与核心恢复问题。\n\n## 兼容性\n\n- 现有订阅与旧版客户端继续可用；即使旧客户端缓存过固定带宽提示，服务端也会坚持自适应策略。\n- Reality、Hysteria 2 与现有节点选择逻辑保持不变，本次没有更改协议或线路含义。\n",
+  "notesEn": "Released 2026-08-20. Cross-network stutter mitigation is now adaptive end to end, with clearer recovery telemetry.\n\n## Fixes and usability\n\n- **Adaptive Hysteria 2 congestion control:** subscriptions and clients no longer supply fragile fixed-bandwidth hints. Nodes adapt to actual loss, latency, and available throughput, avoiding sustained packet loss and jitter caused by overestimation.\n- **Actionable network diagnostics:** latency probes include the current network type, while API rescue and hot reload events record explicit restart reasons. Wi-Fi, cellular, routing, and core-recovery faults can now be distinguished.\n\n## Compatibility\n\n- Existing subscriptions and older clients remain supported. The server keeps its adaptive policy even when an older client has cached fixed-bandwidth hints.\n- Reality, Hysteria 2, and the existing node-selection behavior are unchanged; this release does not redefine protocols or routes.\n",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.8/YueLink-1.3.8-android-arm64-v8a.apk",
-      "sha256": "fc10bf5cb8fde3743c75188b462d3adad604e2129ccc9e89dc833e0c66d0ce0e"
+      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-android-arm64-v8a.apk",
+      "sha256": "cba23797fb60a4ebda1d6fe8e1f9a5dafed74843cbaccfea2b8127fcce2013ac"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.8/YueLink-1.3.8-android-armeabi-v7a.apk",
-      "sha256": "a69a750413c0fedae94818d7aa74d34c7bbef440575b4c34d4ffd6a38239a3be"
+      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-android-armeabi-v7a.apk",
+      "sha256": "fedd87a28fad5876a9c07e3c8a775bf89165c3616318fb492f837e1f76bfb62b"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.8/YueLink-1.3.8-android-x86_64.apk",
-      "sha256": "00fcd97c0f06852d450f9028b85018dd79d82972512eb1cb0ff25c2fafca34fe"
+      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-android-x86_64.apk",
+      "sha256": "96386a55b60e76f2fc95faff9a27b5b135eb159f79de9975df1950c09ddbc2b2"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.8/YueLink-1.3.8-android-universal.apk",
-      "sha256": "f4a2b65857346afc961bb4c975e63cd527600f69d8708c9f44a2876e52cb10e2"
+      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-android-universal.apk",
+      "sha256": "176011d3a562cd3265af20a3e71e07de4c1c89480e2de193461837c69f240617"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.8/YueLink-1.3.8-ios.ipa",
-      "sha256": "a503fe894d0eb0d75cfdd9d7efd66b32a648d6283ffc2509dc48e62ce65401f6"
+      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-ios.ipa",
+      "sha256": "3a92be6fe9123ec402c433d699e72d94365afb4a4b14478ae5be2fffe78671c4"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.8/YueLink-1.3.8-macos-universal.dmg",
-      "sha256": "36fdfa9ffe48d653ace2e403792a2c89d40b79aff2d73fca827c121309263250"
+      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-macos-universal.dmg",
+      "sha256": "a2f1abb94e80eaf26d96e6699df273b48a1ac8e85562820c74b8242ccc4d0900"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.8/YueLink-1.3.8-windows-amd64-setup.exe",
-      "sha256": "86854d1d153a2a013cb8881cf3a53750eda4d561a00607a4e32d5ab3d0527a65"
+      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-windows-amd64-setup.exe",
+      "sha256": "bf74bbcd13ccabe6703ec8b1fd8e6f5a2907c7b277155b82a4757c5dcade5b26"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.8/YueLink-1.3.8-windows-amd64-portable.zip",
-      "sha256": "9c675792880f0d12ba525083d87b3f7a11ec564064f70ac3122e3e2a5c2de009"
+      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-windows-amd64-portable.zip",
+      "sha256": "cca748aed168d5e9f6d27df3f2c48efffd57d90b38e2ec78b82609e708cd1216"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.8/YueLink-1.3.8-linux-amd64.AppImage",
-      "sha256": "94f02c1df38c38630ca789a8eb745d54a049d120e219542e6a664d8a274bbc6d"
+      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-linux-amd64.AppImage",
+      "sha256": "4976b58f375f7d74733fe8ea012e9b76077cb46a5a383d66b2e942fed29270e3"
     }
   },
-  "sig": "ed25519:uQLGK3BwV3Y5i+6X/ku7gO5MNsIlLR/RvuOtHslpo+kNZvtOaojeuqK3LeQOShz0ps8OpSMOaHMX2WP/tXuaCw=="
+  "sig": "ed25519:HZnJqkB7Eilu8KKHzTKc+wEZp45XH0WDCXDO44r/cASzC3yJjsNELQAPjODgL6jXJXeeW6zHniawz4gsQFptBw=="
 }

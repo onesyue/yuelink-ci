@@ -12,9 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.json"
 MANIFEST_HEALTH = ROOT / ".github/workflows/manifest-health.yml"
 # 归档的旧签名根，用来证明「签名合法但版本更旧」会被单调地板拒绝。
-# 指向**最近**的那一个而不是最老的：1.3.7 的重放比更早版本的重放现实得多
+# 指向**最近**的那一个而不是最老的：1.3.8 的重放比更早版本的重放现实得多
 # （它就是上一版真正在 CDN 上服役过的根）。更早的那些仍留在仓里。
-OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.3.7.json"
+OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.3.8.json"
 # 1.3.6 是最后一个没有可选 `notesEn` 的真实签名根。它单独覆盖旧 schema
 # 兼容性；不能复用紧邻 replay fixture，因为 1.3.7 起该字段已经存在。
 LEGACY_WITHOUT_OPTIONAL_FIXTURE = (
