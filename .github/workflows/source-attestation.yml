@@ -83,7 +83,7 @@ jobs:
           printf 'source_sha=%s\nrelease_tag=v%s\n' "$SOURCE_SHA" "$version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Flutter
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@1acbd7c34b84d140f2b7ff5df8f6c4c2220c1561 # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@bc63a5598b5120c2dc9c46f01ad749c88715cd1e # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
@@ -269,7 +269,7 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Set up Flutter
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@1acbd7c34b84d140f2b7ff5df8f6c4c2220c1561 # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@bc63a5598b5120c2dc9c46f01ad749c88715cd1e # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
@@ -295,7 +295,7 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Set up Flutter
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@1acbd7c34b84d140f2b7ff5df8f6c4c2220c1561 # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@bc63a5598b5120c2dc9c46f01ad749c88715cd1e # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
