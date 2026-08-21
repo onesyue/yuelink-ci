@@ -55,6 +55,32 @@ def test_archive_member_validation_rejects_traversal_and_absolute_paths() -> Non
         assert installer._safe_member(safe) is True
 
 
+def test_tar_links_allow_only_targets_resolving_inside_archive_root() -> None:
+    installer = _installer_module()
+    # Present in Flutter 3.44.9's official Linux archive: the target resolves
+    # to flutter/engine/src/flutter/lib/web_ui/test/webparagraph/... .
+    assert installer._safe_tar_link(
+        "flutter/engine/src/flutter/lib/web_ui/test/ui/paragraph_performance_test.dart",
+        "../webparagraph/paragraph_performance_test.dart",
+        hard_link=False,
+    )
+    assert installer._safe_tar_link(
+        "flutter/bin/cache/example", "flutter/bin/flutter", hard_link=True
+    )
+
+    for link_name in (
+        "../../../../../../../../etc/passwd",
+        "/etc/passwd",
+        "C:\\Windows\\system.ini",
+    ):
+        assert not installer._safe_tar_link(
+            "flutter/bin/cache/link", link_name, hard_link=False
+        )
+    assert not installer._safe_tar_link(
+        "flutter/bin/cache/link", "../escape", hard_link=True
+    )
+
+
 def test_cache_receipt_binds_platform_arch_version_and_archive_hash(tmp_path: Path) -> None:
     installer = _installer_module()
     expected = installer.receipt("3.44.9", "Linux", "X64", "a" * 64)

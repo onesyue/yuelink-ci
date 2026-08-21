@@ -52,6 +52,39 @@ def _safe_member(name: str) -> bool:
     )
 
 
+def _safe_tar_link(member_name: str, link_name: str, *, hard_link: bool) -> bool:
+    """Accept relative links only when their lexical target stays in the archive.
+
+    Symlink targets are relative to the directory containing the link. Tar hard
+    link targets, in contrast, are archive-root-relative. Flutter's official
+    Linux archive contains legitimate ``../`` symlinks, so rejecting every
+    parent component is too strict; what matters is whether resolving those
+    components would escape the verified extraction root.
+    """
+
+    normalized_link = link_name.replace("\\", "/")
+    link_path = PurePosixPath(normalized_link)
+    if (
+        not normalized_link
+        or link_path.is_absolute()
+        or re.match(r"^[A-Za-z]:/", normalized_link) is not None
+    ):
+        return False
+
+    base = PurePosixPath() if hard_link else PurePosixPath(member_name).parent
+    resolved: list[str] = []
+    for part in (base / link_path).parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if not resolved:
+                return False
+            resolved.pop()
+            continue
+        resolved.append(part)
+    return bool(resolved)
+
+
 def inspect_archive(archive: Path) -> None:
     if archive.suffix == ".zip":
         with ZipFile(archive) as bundle:
@@ -67,8 +100,9 @@ def inspect_archive(archive: Path) -> None:
             if item.ischr() or item.isblk() or item.isfifo():
                 fail(f"special tar member {item.name!r}")
             if item.issym() or item.islnk():
-                target = PurePosixPath(item.name).parent / item.linkname
-                if not _safe_member(str(target)):
+                if not _safe_tar_link(
+                    item.name, item.linkname, hard_link=item.islnk()
+                ):
                     fail(f"unsafe tar link {item.name!r} -> {item.linkname!r}")
 
 
