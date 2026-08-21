@@ -1,50 +1,50 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.9",
+  "version": "1.3.11",
   "channel": "stable",
-  "publishedAt": "2026-08-20T09:58:13Z",
-  "expiresAt": "2026-09-24T09:58:13Z",
+  "publishedAt": "2026-08-20T20:10:39Z",
+  "expiresAt": "2026-09-24T20:10:39Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "2026-08-20 发布。跨网络卡顿治理改为端到端自适应，并补齐恢复链路的可观测性。\n\n## 修复与体验\n\n- **Hysteria 2 自适应拥塞控制**：订阅与客户端不再提供容易失真的固定带宽提示，节点按真实链路的丢包、时延和可用吞吐动态调整，避免高估带宽后持续丢包与抖动。\n- **网络问题可以准确归因**：延迟探测会携带当前网络类型，API 救援与热重载会记录明确重启原因，能够区分 Wi-Fi、蜂窝、路由与核心恢复问题。\n\n## 兼容性\n\n- 现有订阅与旧版客户端继续可用；即使旧客户端缓存过固定带宽提示，服务端也会坚持自适应策略。\n- Reality、Hysteria 2 与现有节点选择逻辑保持不变，本次没有更改协议或线路含义。\n",
-  "notesEn": "Released 2026-08-20. Cross-network stutter mitigation is now adaptive end to end, with clearer recovery telemetry.\n\n## Fixes and usability\n\n- **Adaptive Hysteria 2 congestion control:** subscriptions and clients no longer supply fragile fixed-bandwidth hints. Nodes adapt to actual loss, latency, and available throughput, avoiding sustained packet loss and jitter caused by overestimation.\n- **Actionable network diagnostics:** latency probes include the current network type, while API rescue and hot reload events record explicit restart reasons. Wi-Fi, cellular, routing, and core-recovery faults can now be distinguished.\n\n## Compatibility\n\n- Existing subscriptions and older clients remain supported. The server keeps its adaptive policy even when an older client has cached fixed-bandwidth hints.\n- Reality, Hysteria 2, and the existing node-selection behavior are unchanged; this release does not redefine protocols or routes.\n",
+  "notes": "2026-08-21 发布。客服入口与全 AI 工单策略统一，不再把小悦 AI 误标成人工支持。\n\n## 修复与体验\n\n- **诊断页统一为 AI 客服**：外部客服入口、失败提示和下一步说明都明确指向小悦 AI，不再承诺不存在的人工接管。\n- **工单继续自动闭环**：原生工单由小悦 AI 在同一工单追问、核查和回复；退款与提现继续使用面板独立自助页面。\n\n## 兼容性\n\n- v1.3.9 的 Hysteria 2 自适应拥塞控制、网络类型遥测和热重载归因保持不变。\n- 现有订阅、账号和节点选择逻辑不变，本次不修改协议或线路含义。\n",
+  "notesEn": "Released 2026-08-21. Support entry points now match the AI-only ticket policy and no longer mislabel Xiaoyue AI as human support.\n\n## Fixes and usability\n\n- **Consistent AI support:** the diagnostic page's external support action, error message, and next-step guidance now point explicitly to Xiaoyue AI without promising a human handoff.\n- **Automated ticket closure:** Xiaoyue AI continues to ask follow-up questions, verify available facts, and reply in the same ticket. Refunds and withdrawals remain available through their dedicated self-service pages.\n\n## Compatibility\n\n- The adaptive Hysteria 2 congestion control, network-type telemetry, and hot-reload attribution introduced in v1.3.9 remain unchanged.\n- Existing subscriptions, accounts, and node-selection behavior are unchanged; this release does not redefine protocols or routes.\n",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-android-arm64-v8a.apk",
-      "sha256": "cba23797fb60a4ebda1d6fe8e1f9a5dafed74843cbaccfea2b8127fcce2013ac"
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-android-arm64-v8a.apk",
+      "sha256": "13d66205d8e96ea92908939d7a4c0bf2410b9ba2cc92cbbf7c74d7ff895768ae"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-android-armeabi-v7a.apk",
-      "sha256": "fedd87a28fad5876a9c07e3c8a775bf89165c3616318fb492f837e1f76bfb62b"
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-android-armeabi-v7a.apk",
+      "sha256": "49586b24f6dbd2c3c9779fdf0b80e250287b76439b5e1ba768943dfe4e5cdd9f"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-android-x86_64.apk",
-      "sha256": "96386a55b60e76f2fc95faff9a27b5b135eb159f79de9975df1950c09ddbc2b2"
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-android-x86_64.apk",
+      "sha256": "de60b7d9d0e60a119b22cf4073a33e08bd55ab42c68d98bce598c7410525b60e"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-android-universal.apk",
-      "sha256": "176011d3a562cd3265af20a3e71e07de4c1c89480e2de193461837c69f240617"
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-android-universal.apk",
+      "sha256": "d31166d43ec028ec4e82f1aaa2b3360aac9f958e25b4fe00a6da962d29bb8df8"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-ios.ipa",
-      "sha256": "3a92be6fe9123ec402c433d699e72d94365afb4a4b14478ae5be2fffe78671c4"
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-ios.ipa",
+      "sha256": "227de507fa12afc3bc3d24c07979b6833247fb08fc50f6d17a297e21c28edbba"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-macos-universal.dmg",
-      "sha256": "a2f1abb94e80eaf26d96e6699df273b48a1ac8e85562820c74b8242ccc4d0900"
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-macos-universal.dmg",
+      "sha256": "2c622572deda6e923ba6e0fc2c91698c339055eb08a165338a436b0687801361"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-windows-amd64-setup.exe",
-      "sha256": "bf74bbcd13ccabe6703ec8b1fd8e6f5a2907c7b277155b82a4757c5dcade5b26"
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-windows-amd64-setup.exe",
+      "sha256": "2d8479808aef49ff1fe08733ab0dacc96df5f30b38225ee35651780a7b88a499"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-windows-amd64-portable.zip",
-      "sha256": "cca748aed168d5e9f6d27df3f2c48efffd57d90b38e2ec78b82609e708cd1216"
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-windows-amd64-portable.zip",
+      "sha256": "11747462c845e6ffce5ea51a430c9b2520f048b1a10f36886b03dcfa47b998d0"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.9/YueLink-1.3.9-linux-amd64.AppImage",
-      "sha256": "4976b58f375f7d74733fe8ea012e9b76077cb46a5a383d66b2e942fed29270e3"
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-linux-amd64.AppImage",
+      "sha256": "b79068c805e9c1dc55573f3d1c7dd42d6cf4091304212b103f8725bd8da37b70"
     }
   },
-  "sig": "ed25519:HZnJqkB7Eilu8KKHzTKc+wEZp45XH0WDCXDO44r/cASzC3yJjsNELQAPjODgL6jXJXeeW6zHniawz4gsQFptBw=="
+  "sig": "ed25519:M7uZdS524Km4EGAlP9Ddl2Tz35139NUykSRm1MgGbZ8FovGEcFeisDUYHm7VcJv8/iZ3iP7tcGapeN1w3e4+Bw=="
 }

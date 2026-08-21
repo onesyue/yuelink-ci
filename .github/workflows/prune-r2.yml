@@ -14,18 +14,29 @@ name: Prune old versions from R2
 #   - schedule : 每日 18:30 UTC 兜底(cron 不可靠, 可能延迟/跳过)。
 #   - workflow_dispatch : 手动触发(临时清理 / 排查)。
 #
-# 安全: 保留集只从 manifest 读取; 读不到则**中止**, 绝不在不确定时删除。
+# 安全: 保留集只从经固定 Ed25519 根验真的 manifest 读取; 读不到或验签失败
+# 则**中止**, 绝不在不确定时删除。历史归档不套用当前防回滚地板（否则上一版
+# 一旦低于新地板就会失去恢复名额），但仍执行完整签名与 schema/policy 验证。
 
 on:
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers] no upstream artifacts/code; exact run identity + pinned verifier + signed R2 roots
     workflows: ["Build YueLink"]
     types: [completed]
   schedule:
     - cron: '30 18 * * *'   # 每日 18:30 UTC ≈ 次日 02:30 北京 (兜底)
   workflow_dispatch:
 
-# 只用 R2 secrets + aws-cli, 不碰 GITHUB_TOKEN / 不 checkout → 零 token 权限。
-permissions: {}
+# 只读 checkout 固定在受信默认分支，以复用仓内的 Ed25519 验证器；R2 仍是
+# 此 workflow 唯一写权限，GITHUB_TOKEN 不拥有仓库写权。
+permissions:
+  contents: read
+
+# The schedule, workflow_run hook and manual recovery path can fire together.
+# Serialize destructive bucket walks; the body independently treats any
+# incomplete/newer prefix as live and therefore remains safe alongside Build.
+concurrency:
+  group: yuelink-r2-prune
+  cancel-in-progress: false
 
 jobs:
   prune:
@@ -34,6 +45,58 @@ jobs:
     # workflow_run 触发时只在构建成功后清(失败构建不动 R2); schedule/手动恒跑。
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
+      - name: Validate trusted Build workflow_run identity
+        if: ${{ github.event_name == 'workflow_run' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPOSITORY: ${{ github.event.workflow_run.repository.full_name }}
+          SOURCE_HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          SOURCE_EVENT: ${{ github.event.workflow_run.event }}
+          SOURCE_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          SOURCE_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_WORKFLOW_PATH: ${{ github.event.workflow_run.path }}
+        run: |
+          set -euo pipefail
+          [ "$SOURCE_REPOSITORY" = "$GITHUB_REPOSITORY" ] || {
+            echo "::error::workflow_run repository is not $GITHUB_REPOSITORY"
+            exit 1
+          }
+          [ "$SOURCE_HEAD_REPOSITORY" = "$GITHUB_REPOSITORY" ] || {
+            echo "::error::workflow_run head repository is not $GITHUB_REPOSITORY"
+            exit 1
+          }
+          case "$SOURCE_EVENT" in
+            push|workflow_dispatch) ;;
+            *) echo "::error::unexpected Build source event: $SOURCE_EVENT"; exit 1 ;;
+          esac
+          [ "$SOURCE_CONCLUSION" = success ] || {
+            echo "::error::Build workflow did not conclude successfully"
+            exit 1
+          }
+          [ "$SOURCE_WORKFLOW_PATH" = .github/workflows/build.yml ] || {
+            echo "::error::unexpected source workflow path: $SOURCE_WORKFLOW_PATH"
+            exit 1
+          }
+          [[ "$SOURCE_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::Build head SHA is not a full lowercase commit id"
+            exit 1
+          }
+          resolved="$(
+            gh api "repos/$GITHUB_REPOSITORY/commits/$SOURCE_HEAD_SHA" --jq .sha
+          )"
+          [ "$resolved" = "$SOURCE_HEAD_SHA" ] || {
+            echo "::error::Build head SHA is not a commit in $GITHUB_REPOSITORY"
+            exit 1
+          }
+
+      - name: Checkout pinned manifest verifier
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # workflow_run/schedule execute the trusted default-branch workflow;
+          # pin checkout to that exact workflow revision, never the source run.
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
       - name: Prune R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
@@ -62,6 +125,10 @@ jobs:
               echo "::error::无法读取 root update.json — 中止"
               exit 1
             }
+          python3 scripts/verify-update-manifest.py "$ROOT_MANIFEST" || {
+            echo "::error::root update.json 未通过固定 Ed25519 根/防回滚地板 — 中止"
+            exit 1
+          }
           CURRENT_VERSION=$(jq -er \
             '.version | select(type == "string")' "$ROOT_MANIFEST" \
             2>/dev/null || true)
@@ -78,6 +145,11 @@ jobs:
             [ -n "$prefix" ] || continue
             if ! aws s3 cp "s3://$BUCKET/$prefix/update.json" "$ARCHIVED" \
                 --endpoint-url "$R2_ENDPOINT" >/dev/null 2>&1; then
+              continue
+            fi
+            if ! python3 scripts/verify-update-manifest.py \
+                --historical-archive "$ARCHIVED"; then
+              echo "::warning::$prefix 归档 manifest 未通过固定 Ed25519 根 — 不计入恢复集"
               continue
             fi
             if ! jq -e --arg prefix "$prefix" '
@@ -145,7 +217,9 @@ jobs:
             exit 0
           fi
           echo "保留完整 stable 版本($KEEP_COUNT):"
-          echo "$KEEP" | sed 's/^/  /'
+          while IFS= read -r kept; do
+            printf '  %s\n' "$kept"
+          done <<< "$KEEP"
 
           # 2) 只删除可证明已经完成的发布前缀:
           #    - stable 必须在上面的 COMPLETE 集合里。没有归档 manifest 的

@@ -292,8 +292,7 @@ def verify(raw: bytes, *, minimum_raw: bytes | None = None) -> dict[str, Any]:
     learned from the CDN being authenticated.
     """
 
-    manifest = _verify_signed_manifest(raw)
-    _validate_manifest_policy(manifest)
+    manifest = verify_historical_archive(raw)
     try:
         floor_raw = minimum_raw if minimum_raw is not None else MINIMUM_MANIFEST.read_bytes()
     except OSError as exc:
@@ -303,19 +302,49 @@ def verify(raw: bytes, *, minimum_raw: bytes | None = None) -> dict[str, Any]:
     return manifest
 
 
+def verify_historical_archive(raw: bytes) -> dict[str, Any]:
+    """Verify an immutable archived root without applying today's replay floor.
+
+    Rollback archives are expected to become older than the live updater's
+    reviewed minimum. They still must be authentic roots from the pinned
+    Ed25519 key and satisfy the complete manifest policy before an R2 pruning
+    decision may treat their installer prefix as recoverable.
+    """
+
+    manifest = _verify_signed_manifest(raw)
+    _validate_manifest_policy(manifest)
+    return manifest
+
+
 def main() -> int:
-    if len(sys.argv) != 2:
-        print(f"usage: {Path(sys.argv[0]).name} MANIFEST", file=sys.stderr)
+    args = sys.argv[1:]
+    historical_archive = False
+    if args[:1] == ["--historical-archive"]:
+        historical_archive = True
+        args = args[1:]
+    if len(args) != 1:
+        print(
+            f"usage: {Path(sys.argv[0]).name} [--historical-archive] MANIFEST",
+            file=sys.stderr,
+        )
         return 2
     try:
-        manifest = verify(Path(sys.argv[1]).read_bytes())
+        raw = Path(args[0]).read_bytes()
+        manifest = (
+            verify_historical_archive(raw) if historical_archive else verify(raw)
+        )
     except (OSError, ManifestError) as exc:
         print(f"FATAL: untrusted YueLink update manifest: {exc}", file=sys.stderr)
         return 2
+    policy = (
+        "historical-archive"
+        if historical_archive
+        else f"minimum={MINIMUM_MANIFEST.name}"
+    )
     print(
         "verified YueLink update manifest "
         f"version={manifest['version']} keyId={manifest['keyId']} "
-        f"minimum={MINIMUM_MANIFEST.name}"
+        f"policy={policy}"
     )
     return 0
 

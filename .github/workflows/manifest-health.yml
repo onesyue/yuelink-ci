@@ -19,12 +19,15 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   manifest_check:
     name: Updater manifest freshness
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Only the failure handler opens/comments on this repository's watchdog issue.
+      issues: write
     steps:
       - name: Checkout pinned manifest verifier
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -43,10 +46,40 @@ jobs:
           set -euo pipefail
           tmp="$(mktemp)"
           release_health="$(mktemp)"
-          trap 'rm -f -- "$tmp" "$release_health"' EXIT
+          https_headers="$(mktemp)"
+          http_headers="$(mktemp)"
+          trap 'rm -f -- "$tmp" "$release_health" "$https_headers" "$http_headers"' EXIT
+
+          # The signed manifest protects object authenticity, but it cannot
+          # repair a plaintext first request or a weakened zone TLS boundary.
+          # Enforce the CDN controls independently before trusting the object.
+          if ! http_code="$(curl --fail --silent --show-error \
+            --proto '=http' --connect-timeout 5 --max-time 20 \
+            --retry 2 --retry-all-errors \
+            --dump-header "$http_headers" --output /dev/null \
+            --write-out '%{http_code}' \
+            'http://yuetong.app/update.json')"; then
+            echo "detail=plaintext update endpoint could not be checked" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if [ "$http_code" != 301 ] ||
+             ! tr -d '\r' < "$http_headers" | grep -Eqi \
+               '^location:[[:space:]]*https://yuetong\.app/update\.json[[:space:]]*$'; then
+            echo "detail=plaintext update endpoint must 301 to the exact HTTPS URL" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if curl --fail --silent --show-error \
+            --tlsv1.1 --tls-max 1.1 \
+            --connect-timeout 5 --max-time 20 \
+            --output /dev/null 'https://yuetong.app/update.json'; then
+            echo "detail=yuetong.app still accepts obsolete TLS 1.1" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
           if ! code="$(curl --fail --location --silent --show-error \
             --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --tls-max 1.2 \
             --connect-timeout 5 --max-time 30 --retry 2 --retry-all-errors \
+            --dump-header "$https_headers" \
             --output "$tmp" --write-out '%{http_code}' \
             "https://yuetong.app/update.json")"; then
             echo "detail=root manifest HTTPS fetch failed" >> "$GITHUB_OUTPUT"
@@ -54,6 +87,16 @@ jobs:
           fi
           if [ "$code" != "200" ]; then
             echo "detail=root manifest fetch failed: HTTP $code" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if ! tr -d '\r' < "$https_headers" | grep -Eqi \
+               '^strict-transport-security:[[:space:]]*max-age=15552000;[[:space:]]*includeSubDomains[[:space:]]*$'; then
+            echo "detail=HTTPS manifest response lost the reviewed HSTS policy" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if ! tr -d '\r' < "$https_headers" | grep -Eqi \
+               '^x-content-type-options:[[:space:]]*nosniff[[:space:]]*$'; then
+            echo "detail=HTTPS manifest response lost X-Content-Type-Options nosniff" >> "$GITHUB_OUTPUT"
             exit 1
           fi
           if ! python3 scripts/verify-update-manifest.py "$tmp"; then

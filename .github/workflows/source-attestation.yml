@@ -22,7 +22,7 @@ permissions:
 
 env:
   FLUTTER_VERSION: '3.44.7'
-  GO_VERSION: '1.26.6'
+  GO_VERSION: '1.26.7'
   GITLEAKS_VERSION: '8.30.1'
   GITLEAKS_LINUX_X64_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
 
@@ -249,7 +249,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: false
       - name: Scan production target graphs
-        run: bash scripts/ci/govulncheck_targets.sh "${{ matrix.module }}"
+        env:
+          MODULE: ${{ matrix.module }}
+        run: bash scripts/ci/govulncheck_targets.sh "$MODULE"
 
   macos_integration:
     name: Integration tests (macOS)
@@ -309,6 +311,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # actions/attest-build-provenance exchanges the job OIDC token for a
+      # GitHub-hosted signed attestation and writes it to the repo ledger.
       id-token: write
       attestations: write
     steps:
@@ -378,10 +382,12 @@ jobs:
       - name: Record verification coordinates
         env:
           ATTESTATION_URL: ${{ steps.provenance.outputs.attestation-url }}
+          SOURCE_SHA: ${{ needs.source_contract.outputs.source_sha }}
+          RELEASE_TAG: ${{ needs.source_contract.outputs.release_tag }}
         run: |
           {
             echo "### YueLink source attestation"
-            echo "- source: \`${{ needs.source_contract.outputs.source_sha }}\`"
-            echo "- release: \`${{ needs.source_contract.outputs.release_tag }}\`"
+            echo "- source: \`$SOURCE_SHA\`"
+            echo "- release: \`$RELEASE_TAG\`"
             echo "- provenance: $ATTESTATION_URL"
           } >> "$GITHUB_STEP_SUMMARY"

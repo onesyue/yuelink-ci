@@ -11,6 +11,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.json"
 MANIFEST_HEALTH = ROOT / ".github/workflows/manifest-health.yml"
+PRUNE_R2 = ROOT / ".github/workflows/prune-r2.yml"
 # 归档的旧签名根，用来证明「签名合法但版本更旧」会被单调地板拒绝。
 # 指向**最近**的那一个而不是最老的：1.3.8 的重放比更早版本的重放现实得多
 # （它就是上一版真正在 CDN 上服役过的根）。更早的那些仍留在仓里。
@@ -81,6 +82,21 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(verifier.ManifestError, "below the reviewed minimum"):
             verifier.verify(older)
+
+    def test_authentic_older_root_remains_valid_as_a_historical_archive(self) -> None:
+        older = OLDER_FIXTURE.read_bytes()
+        verified = verifier.verify_historical_archive(older)
+        self.assertEqual(verified["version"], json.loads(older)["version"])
+
+    def test_historical_archive_still_rejects_signature_tampering(self) -> None:
+        tampered = json.loads(OLDER_FIXTURE.read_bytes())
+        signature = bytearray(base64.b64decode(tampered["sig"].removeprefix("ed25519:")))
+        signature[-1] ^= 0x01
+        tampered["sig"] = "ed25519:" + base64.b64encode(signature).decode("ascii")
+        with self.assertRaisesRegex(verifier.ManifestError, "signature is invalid"):
+            verifier.verify_historical_archive(
+                json.dumps(tampered, ensure_ascii=False).encode()
+            )
 
     def test_newer_version_with_older_publication_time_is_rejected(self) -> None:
         # Exercise the independent timestamp half of the floor directly. A
@@ -278,6 +294,21 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         self.assertIn("release asset probe: $url HTTP $asset_code", workflow)
         self.assertIn("manifest references an unreachable release URL", workflow)
 
+    def assert_manifest_health_enforces_transport_security(self, workflow: str) -> None:
+        markers = (
+            "'http://yuetong.app/update.json'",
+            '[ "$http_code" != 301 ]',
+            "^location:[[:space:]]*https://yuetong\\.app/update\\.json",
+            "--tlsv1.1 --tls-max 1.1",
+            "yuetong.app still accepts obsolete TLS 1.1",
+            "--tls-max 1.2",
+            "^strict-transport-security:[[:space:]]*max-age=15552000;",
+            "includeSubDomains",
+            "^x-content-type-options:[[:space:]]*nosniff",
+        )
+        for marker in markers:
+            self.assertIn(marker, workflow)
+
     def test_manifest_health_compares_every_signed_checksum_sidecar(self) -> None:
         workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
         self.assert_manifest_health_compares_signed_sidecars(workflow)
@@ -285,6 +316,25 @@ class UpdateManifestVerifierTests(unittest.TestCase):
     def test_manifest_health_probes_urls_with_bounded_get(self) -> None:
         workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
         self.assert_manifest_health_uses_bounded_get(workflow)
+
+    def test_manifest_health_enforces_https_hsts_nosniff_and_tls_floor(self) -> None:
+        workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
+        self.assert_manifest_health_enforces_transport_security(workflow)
+
+    def test_manifest_transport_security_contract_is_mutation_sensitive(self) -> None:
+        workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
+        for marker in (
+            '[ "$http_code" != 301 ]',
+            "--tlsv1.1 --tls-max 1.1",
+            "--tls-max 1.2",
+            "max-age=15552000",
+            "x-content-type-options",
+        ):
+            with self.subTest(marker=marker):
+                mutated = workflow.replace(marker, "", 1)
+                self.assertNotEqual(mutated, workflow)
+                with self.assertRaises(AssertionError):
+                    self.assert_manifest_health_enforces_transport_security(mutated)
 
     def test_manifest_health_rejects_unbounded_get_mutation(self) -> None:
         workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
@@ -319,6 +369,31 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         self.assertNotEqual(mutated, workflow)
         with self.assertRaises(AssertionError):
             self.assert_manifest_health_compares_signed_sidecars(mutated)
+
+    def assert_prune_authenticates_manifest_roots(self, workflow: str) -> None:
+        self.assertIn("permissions:\n  contents: read", workflow)
+        self.assertIn("Checkout pinned manifest verifier", workflow)
+        self.assertIn(
+            'python3 scripts/verify-update-manifest.py "$ROOT_MANIFEST"', workflow
+        )
+        self.assertIn('--historical-archive "$ARCHIVED"', workflow)
+
+    def test_r2_prune_authenticates_live_and_historical_roots(self) -> None:
+        self.assert_prune_authenticates_manifest_roots(
+            PRUNE_R2.read_text(encoding="utf-8")
+        )
+
+    def test_r2_prune_manifest_authentication_is_mutation_sensitive(self) -> None:
+        workflow = PRUNE_R2.read_text(encoding="utf-8")
+        for marker in (
+            'python3 scripts/verify-update-manifest.py "$ROOT_MANIFEST"',
+            '--historical-archive "$ARCHIVED"',
+        ):
+            with self.subTest(marker=marker):
+                mutated = workflow.replace(marker, "", 1)
+                self.assertNotEqual(mutated, workflow)
+                with self.assertRaises(AssertionError):
+                    self.assert_prune_authenticates_manifest_roots(mutated)
 
 
 if __name__ == "__main__":

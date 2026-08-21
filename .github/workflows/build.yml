@@ -53,18 +53,16 @@ env:
   # 用户画像正中）+ Xcode 27 工具链 lipo 构建失败；3.44.9 只有 tooling 修复。
   # Dart 仍是 3.12.2，无语言侧变化。
   FLUTTER_VERSION: '3.44.9'
-  # Go 1.26.6 (2026-08-17 复核维持): 其 h2c 回归 (golang/go#80876) 只打
-  # net/http *服务端* h2c 交接路径 — mihomo 的 h2c 全是客户端 transport
-  # (vmess-h2/gun/xhttp 拨出), 本客户端栈 (HY2+Reality) 不经过该路径;
-  # 而 1.26.6 修的 asn1/xml 栈耗尽 + crypto/tls KeyUpdate 三个 CVE 在
-  # 客户端不可信输入路径上可达 (release preflight 的 govulncheck 会 fail-closed
-  # 拦 1.26.5, 2026-08-17 v1.3.1 首次构建实录)。mihomo 上游留 1.26.5 是
-  # 服务端场景的保守选择, 不适用于我们的暴露面。Same MINOR, gvisor
+  # Go 1.26.7 (2026-08-21): 包含 1.26.6 对 asn1/xml 栈耗尽与
+  # crypto/tls KeyUpdate 的修复，并修复其 h2c ReadHeaderTimeout 回归
+  # (golang/go#80927)。mihomo 本身只走客户端 h2c transport，但同一正式
+  # 构建器还编译 service；所有产物与 govulncheck 继续用同一补丁版。
+  # Same MINOR, gvisor
   # linkname contract untouched — see CLAUDE.md for the 1.27 gate.
   # Keep the release builder and govulncheck on this exact patch release;
   # a floating 1.26 selector can silently rebuild the same tag against a
   # different standard library.
-  GO_VERSION: '1.26.6'
+  GO_VERSION: '1.26.7'
   # Production builds consume the reviewed module graph exactly. `core/go.mod`
   # and go.sum are tidy against the pinned mihomo submodule; dependency drift
   # must fail the build instead of being resolved implicitly on a runner.
@@ -124,14 +122,15 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
-          cache: true
+          # This privileged tag workflow produces signed runtime artifacts.
+          # Never restore or save branch-scoped tool caches in that trust
+          # boundary: a cache hit is not part of the reviewed source tree.
+          cache: false
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: |
-            core/go.sum
-            service/go.sum
+          cache: false
 
       - name: Classify release tag once
         id: classify
@@ -188,6 +187,8 @@ jobs:
     name: Build (${{ matrix.platform }})
     needs: [prepare, preflight]
     runs-on: ${{ matrix.os }}
+    env:
+      PLATFORM: ${{ matrix.platform }}
     permissions:
       contents: read
       id-token: write      # OIDC for build-provenance attestation
@@ -222,13 +223,13 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: core/go.sum
+          cache: false
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
-          cache: true
+          cache: false
 
       - name: Setup Java (Android only)
         if: matrix.platform == 'android'
@@ -246,20 +247,8 @@ jobs:
         shell: bash
         run: |
           sdkmanager "ndk;27.2.12479018"
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> $GITHUB_ENV
-          echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> $GITHUB_ENV
-
-      # Gradle 依赖 + AGP + 转换产物缓存(键随 gradle 配置变化失效)。APK 构建本体
-      # 是编译,缓存救不了那 10min,但能省依赖/AGP 重下,热运行小幅提速。
-      - name: Cache Gradle
-        if: matrix.platform == 'android'
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
 
       - name: Install Linux build dependencies
         if: matrix.platform == 'linux'
@@ -366,8 +355,8 @@ jobs:
               APP_VERSION="${VERSION}"
               ;;
           esac
-          echo "APP_VERSION=${APP_VERSION}" >> $GITHUB_ENV
-          echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
+          echo "APP_VERSION=${APP_VERSION}" >> "$GITHUB_ENV"
+          echo "BUILD_NUM=${BUILD_NUM}" >> "$GITHUB_ENV"
 
       - run: flutter pub get --enforce-lockfile
 
@@ -384,15 +373,15 @@ jobs:
       - name: Build & install Go core
         shell: bash
         run: |
-          case "${{ matrix.platform }}" in
+          case "$PLATFORM" in
             windows|linux)
-              dart setup.dart build -p ${{ matrix.platform }} -a amd64
+              dart setup.dart build -p "$PLATFORM" -a amd64
               ;;
             *)
-              dart setup.dart build -p ${{ matrix.platform }}
+              dart setup.dart build -p "$PLATFORM"
               ;;
           esac
-          dart setup.dart install -p ${{ matrix.platform }}
+          dart setup.dart install -p "$PLATFORM"
 
       # ─────────────────────────────────────────────────────────────────────
       # ANDROID
@@ -400,29 +389,32 @@ jobs:
       - name: Decode Android keystore
         if: matrix.platform == 'android'
         shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | openssl base64 -d -A > android/app/yuelink.jks
-          echo "KEYSTORE_PATH=${{ github.workspace }}/android/app/yuelink.jks" >> $GITHUB_ENV
-          echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
-          echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
+          printf '%s' "$KEYSTORE_BASE64" | openssl base64 -d -A > android/app/yuelink.jks
+          echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/android/app/yuelink.jks" >> "$GITHUB_ENV"
 
       - name: Build APKs (split-per-abi + universal)
         if: matrix.platform == 'android'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           flutter build apk --release --split-per-abi \
-            --build-name=${{ env.APP_VERSION }} \
-            --build-number=${{ env.BUILD_NUM }}
+            --build-name="$APP_VERSION" \
+            --build-number="$BUILD_NUM"
           flutter build apk --release \
-            --build-name=${{ env.APP_VERSION }} \
-            --build-number=${{ env.BUILD_NUM }}
+            --build-name="$APP_VERSION" \
+            --build-number="$BUILD_NUM"
 
       - name: Rename APKs
         if: matrix.platform == 'android'
         shell: bash
         run: |
           OUT=build/app/outputs/flutter-apk
-          V=${{ env.APP_VERSION }}
+          V="$APP_VERSION"
           mkdir -p dist
           cp "$OUT/app-arm64-v8a-release.apk"   "dist/YueLink-${V}-android-arm64-v8a.apk"
           cp "$OUT/app-armeabi-v7a-release.apk" "dist/YueLink-${V}-android-armeabi-v7a.apk"
@@ -441,7 +433,10 @@ jobs:
         run: |
           set -euo pipefail
           EXPECT_SHA256="2b117c57ef715f3adb7aa4226a8d23de9a6607eff9f0d3f4df2dbdaa069148cc"
-          APKSIGNER=$(ls "${ANDROID_SDK_ROOT:-$ANDROID_HOME}"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          [ -n "$sdk_root" ] || { echo "::error::Android SDK root is unset"; exit 1; }
+          APKSIGNER=$(find "$sdk_root/build-tools" -mindepth 2 -maxdepth 2 \
+            -type f -name apksigner -print | sort -V | tail -1)
           [ -n "$APKSIGNER" ] || { echo "::error::找不到 apksigner"; exit 1; }
           fail=0
           for apk in dist/YueLink-*-android-*.apk; do
@@ -464,16 +459,6 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────
       # iOS — TrollStore / sideload (no codesign, signed with ad-hoc cert)
       # ─────────────────────────────────────────────────────────────────────
-      - name: Cache CocoaPods (iOS)
-        if: matrix.platform == 'ios'
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
-        with:
-          path: |
-            ~/.cocoapods
-            ios/Pods
-          key: pods-ios-${{ hashFiles('ios/Podfile.lock') }}
-          restore-keys: pods-ios-
-
       - name: Enable Swift Package Manager (iOS + macOS)
         # This step used to be `--no-enable-swift-package-manager`. Its reason —
         # an xcframework double-resolved by `flutter assemble` and `xcodebuild`,
@@ -502,8 +487,8 @@ jobs:
         if: matrix.platform == 'ios'
         run: |
           flutter build ios --release --no-codesign \
-            --build-name=${{ env.APP_VERSION }} \
-            --build-number=${{ env.BUILD_NUM }}
+            --build-name="$APP_VERSION" \
+            --build-number="$BUILD_NUM"
 
       # Lock freshness: the committed Podfile.lock is what
       # scripts/check_cocoapods_residue.sh measures residue FROM. If the
@@ -588,24 +573,14 @@ jobs:
           cd build/ios/iphoneos
           mkdir -p Payload
           cp -r Runner.app Payload/
-          IPA="YueLink-${{ env.APP_VERSION }}-ios.ipa"
+          IPA="YueLink-${APP_VERSION}-ios.ipa"
           zip -r --symlinks "$IPA" Payload
-          mv "$IPA" "${{ github.workspace }}/dist/"
-          ls -lh "${{ github.workspace }}/dist/$IPA"
+          mv "$IPA" "$GITHUB_WORKSPACE/dist/"
+          ls -lh "$GITHUB_WORKSPACE/dist/$IPA"
 
       # ─────────────────────────────────────────────────────────────────────
       # macOS — universal .dmg with squircle icon and optional notarization
       # ─────────────────────────────────────────────────────────────────────
-      - name: Cache CocoaPods (macOS)
-        if: matrix.platform == 'macos'
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
-        with:
-          path: |
-            ~/.cocoapods
-            macos/Pods
-          key: pods-macos-${{ hashFiles('macos/Podfile.lock') }}
-          restore-keys: pods-macos-
-
       - name: Refresh icons + DMG background
         if: matrix.platform == 'macos'
         run: dart run tool/round_appicon.dart
@@ -618,8 +593,8 @@ jobs:
         if: matrix.platform == 'macos'
         run: |
           flutter build macos --release \
-            --build-name=${{ env.APP_VERSION }} \
-            --build-number=${{ env.BUILD_NUM }}
+            --build-name="$APP_VERSION" \
+            --build-number="$BUILD_NUM"
 
       # Same lock-freshness assertion as the iOS job — see that step's
       # comment. Guards the residue guard's input.
@@ -758,7 +733,7 @@ jobs:
           cp "$ICONS/app_icon_1024.png" "$ICONSET/icon_512x512@2x.png"
           iconutil -c icns -o /tmp/yuelink_volicon.icns "$ICONSET"
 
-          DMG_NAME="YueLink-${{ env.APP_VERSION }}-macos-universal.dmg"
+          DMG_NAME="YueLink-${APP_VERSION}-macos-universal.dmg"
           set +e
           "$CREATE_DMG" \
             --volname "YueLink" \
@@ -785,7 +760,7 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           set -euo pipefail
-          DMG_NAME="YueLink-${{ env.APP_VERSION }}-macos-universal.dmg"
+          DMG_NAME="YueLink-${APP_VERSION}-macos-universal.dmg"
           codesign --force --timestamp \
             --sign "$APPLE_SIGNING_IDENTITY" "dist/$DMG_NAME"
           codesign --verify --strict --verbose=2 "dist/$DMG_NAME"
@@ -797,7 +772,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          DMG_NAME="YueLink-${{ env.APP_VERSION }}-macos-universal.dmg"
+          DMG_NAME="YueLink-${APP_VERSION}-macos-universal.dmg"
           xcrun notarytool submit "dist/$DMG_NAME" \
             --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" --wait --timeout 30m
@@ -828,8 +803,8 @@ jobs:
         run: |
           flutter config --enable-windows-desktop
           flutter build windows --release \
-            --build-name=${{ env.APP_VERSION }} \
-            --build-number=${{ env.BUILD_NUM }}
+            --build-name="$APP_VERSION" \
+            --build-number="$BUILD_NUM"
 
       - name: Verify Wintun bundle (Windows)
         if: matrix.platform == 'windows'
@@ -925,7 +900,7 @@ jobs:
         env:
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
-          $version = "${{ env.APP_VERSION }}"
+          $version = $env:APP_VERSION
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           iscc "/DMyAppVersion=$version" "/DMyAppArch=amd64" windows\installer.iss
           if ($env:WINDOWS_CERT_PATH -and (Test-Path $env:WINDOWS_CERT_PATH)) {
@@ -981,8 +956,8 @@ jobs:
           curl-config --features | grep -q AsynchDNS
           flutter config --enable-linux-desktop
           flutter build linux --release \
-            --build-name=${{ env.APP_VERSION }} \
-            --build-number=${{ env.BUILD_NUM }}
+            --build-name="$APP_VERSION" \
+            --build-number="$BUILD_NUM"
 
       - name: Bundle service binaries + create AppImage
         if: matrix.platform == 'linux'
@@ -1011,7 +986,7 @@ jobs:
             | sha256sum -c -
           chmod +x /usr/local/bin/appimagetool
 
-          VERSION="${{ env.APP_VERSION }}"
+          VERSION="$APP_VERSION"
           APPDIR="build/AppDir"
           mkdir -p dist
           OUTPUT="dist/YueLink-${VERSION}-linux-amd64.AppImage"
@@ -1098,6 +1073,11 @@ jobs:
       - name: Record exact sideload identity
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
+        env:
+          # Keep the matrix value explicit at the step boundary. Besides
+          # documenting provenance input, this lets static shell analysis
+          # prove PLATFORM is assigned before the strict-mode script reads it.
+          PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
           version="${APP_VERSION}"
@@ -1113,7 +1093,10 @@ jobs:
             exit 1
           }
 
-          platform="${{ matrix.platform }}"
+          # PLATFORM is injected from the matrix by the step-level env above.
+          # Static shell analysis cannot model GitHub Actions env injection.
+          # shellcheck disable=SC2153
+          platform="${PLATFORM:?matrix platform is missing}"
           case "$platform" in
             android) signing_mode=android-release-key; notarization=not-applicable ;;
             ios) signing_mode=ad-hoc; notarization=not-notarized ;;
@@ -1221,7 +1204,7 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
-          cache: true
+          cache: false
 
       - name: Resolve locked verification dependencies
         if: needs.preflight.outputs.tag_kind == 'stable'
@@ -1409,16 +1392,16 @@ jobs:
               printf '## Downloads\n\n'
               printf '| 平台 | 文件 | 说明 |\n'
               printf '|---|---|---|\n'
-              printf '| Windows | `YueLink-%s-windows-amd64-setup.exe` | 安装版 |\n' "$VERSION"
-              printf '| Windows | `YueLink-%s-windows-amd64-portable.zip` | 便携版 |\n' "$VERSION"
-              printf '| macOS | `YueLink-%s-macos-universal.dmg` | Universal（Apple Silicon + Intel） |\n' "$VERSION"
-              printf '| Android | `YueLink-%s-android-universal.apk` | 通用 |\n' "$VERSION"
-              printf '| Android | `YueLink-%s-android-arm64-v8a.apk` | arm64 |\n' "$VERSION"
-              printf '| Android | `YueLink-%s-android-armeabi-v7a.apk` | armv7 |\n' "$VERSION"
-              printf '| Android | `YueLink-%s-android-x86_64.apk` | x86_64 |\n' "$VERSION"
-              printf '| iOS | `YueLink-%s-ios.ipa` | 侧载，iOS 15+（TrollStore / AltStore / SideStore） |\n' "$VERSION"
-              printf '| Linux | `YueLink-%s-linux-amd64.AppImage` | x86_64 |\n' "$VERSION"
-              printf '\n统一校验文件 `YueLink-%s-SHA256SUMS`，可用 `sha256sum -c` 一次性核对所有产物。\n' "$VERSION"
+              printf "| Windows | \`YueLink-%s-windows-amd64-setup.exe\` | 安装版 |\n" "$VERSION"
+              printf "| Windows | \`YueLink-%s-windows-amd64-portable.zip\` | 便携版 |\n" "$VERSION"
+              printf "| macOS | \`YueLink-%s-macos-universal.dmg\` | Universal（Apple Silicon + Intel） |\n" "$VERSION"
+              printf "| Android | \`YueLink-%s-android-universal.apk\` | 通用 |\n" "$VERSION"
+              printf "| Android | \`YueLink-%s-android-arm64-v8a.apk\` | arm64 |\n" "$VERSION"
+              printf "| Android | \`YueLink-%s-android-armeabi-v7a.apk\` | armv7 |\n" "$VERSION"
+              printf "| Android | \`YueLink-%s-android-x86_64.apk\` | x86_64 |\n" "$VERSION"
+              printf "| iOS | \`YueLink-%s-ios.ipa\` | 侧载，iOS 15+（TrollStore / AltStore / SideStore） |\n" "$VERSION"
+              printf "| Linux | \`YueLink-%s-linux-amd64.AppImage\` | x86_64 |\n" "$VERSION"
+              printf "\n统一校验文件 \`YueLink-%s-SHA256SUMS\`，可用 \`sha256sum -c\` 一次性核对所有产物。\n" "$VERSION"
               printf '\n## Install notes\n\n'
               printf '<details>\n<summary>Windows — SmartScreen 蓝色对话框</summary>\n\n'
               printf 'YueLink 安装包会在配置证书后做 Authenticode 签名；新版本、新证书或下载量较少时，Windows 仍可能弹"已保护你的电脑"。\n'
@@ -1451,8 +1434,8 @@ jobs:
             # manifest shape identical on both branches.
             cp release_notes.app.md release_notes.app.en.md
           fi
-          echo "RELEASE_TITLE=${TITLE}" >> $GITHUB_ENV
-          echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "RELEASE_TITLE=${TITLE}" >> "$GITHUB_ENV"
+          echo "APP_VERSION=${VERSION}" >> "$GITHUB_ENV"
 
       - name: Prepend truthful sideload status to release notes
         run: |
@@ -1509,7 +1492,7 @@ jobs:
       # ── Unsigned updater candidate for the private signing plane ─────────
       - name: Generate updater manifest candidate
         run: |
-          VERSION="${{ env.APP_VERSION }}"
+          VERSION="$APP_VERSION"
           TAG="${GITHUB_REF_NAME}"
           # There is exactly one channel now — stable/`update.json`. The
           # pre-release channel was retired, so a `vX.Y.Z-pre` tag must NOT
@@ -1607,8 +1590,8 @@ jobs:
             --argjson platforms "$PLATFORMS" \
             '{schemaVersion: $schemaVersion, keyId: $keyId, version: $version, channel: $channel, publishedAt: $publishedAt, expiresAt: $expiresAt, releaseUrl: $releaseUrl, notes: $notes, notesEn: $notesEn, platforms: $platforms}' \
             > "$MANIFEST_NAME"
-          echo "MANIFEST_NAME=$MANIFEST_NAME" >> $GITHUB_ENV
-          cat "$MANIFEST_NAME" | jq .
+          echo "MANIFEST_NAME=$MANIFEST_NAME" >> "$GITHUB_ENV"
+          jq . "$MANIFEST_NAME"
 
       # Updater manifest invariant: every platform URL must point at an
       # actual installer artifact (apk/ipa/dmg/exe/zip/AppImage) — never
@@ -1702,12 +1685,16 @@ jobs:
             echo "✓ 已发布安装包到 R2 ($BUCKET/$TAG/) — prerelease, 未发布 manifest"
           else
             echo "✓ 已发布不可变 $TAG/$MANIFEST_NAME + 安装包"
+            candidate_sha256="$(sha256sum "$MANIFEST_NAME" | awk '{print $1}')"
+            source_commit="$(git rev-parse HEAD)"
             {
               echo "## Awaiting private manifest signature"
               echo
               echo "Public CI produced \`$TAG/$MANIFEST_NAME\` only."
-              echo "Run \`promote_signed_manifest.sh ${APP_VERSION}\` in the"
-              echo "protected local/private signing plane after this job succeeds."
+              echo "- Source commit: \`$source_commit\`"
+              echo "- Candidate SHA-256: \`$candidate_sha256\`"
+              echo "Pass both exact values to the protected local/private signing"
+              echo "plane only after the artifact verification step also succeeds."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -1717,7 +1704,7 @@ jobs:
           set -euo pipefail
           for attempt in 1 2 3 4 5 6 7 8; do
             if dart run scripts/verify_release_artifacts.dart \
-                 --version "${{ env.APP_VERSION }}" --candidate; then
+                 --version "$APP_VERSION" --candidate; then
               echo "release candidate verification passed on attempt $attempt"
               exit 0
             fi
