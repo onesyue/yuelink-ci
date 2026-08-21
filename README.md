@@ -82,6 +82,29 @@ delete or overwrite path. There is no implicitly cleanable namespace. Any
 future ephemeral area must have a separate explicit prefix, age and ownership
 contract outside both locked `v` and `security/` prefixes.
 
+Immediately before private promotion, `r2-lock-attestation.yml` reads that
+same live rule with the existing configuration-read-only Cloudflare token and
+emits a 30-minute proof bound to the exact stable version, private source,
+candidate SHA-256, candidate builder/run and a fresh 32-byte random challenge.
+The proof receives GitHub-hosted artifact provenance; it contains no
+Cloudflare token, R2 write key or updater signing seed. The proof workflow
+commit must be the exact same signed `master` commit named by the candidate's
+builder tag/run; a later control-plane commit is never accepted. The private
+promoter also pins the workflow identity and rechecks Sigstore provenance and
+expiry before immutable archive publication and again immediately before the
+root CAS. This is a short-lived point-in-time attestation rather than a second
+live Cloudflare query; promotion starts immediately and an expired proof is
+replaced, never extended or accepted.
+
+```bash
+challenge=$(openssl rand -hex 32)
+gh workflow run r2-lock-attestation.yml -R onesyue/yuelink-ci \
+  -f version=X.Y.Z -f source_commit="$SOURCE_SHA" \
+  -f candidate_sha256="$CANDIDATE_SHA256" \
+  -f builder_commit="$BUILDER_SHA" -f build_run_id="$BUILD_RUN_ID" \
+  -f challenge="$challenge"
+```
+
 The source attestation is equal to or stronger than the private source jobs:
 it checks master ancestry, the complete unreleased Dart format delta, Android
 release-signing contract, Flutter analysis, architecture imports, CocoaPods
@@ -112,7 +135,7 @@ android-actions/setup-android@*
 onesyue/yuelink-ci@*
 ```
 
-The contract inventories all six workflow files plus the composite Flutter
-action (seven action-bearing YAML definitions), checks every `uses:` against
+The contract inventories all seven workflow files plus the composite Flutter
+action (eight action-bearing YAML definitions), checks every `uses:` against
 this policy, and rejects mutable refs, an unknown external repository, or a
 stale/extra documented pattern.

@@ -1,0 +1,118 @@
+name: R2 lock attestation
+run-name: R2 lock proof v${{ inputs.version }} ${{ inputs.challenge }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Stable version (X.Y.Z)'
+        required: true
+        type: string
+      source_commit:
+        description: 'Exact private source commit'
+        required: true
+        type: string
+      candidate_sha256:
+        description: 'Reviewed immutable candidate SHA-256'
+        required: true
+        type: string
+      builder_commit:
+        description: 'Exact public candidate builder commit'
+        required: true
+        type: string
+      build_run_id:
+        description: 'Successful public Build YueLink run id'
+        required: true
+        type: string
+      challenge:
+        description: 'Fresh 32-byte random challenge as 64 lowercase hex'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r2-lock-attestation-${{ inputs.challenge }}
+  cancel-in-progress: false
+
+jobs:
+  prove:
+    name: Prove live immutable version lock
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout exact proof generator
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify lock and write release-bound proof
+        id: proof
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_R2_CONFIG_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          BUILDER_COMMIT: ${{ inputs.builder_commit }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          CHALLENGE: ${{ inputs.challenge }}
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/r2-lock-proof.json"
+          bash scripts/create-r2-lock-attestation.sh \
+            "$RELEASE_VERSION" "$SOURCE_COMMIT" "$CANDIDATE_SHA256" \
+            "$BUILDER_COMMIT" "$BUILD_RUN_ID" "$CHALLENGE" "$output" \
+            | tee "$RUNNER_TEMP/proof-result"
+          proof_sha256="$(sed -nE 's/^R2_LOCK_PROOF_SHA256=([0-9a-f]{64})$/\1/p' "$RUNNER_TEMP/proof-result")"
+          [[ "$proof_sha256" =~ ^[0-9a-f]{64}$ ]] || {
+            echo "::error::proof generator did not emit a canonical digest"
+            exit 1
+          }
+          printf 'path=%s\nsha256=%s\n' "$output" "$proof_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload lock proof
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: yuelink-r2-lock-proof-v${{ inputs.version }}-${{ inputs.challenge }}
+          path: ${{ steps.proof.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Sign lock proof provenance
+        id: provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: ${{ steps.proof.outputs.path }}
+
+      - name: Record proof coordinates
+        env:
+          VERSION: ${{ inputs.version }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          BUILDER_COMMIT: ${{ inputs.builder_commit }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          CHALLENGE: ${{ inputs.challenge }}
+          PROOF_SHA256: ${{ steps.proof.outputs.sha256 }}
+          ATTESTATION_URL: ${{ steps.provenance.outputs.attestation-url }}
+        run: |
+          {
+            echo '## Fresh R2 lock proof'
+            echo "- version: \`v$VERSION\`"
+            echo "- source: \`$SOURCE_COMMIT\`"
+            echo "- candidate: \`$CANDIDATE_SHA256\`"
+            echo "- candidate builder: \`$BUILDER_COMMIT\`"
+            echo "- candidate build run: \`$BUILD_RUN_ID\`"
+            echo "- challenge: \`$CHALLENGE\`"
+            echo "- proof SHA-256: \`$PROOF_SHA256\`"
+            echo "- expires: 30 minutes after issuance"
+            echo "- provenance: $ATTESTATION_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
