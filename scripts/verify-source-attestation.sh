@@ -44,20 +44,35 @@ cleanup() {
 trap cleanup EXIT
 snapshot="$(mktemp -d "$tmp_root/yuelink-source-attestation-verify.XXXXXX")"
 run_json="$snapshot/run.json"
+workflow_json="$snapshot/workflow.json"
 proof_dir="$snapshot/proof"
 proof="$proof_dir/source-attestation.json"
 mkdir -p "$proof_dir"
 
 GH_PROMPT_DISABLED=1 gh api \
   "repos/$REPOSITORY/actions/runs/$RUN_ID" > "$run_json"
+GH_PROMPT_DISABLED=1 gh api \
+  "repos/$REPOSITORY/actions/workflows/source-attestation.yml" > "$workflow_json"
+WORKFLOW_ID="$(jq -er --arg expected_name "Source attestation" '
+  select(.name == $expected_name and
+         .path == ".github/workflows/source-attestation.yml" and
+         .state == "active") |
+  .id | tostring | select(test("^[1-9][0-9]*$"))
+' "$workflow_json")" || {
+  echo "::error::source-attestation workflow identity is not the exact active workflow" >&2
+  exit 1
+}
 jq -e \
   --arg repository "$REPOSITORY" \
   --arg workflow "$WORKFLOW_PATH" \
+  --arg workflow_id "$WORKFLOW_ID" \
   --arg source "$SOURCE_COMMIT" \
   --arg builder "$BUILDER_COMMIT" \
   --arg run "$RUN_ID" '
     (.id | tostring) == $run and
-    .name == "Source attestation" and
+    ((.workflow_id | tostring) == $workflow_id) and
+    (.name == "Source attestation" or
+     .name == ("Source attestation " + $source)) and
     .display_title == ("Source attestation " + $source) and
     .path == $workflow and .event == "workflow_dispatch" and
     .status == "completed" and .conclusion == "success" and

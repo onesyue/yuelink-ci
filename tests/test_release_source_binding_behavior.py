@@ -86,7 +86,19 @@ def source_run(**overrides: object) -> str:
         "head_sha": BUILDER,
         "head_branch": "master",
         "run_attempt": 1,
+        "workflow_id": 56789,
         "repository": {"full_name": "onesyue/yuelink-ci"},
+    }
+    payload.update(overrides)
+    return json.dumps(payload)
+
+
+def source_workflow(**overrides: object) -> str:
+    payload: dict[str, object] = {
+        "id": 56789,
+        "name": "Source attestation",
+        "path": ".github/workflows/source-attestation.yml",
+        "state": "active",
     }
     payload.update(overrides)
     return json.dumps(payload)
@@ -120,6 +132,7 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
         ref_json: str | None = None,
         tag: str | None = None,
         run: str | None = None,
+        workflow: str | None = None,
         proof: str | None = None,
         attestation_ok: bool = True,
         dispatch_source: str = "",
@@ -140,6 +153,7 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
                       case "$2" in
                         *'/git/ref/tags/'*) printf '%s' "$FAKE_REF_JSON" ;;
                         *'/git/tags/'*) printf '%s' "$FAKE_TAG_JSON" ;;
+                        *'/actions/workflows/source-attestation.yml') printf '%s' "$FAKE_WORKFLOW_JSON" ;;
                         *'/actions/runs/'*) printf '%s' "$FAKE_RUN_JSON" ;;
                         *) exit 97 ;;
                       esac
@@ -186,6 +200,7 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
                 "FAKE_REF_JSON": ref_json or valid_ref(),
                 "FAKE_TAG_JSON": tag or tag_json(),
                 "FAKE_RUN_JSON": run or source_run(),
+                "FAKE_WORKFLOW_JSON": workflow or source_workflow(),
                 "FAKE_PROOF_JSON": proof or source_proof(),
                 "FAKE_ATTESTATION_OK": "1" if attestation_ok else "0",
                 "SOURCE_ATTESTATION_VERIFIER": str(VERIFIER),
@@ -260,12 +275,33 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
             source_run(conclusion="failure"),
             source_run(head_sha="d" * 40),
             source_run(display_title="Source attestation arbitrary"),
+            source_run(workflow_id=98765),
+            source_run(name="unexpected run name"),
         )
         for run in invalid_runs:
             with self.subTest(run=run):
                 result, output = self.run_binding(run=run)
                 self.assertNotEqual(result.returncode, 0, result.stdout)
                 self.assertEqual(output, "")
+
+        invalid_workflows = (
+            source_workflow(id=98765),
+            source_workflow(name="Build YueLink"),
+            source_workflow(path=".github/workflows/build.yml"),
+            source_workflow(state="disabled_manually"),
+        )
+        for workflow in invalid_workflows:
+            with self.subTest(workflow=workflow):
+                result, output = self.run_binding(workflow=workflow)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertEqual(output, "")
+
+    def test_current_github_dynamic_run_name_is_accepted(self) -> None:
+        result, output = self.run_binding(
+            run=source_run(name=f"Source attestation {SOURCE}")
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(output, f"source_commit={SOURCE}\nattestation_run_id=12345\n")
 
     def test_wrong_proof_or_failed_attestation_is_rejected(self) -> None:
         invalid_proofs = (
