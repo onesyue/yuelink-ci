@@ -1,0 +1,18 @@
+version: 2
+
+# The repository policy requires every external GitHub Action to use a full
+# 40-character commit SHA. Dependabot keeps those immutable refs current; no
+# update is merged automatically, so every workflow change still passes the
+# offline policy suite and human review.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+

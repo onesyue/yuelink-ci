@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/source-attestation.yml"
 RELEASE = ROOT / "release.sh"
 README = ROOT / "README.md"
+DEPENDABOT = ROOT / ".github/dependabot.yml"
 
 WORKFLOW_MARKERS = (
     "run-name: Source attestation ${{ inputs.source_sha }}",
@@ -157,14 +158,35 @@ class SourceAttestationContractTests(unittest.TestCase):
         self.assertTrue(any("mutable or malformed action ref" in issue for issue in issues))
 
     def test_every_public_workflow_action_is_commit_pinned(self) -> None:
-        for workflow_path in sorted((ROOT / ".github/workflows").glob("*.yml")):
+        workflow_paths = sorted((ROOT / ".github/workflows").glob("*.yml"))
+        workflow_paths += sorted((ROOT / ".github/workflows").glob("*.yaml"))
+        action_count = 0
+        for workflow_path in workflow_paths:
             workflow = workflow_path.read_text(encoding="utf-8")
             actions = re.findall(r"(?m)^\s*(?:-\s*)?uses:\s*([^\s#]+)", workflow)
             for action in actions:
-                if action.startswith("./"):
-                    continue
+                action_count += 1
                 with self.subTest(workflow=workflow_path.name, action=action):
+                    self.assertFalse(
+                        action.startswith("./"),
+                        "local/dynamic actions are outside the enabled SHA-pinning policy",
+                    )
                     self.assertRegex(action, r"^[^@]+@[0-9a-f]{40}$")
+        self.assertGreater(action_count, 0, "workflow action inventory is unexpectedly empty")
+
+    def test_sha_pinning_policy_has_dependabot_maintenance(self) -> None:
+        dependabot = DEPENDABOT.read_text(encoding="utf-8")
+        self.assertEqual(dependabot.count("package-ecosystem: github-actions"), 1)
+        self.assertRegex(dependabot, r"(?m)^\s+directory: /$")
+        self.assertRegex(dependabot, r"(?m)^\s+interval: weekly$")
+        limit = re.search(r"(?m)^\s+open-pull-requests-limit:\s*(\d+)\s*$", dependabot)
+        self.assertIsNotNone(limit)
+        self.assertGreater(int(limit.group(1)), 0)
+        self.assertIn("sha_pinning_required=true", self.readme)
+        self.assertIn(
+            "Local or dynamically\nresolved actions are intentionally absent",
+            self.readme,
+        )
 
     def test_run_scripts_do_not_expand_github_expressions(self) -> None:
         """Actions values enter shell scripts through step env, not templates."""

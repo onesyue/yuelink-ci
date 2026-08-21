@@ -67,3 +67,10 @@ final JSON proof is uploaded under the exact source SHA and receives GitHub
 build-provenance attestation. Updater signing material is intentionally not
 copied into this public repository; the protected promotion step verifies the
 real key and remains independently mandatory.
+
+Every external `uses:` reference in all public workflows is pinned to a full
+40-character commit SHA. The repository-level Actions policy is correspondingly
+set to `sha_pinning_required=true`, and `.github/dependabot.yml` maintains those
+immutable pins with reviewed weekly pull requests. Local or dynamically
+resolved actions are intentionally absent; adding one requires revisiting the
+repository policy before it can merge.
