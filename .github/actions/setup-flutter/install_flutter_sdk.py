@@ -168,6 +168,32 @@ def valid_cached_sdk(target: Path, expected: dict[str, str], system: str) -> boo
         return False
 
 
+def parse_machine_document(output: str) -> dict[str, object]:
+    """Extract Flutter's final machine document from first-run output.
+
+    A cold Windows SDK builds ``flutter_tools`` before answering the version
+    probe and writes dependency progress ahead of the JSON document.  Accept
+    exactly one object that starts on its own line and consumes the remainder
+    of stdout; arbitrary trailing output or a non-object stays fail-closed.
+    """
+
+    decoder = json.JSONDecoder()
+    parsed_objects: list[tuple[dict[str, object], int]] = []
+    for match in re.finditer(r"(?m)^[ \t]*\{", output):
+        start = output.find("{", match.start())
+        try:
+            document, end = decoder.raw_decode(output, start)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(document, dict):
+            parsed_objects.append((document, end))
+    if len(parsed_objects) != 1 or output[parsed_objects[0][1] :].strip():
+        raise ValueError(
+            f"expected one final JSON object, found {len(parsed_objects)}"
+        )
+    return parsed_objects[0][0]
+
+
 def verify_runtime(target: Path, version: str, system: str) -> None:
     executable = target / "bin" / ("flutter.bat" if system == "Windows" else "flutter")
     command = [str(executable), "--version", "--machine"]
@@ -191,8 +217,8 @@ def verify_runtime(target: Path, version: str, system: str) -> None:
         text=True,
     )
     try:
-        document = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
+        document = parse_machine_document(result.stdout)
+    except ValueError as exc:
         stdout = result.stdout[-500:].replace("\r", "\\r").replace("\n", "\\n")
         stderr = result.stderr[-500:].replace("\r", "\\r").replace("\n", "\\n")
         fail(

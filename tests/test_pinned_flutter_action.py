@@ -125,8 +125,12 @@ def test_windows_runtime_probe_uses_command_processor_and_call() -> None:
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout='{"frameworkVersion":"3.44.9"}',
-                stderr="",
+                stdout=(
+                    "Resolving dependencies...\n"
+                    "Got dependencies.\n"
+                    '{"frameworkVersion":"3.44.9"}\n'
+                ),
+                stderr="Building flutter tool...\nRunning pub upgrade...\n",
             )
 
         with mock.patch.dict(os.environ, {"COMSPEC": str(command_processor)}):
@@ -182,3 +186,23 @@ def test_windows_runtime_probe_rejects_command_metacharacters() -> None:
                     assert "command-processor metacharacters" in str(exc)
                 else:  # pragma: no cover - fail-closed assertion
                     raise AssertionError(f"unsafe Windows path {unsafe!r} was accepted")
+
+
+def test_machine_document_parser_is_closed_after_the_final_object() -> None:
+    installer = _installer_module()
+    assert installer.parse_machine_document(
+        'first-run progress\n{"frameworkVersion":"3.44.9"}\r\n'
+    ) == {"frameworkVersion": "3.44.9"}
+
+    for invalid in (
+        "first-run progress only\n",
+        '[{"frameworkVersion":"3.44.9"}]\n',
+        '{"frameworkVersion":"3.44.9"}\ntrailing output\n',
+        '{"frameworkVersion":"3.44.9"}\n{"frameworkVersion":"3.44.9"}\n',
+    ):
+        try:
+            installer.parse_machine_document(invalid)
+        except ValueError:
+            pass
+        else:  # pragma: no cover - fail-closed assertion
+            raise AssertionError(f"invalid Flutter machine output was accepted: {invalid!r}")
