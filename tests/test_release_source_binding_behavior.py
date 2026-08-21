@@ -338,6 +338,21 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
         ):
             self.assertIn(marker, self.workflow)
 
+    def test_platform_identity_uses_attested_commit_not_private_tag_ref(self) -> None:
+        start = self.workflow.index("      - name: Record exact sideload identity")
+        end = self.workflow.index("      - name: Attest build provenance", start)
+        identity = self.workflow[start:end]
+        self.assertIn(
+            "ATTESTED_SOURCE_COMMIT: "
+            "${{ needs.source_binding.outputs.source_commit }}",
+            identity,
+        )
+        self.assertIn(
+            '[ "$source_commit" = "$ATTESTED_SOURCE_COMMIT" ]',
+            identity,
+        )
+        self.assertNotIn("git rev-list", identity)
+
 
 if __name__ == "__main__":
     unittest.main()

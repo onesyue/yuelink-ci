@@ -1234,14 +1234,14 @@ jobs:
           # documenting provenance input, this lets static shell analysis
           # prove PLATFORM is assigned before the strict-mode script reads it.
           PLATFORM: ${{ matrix.platform }}
+          ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
         run: |
           set -euo pipefail
           version="${APP_VERSION}"
           tag="${GITHUB_REF_NAME}"
           source_commit="$(git rev-parse HEAD)"
-          tag_commit="$(git rev-list -n1 "$tag")"
-          [ "$source_commit" = "$tag_commit" ] || {
-            echo "::error::checked-out source commit $source_commit does not match $tag ($tag_commit)"
+          [ "$source_commit" = "$ATTESTED_SOURCE_COMMIT" ] || {
+            echo "::error::checked-out source commit $source_commit does not match attested source $ATTESTED_SOURCE_COMMIT"
             exit 1
           }
           [ "${tag#v}" = "$version" ] || {
