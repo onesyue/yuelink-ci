@@ -170,8 +170,22 @@ def valid_cached_sdk(target: Path, expected: dict[str, str], system: str) -> boo
 
 def verify_runtime(target: Path, version: str, system: str) -> None:
     executable = target / "bin" / ("flutter.bat" if system == "Windows" else "flutter")
+    command = [str(executable), "--version", "--machine"]
+    if system == "Windows":
+        # CreateProcess does not define a stable direct-execution contract for
+        # batch files.  In particular, a .bat launched from Python can return
+        # success without forwarding its stdout on GitHub's Windows runner.
+        # Invoke the runner's command processor explicitly and use CALL so the
+        # Flutter batch file returns control and its real exit status/output.
+        command_processor = os.environ.get("COMSPEC", "")
+        if not command_processor or not Path(command_processor).is_file():
+            fail("Windows command processor is absent")
+        if re.search(r'[%!&|<>^()\r\n"]', str(executable)):
+            fail("Windows Flutter path contains command-processor metacharacters")
+        batch_command = "call " + subprocess.list2cmdline(command)
+        command = [command_processor, "/d", "/s", "/c", batch_command]
     result = subprocess.run(
-        [str(executable), "--version", "--machine"],
+        command,
         check=True,
         capture_output=True,
         text=True,
@@ -179,7 +193,12 @@ def verify_runtime(target: Path, version: str, system: str) -> None:
     try:
         document = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        fail(f"Flutter version probe was not JSON: {exc}")
+        stdout = result.stdout[-500:].replace("\r", "\\r").replace("\n", "\\n")
+        stderr = result.stderr[-500:].replace("\r", "\\r").replace("\n", "\\n")
+        fail(
+            "Flutter version probe was not JSON: "
+            f"{exc}; stdout_tail={stdout!r}; stderr_tail={stderr!r}"
+        )
     if document.get("frameworkVersion") != version:
         fail(
             "Flutter runtime version mismatch: "

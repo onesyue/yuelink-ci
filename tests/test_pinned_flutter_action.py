@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
+import subprocess
+import tempfile
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -94,3 +98,87 @@ def test_cache_receipt_binds_platform_arch_version_and_archive_hash(tmp_path: Pa
     assert installer.valid_cached_sdk(
         target, {**expected, "runner_arch": "ARM64"}, "Linux"
     ) is False
+
+
+def test_windows_runtime_probe_uses_command_processor_and_call() -> None:
+    installer = _installer_module()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Exercise Windows' most failure-prone case: a tool-cache path that
+        # requires cmd.exe quoting.
+        target = Path(temp_dir) / "SDK Root"
+        executable = target / "bin" / "flutter.bat"
+        executable.parent.mkdir(parents=True)
+        executable.write_text("@exit /b 0\n", encoding="utf-8")
+        command_processor = Path(temp_dir) / "cmd.exe"
+        command_processor.write_bytes(b"runner command processor")
+        observed: list[list[str]] = []
+
+        def run(
+            command: list[str], **kwargs: object
+        ) -> subprocess.CompletedProcess[str]:
+            observed.append(command)
+            assert kwargs == {
+                "check": True,
+                "capture_output": True,
+                "text": True,
+            }
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout='{"frameworkVersion":"3.44.9"}',
+                stderr="",
+            )
+
+        with mock.patch.dict(os.environ, {"COMSPEC": str(command_processor)}):
+            with mock.patch.object(installer.subprocess, "run", run):
+                installer.verify_runtime(target, "3.44.9", "Windows")
+
+        assert observed == [
+            [
+                str(command_processor),
+                "/d",
+                "/s",
+                "/c",
+                "call "
+                + subprocess.list2cmdline(
+                    [str(executable), "--version", "--machine"]
+                ),
+            ]
+        ]
+
+
+def test_windows_runtime_probe_fails_closed_without_command_processor() -> None:
+    installer = _installer_module()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        target = Path(temp_dir) / "sdk"
+        (target / "bin").mkdir(parents=True)
+        (target / "bin/flutter.bat").write_text("@exit /b 0\n", encoding="utf-8")
+        environment = dict(os.environ)
+        environment.pop("COMSPEC", None)
+        with mock.patch.dict(os.environ, environment, clear=True):
+            try:
+                installer.verify_runtime(target, "3.44.9", "Windows")
+            except SystemExit as exc:
+                assert "Windows command processor is absent" in str(exc)
+            else:  # pragma: no cover - fail-closed assertion
+                raise AssertionError("missing COMSPEC was accepted")
+
+
+def test_windows_runtime_probe_rejects_command_metacharacters() -> None:
+    installer = _installer_module()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        command_processor = Path(temp_dir) / "cmd.exe"
+        command_processor.write_bytes(b"runner command processor")
+        for unsafe in ("SDK%TEMP%", "SDK!VAR!", "SDK&next", "SDK(test)"):
+            target = Path(temp_dir) / unsafe
+            (target / "bin").mkdir(parents=True)
+            (target / "bin/flutter.bat").write_text(
+                "@exit /b 0\n", encoding="utf-8"
+            )
+            with mock.patch.dict(os.environ, {"COMSPEC": str(command_processor)}):
+                try:
+                    installer.verify_runtime(target, "3.44.9", "Windows")
+                except SystemExit as exc:
+                    assert "command-processor metacharacters" in str(exc)
+                else:  # pragma: no cover - fail-closed assertion
+                    raise AssertionError(f"unsafe Windows path {unsafe!r} was accepted")
