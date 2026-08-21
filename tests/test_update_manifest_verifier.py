@@ -21,6 +21,11 @@ OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.3.8.json"
 LEGACY_WITHOUT_OPTIONAL_FIXTURE = (
     ROOT / "tests/fixtures/update-manifest-v1.3.6.json"
 )
+# 当前生产根覆盖 release-only 证据字段；与 legacy 真签名根一起防止 schema
+# 前滚时把已安装客户端或公开 manifest-health 夜巡锁死。
+CURRENT_PROMOTED_FIXTURE = (
+    ROOT / "tests/fixtures/update-manifest-v1.3.16.json"
+)
 SPEC = importlib.util.spec_from_file_location(
     "verify_update_manifest", ROOT / "scripts/verify-update-manifest.py"
 )
@@ -163,6 +168,102 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         self.assertEqual(
             verifier._verify_signed_manifest(raw)["version"], manifest["version"]
         )
+
+    def test_current_promoted_production_root_is_valid(self) -> None:
+        raw = CURRENT_PROMOTED_FIXTURE.read_bytes()
+        manifest = json.loads(raw)
+        self.assertEqual(manifest["version"], "1.3.16")
+        self.assertEqual(
+            {
+                "sourceCommit",
+                "sha256SumsSha256",
+                "promotionEvidence",
+            },
+            set(manifest) & {
+                "sourceCommit",
+                "sha256SumsSha256",
+                "promotionEvidence",
+            },
+        )
+        verified = verifier.verify_historical_archive(raw)
+        self.assertEqual(verified["version"], manifest["version"])
+
+    def test_legacy_production_root_without_release_evidence_remains_valid(self) -> None:
+        raw = (ROOT / "tests/fixtures/update-manifest-v1.3.4.json").read_bytes()
+        manifest = json.loads(raw)
+        self.assertFalse(
+            {"sourceCommit", "sha256SumsSha256", "promotionEvidence"} & set(manifest)
+        )
+        self.assertEqual(
+            verifier.verify_historical_archive(raw)["version"], manifest["version"]
+        )
+
+    def test_release_evidence_fields_are_allowlisted_at_schema_gate(self) -> None:
+        values = {
+            "sourceCommit": "a" * 40,
+            "sha256SumsSha256": "b" * 64,
+            "promotionEvidence": {
+                "schemaVersion": 1,
+                "candidateSha256": "c" * 64,
+                "sha256SumsSha256": "b" * 64,
+                "payloadBundleSha256": "d" * 64,
+                "payloadCount": 19,
+            },
+        }
+        tampered = dict(self.manifest)
+        tampered.update(values)
+        raw = json.dumps(tampered, ensure_ascii=False).encode()
+        with self.assertRaises(verifier.ManifestError) as caught:
+            verifier.verify(raw)
+        self.assertNotIn("unknown top-level", str(caught.exception))
+        self.assertIn("signature", str(caught.exception))
+
+    def test_release_evidence_policy_is_exact_and_cross_bound(self) -> None:
+        promoted = json.loads(CURRENT_PROMOTED_FIXTURE.read_bytes())
+        verifier._validate_manifest_policy(promoted)
+
+        bad_source = dict(promoted)
+        bad_source["sourceCommit"] = "A" * 40
+        with self.assertRaisesRegex(verifier.ManifestError, "canonical lowercase Git"):
+            verifier._validate_manifest_policy(bad_source)
+
+        evidence_keys = {"sourceCommit", "sha256SumsSha256", "promotionEvidence"}
+        for missing_key in evidence_keys:
+            with self.subTest(missing_key=missing_key):
+                partial = json.loads(CURRENT_PROMOTED_FIXTURE.read_bytes())
+                del partial[missing_key]
+                with self.assertRaisesRegex(verifier.ManifestError, "complete bundle"):
+                    verifier._validate_manifest_policy(partial)
+
+        legacy = json.loads(
+            (ROOT / "tests/fixtures/update-manifest-v1.3.4.json").read_bytes()
+        )
+        for present_key in evidence_keys:
+            with self.subTest(present_key=present_key):
+                partial = dict(legacy)
+                partial[present_key] = None
+                with self.assertRaisesRegex(verifier.ManifestError, "complete bundle"):
+                    verifier._validate_manifest_policy(partial)
+
+        all_null = dict(legacy)
+        all_null.update({key: None for key in evidence_keys})
+        with self.assertRaisesRegex(verifier.ManifestError, "canonical lowercase Git"):
+            verifier._validate_manifest_policy(all_null)
+
+        bad_evidence = json.loads(CURRENT_PROMOTED_FIXTURE.read_bytes())
+        bad_evidence["promotionEvidence"]["sha256SumsSha256"] = "0" * 64
+        with self.assertRaisesRegex(verifier.ManifestError, "must match"):
+            verifier._validate_manifest_policy(bad_evidence)
+
+        extra_evidence_key = json.loads(CURRENT_PROMOTED_FIXTURE.read_bytes())
+        extra_evidence_key["promotionEvidence"]["unreviewed"] = True
+        with self.assertRaisesRegex(verifier.ManifestError, "reviewed exact schema"):
+            verifier._validate_manifest_policy(extra_evidence_key)
+
+        bad_payload_count = json.loads(CURRENT_PROMOTED_FIXTURE.read_bytes())
+        bad_payload_count["promotionEvidence"]["payloadCount"] = True
+        with self.assertRaisesRegex(verifier.ManifestError, "integer 19"):
+            verifier._validate_manifest_policy(bad_payload_count)
 
     def test_required_key_removal_is_rejected(self) -> None:
         """放宽成「必需子集 + 白名单」之后，必需键少一个仍然必须拒。"""

@@ -55,8 +55,13 @@ REQUIRED_TOP_LEVEL_KEYS = {
 #
 # 新增可选键时：加进这个集合、更新 tests/test_update_manifest_verifier.py 的
 # test_unknown_top_level_key_is_rejected，并确认客户端 _candidateTopLevelKeys 也认它。
+# `sourceCommit` 与晋级证据来自新稳定根；真实旧根没有这些键，因此仍是可选，
+# 但 policy 会要求三键全有或全无并严格交叉绑定，不能把“前向兼容”误写成任意扩展。
 OPTIONAL_TOP_LEVEL_KEYS = {
     "notesEn",
+    "sourceCommit",
+    "sha256SumsSha256",
+    "promotionEvidence",
 }
 TOP_LEVEL_KEYS = REQUIRED_TOP_LEVEL_KEYS | OPTIONAL_TOP_LEVEL_KEYS
 EXPECTED_PLATFORM_ARTIFACTS = {
@@ -236,6 +241,68 @@ def _validate_manifest_policy(
         not isinstance(manifest["notesEn"], str) or not manifest["notesEn"].strip()
     ):
         raise ManifestError("notesEn must be a non-empty string when present")
+
+    evidence_keys = {"sourceCommit", "sha256SumsSha256", "promotionEvidence"}
+    present_evidence_keys = set(manifest) & evidence_keys
+    if present_evidence_keys and present_evidence_keys != evidence_keys:
+        raise ManifestError(
+            "sourceCommit, sha256SumsSha256, and promotionEvidence "
+            "must appear as one complete bundle"
+        )
+
+    source_commit = manifest["sourceCommit"] if present_evidence_keys else None
+    if present_evidence_keys and (
+        not isinstance(source_commit, str)
+        or len(source_commit) != 40
+        or any(character not in "0123456789abcdef" for character in source_commit)
+    ):
+        raise ManifestError("sourceCommit must be a canonical lowercase Git SHA-1")
+
+    sums_digest = manifest["sha256SumsSha256"] if present_evidence_keys else None
+    if present_evidence_keys and (
+        not isinstance(sums_digest, str)
+        or len(sums_digest) != 64
+        or any(character not in "0123456789abcdef" for character in sums_digest)
+    ):
+        raise ManifestError("sha256SumsSha256 must be a canonical lowercase SHA-256")
+
+    promotion_evidence = (
+        manifest["promotionEvidence"] if present_evidence_keys else None
+    )
+    if present_evidence_keys:
+        if not isinstance(promotion_evidence, dict) or set(promotion_evidence) != {
+            "schemaVersion",
+            "candidateSha256",
+            "sha256SumsSha256",
+            "payloadBundleSha256",
+            "payloadCount",
+        }:
+            raise ManifestError("promotionEvidence must use the reviewed exact schema")
+        if promotion_evidence.get("schemaVersion") != 1 or isinstance(
+            promotion_evidence.get("schemaVersion"), bool
+        ):
+            raise ManifestError("promotionEvidence schemaVersion must be integer 1")
+        for field in (
+            "candidateSha256",
+            "sha256SumsSha256",
+            "payloadBundleSha256",
+        ):
+            digest = promotion_evidence.get(field)
+            if (
+                not isinstance(digest, str)
+                or len(digest) != 64
+                or any(character not in "0123456789abcdef" for character in digest)
+            ):
+                raise ManifestError(
+                    f"promotionEvidence {field} must be a canonical lowercase SHA-256"
+                )
+        if promotion_evidence["sha256SumsSha256"] != sums_digest:
+            raise ManifestError(
+                "promotionEvidence sha256SumsSha256 must match the signed top-level digest"
+            )
+        payload_count = promotion_evidence.get("payloadCount")
+        if payload_count != 19 or isinstance(payload_count, bool):
+            raise ManifestError("promotionEvidence payloadCount must be integer 19")
 
     published = _utc_timestamp(manifest.get("publishedAt"), "publishedAt")
     expires = _utc_timestamp(manifest.get("expiresAt"), "expiresAt")

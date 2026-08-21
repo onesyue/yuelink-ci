@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.16",
+  "channel": "stable",
+  "publishedAt": "2026-08-21T20:25:12Z",
+  "expiresAt": "2026-09-25T20:25:12Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "2026-08-22 发布。短时 R2 永久锁证明现在严格匹配 GitHub Actions 的真实运行身份。\n\n## 修复与可靠性\n\n- **真实 API 语义**：修复 proof verifier 把 Actions run API 的 `name` 误认为 workflow 显示名的问题。配置 `run-name` 后，GitHub 实际会让 `name` 与 `display_title` 都携带版本和一次性随机 challenge。\n- **身份继续严格闭合**：两个标题字段都必须精确匹配；workflow id/path、签名 builder commit、当前 master、run attempt、源码、候选摘要、构建运行和 30 分钟有效期仍逐项验证。\n- **失败版本不覆盖**：v1.3.15 的双方签名标签、五平台候选、成功构建与失败关闭证据永久保留；它没有进入稳定更新清单，本版本仅以前滚方式修复。\n\n## 用户可见改进\n\n- 延续 v1.3.13 的未知流量与真实零流量区分、语言切换错误反馈、会员卡恢复态及全页面统一 44px 语言控件。\n\n## 兼容性\n\n- 账号、套餐、订阅、节点选择、更新签名公钥和安装包升级身份均不变。\n- 本补丁只修复发布供应链，不改变客户端运行时协议与数据格式。\n",
+  "notesEn": "Released on August 22, 2026. The short-lived R2 object-lock proof now matches GitHub Actions' real run identity exactly.\n\n## Reliability fixes\n\n- **Real API semantics:** fixes a verifier assumption that the Actions run API `name` remains the workflow display name. With `run-name` configured, GitHub sets both `name` and `display_title` to the version-and-challenge run title.\n- **Strict identity remains closed:** both title fields must match exactly, while workflow id/path, the signed builder commit, current master, run attempt, source, candidate digest, build run, and 30-minute lifetime remain independently bound.\n- **The failed release remains immutable:** both signed v1.3.15 tags, its five-platform candidate, successful build, and fail-closed proof evidence remain permanently retained. It never entered the stable updater manifest; this release only rolls forward.\n\n## User-visible improvements\n\n- Includes the v1.3.13 fixes for unknown versus real-zero traffic, visible language-save failures, recoverable membership-card errors, and consistent 44px language controls on every surface.\n\n## Compatibility\n\n- Accounts, plans, subscriptions, node selection, the update-signing public key, and installer upgrade identity are unchanged.\n- This patch only repairs the release supply chain; runtime protocols and data formats are unchanged.\n",
+  "sourceCommit": "1eda1e05712cd0b03ded741812441795fdcc37ac",
+  "sha256SumsSha256": "e48829f4ed36f71fa23f4771a9fad2ea1e52daf2bd0c023ebb04b41387d29c70",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.16/YueLink-1.3.16-android-arm64-v8a.apk",
+      "sha256": "6336d149184cdfd5309d57d2e3d49d15a3f9bcf35833c7b5bb16f84100195549"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.16/YueLink-1.3.16-android-armeabi-v7a.apk",
+      "sha256": "ac314751241a944a45aace11d0bbb5a42b653d23967d3be7b3b6a6a001513c3c"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.16/YueLink-1.3.16-android-x86_64.apk",
+      "sha256": "c3c7f2566a5aeb4af791f5dca57c43bba7f8e6c55b205b7805a8386079c10a07"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.16/YueLink-1.3.16-android-universal.apk",
+      "sha256": "bac10c02c9f1ff1039ece4f002f51fcc1f9c0b9e6bf4f05f0f2c0f5d3f6ca630"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.16/YueLink-1.3.16-ios.ipa",
+      "sha256": "7ef82cae4507b22d206280a28dd756ad9c4d1cfabc51aa5f807b4c3313c04a32"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.16/YueLink-1.3.16-macos-universal.dmg",
+      "sha256": "c4935de44a7545359e38654d4f1cbfe92c6618730b927bfd5ca3720c450e31b2"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.16/YueLink-1.3.16-windows-amd64-setup.exe",
+      "sha256": "79e20d9232ff10ca046c3a5e0b429b50207131a5438e5a10c6faa745d337d50e"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.16/YueLink-1.3.16-windows-amd64-portable.zip",
+      "sha256": "37768a6637f4346ee80999f4b794687fa98b74bfc1ca2f69bc68a3d8d441ee96"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.16/YueLink-1.3.16-linux-amd64.AppImage",
+      "sha256": "27efbbdb8ec8ca8be6d3c9f25babcecb24758d46677a2fa7855daeaa8a7e3694"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "6300c09abaf09035d8bf0ef5ee74df320da937d2e0c56a98460a7797d71794a2",
+    "sha256SumsSha256": "e48829f4ed36f71fa23f4771a9fad2ea1e52daf2bd0c023ebb04b41387d29c70",
+    "payloadBundleSha256": "df85e47b9089e3b4c4ba6bb289955abd7f10c0a1ac6e6f711547cde54bb119d2",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:Uly4ZKQbkJeyAdZQWUO5VnmlMHk1+TNN1/nnNeWBvsZ8qQRuKYnIHItTXp7oVaSeMZTA7yS3yBsuYZamBICICA=="
+}
