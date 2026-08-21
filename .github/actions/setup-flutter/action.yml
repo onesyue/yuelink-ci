@@ -1,0 +1,44 @@
+name: Set up pinned Flutter SDK
+description: Install a SHA-256-pinned official Flutter SDK without mutable nested actions
+
+inputs:
+  flutter-version:
+    description: Exact Flutter stable version supported by the installer
+    required: true
+  cache:
+    description: Cache the verified SDK on non-release jobs
+    required: false
+    default: "true"
+
+outputs:
+  flutter-root:
+    description: Absolute path of the verified Flutter SDK
+    value: ${{ steps.install.outputs.flutter-root }}
+
+runs:
+  using: composite
+  steps:
+    - name: Restore verified Flutter SDK cache
+      if: inputs.cache == 'true'
+      uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+      with:
+        path: ${{ runner.tool_cache }}/yue-flutter/${{ inputs.flutter-version }}/${{ runner.os }}-${{ runner.arch }}
+        key: yue-flutter-sdk-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.flutter-version }}
+
+    - name: Install and verify official Flutter SDK
+      id: install
+      shell: bash
+      env:
+        YUE_FLUTTER_VERSION: ${{ inputs.flutter-version }}
+        YUE_FLUTTER_TOOL_CACHE: ${{ runner.tool_cache }}
+        YUE_FLUTTER_RUNNER_OS: ${{ runner.os }}
+        YUE_FLUTTER_RUNNER_ARCH: ${{ runner.arch }}
+      run: |
+        set -euo pipefail
+        if command -v python3 >/dev/null 2>&1; then
+          python_bin=python3
+        else
+          python_bin=python
+        fi
+        "$python_bin" "$GITHUB_ACTION_PATH/install_flutter_sdk.py"
+
