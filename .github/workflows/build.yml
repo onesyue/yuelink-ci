@@ -2,7 +2,7 @@ name: Build YueLink
 
 # ┌───────────────────────────────────────────────────────────────────────┐
 # │ PUBLIC CI MIRROR — 本仓不含源码。源码在私有 onesyue/yuelink。见 README。         │
-# │ 触发：在本仓打同名 tag 推送 → checkout 私有仓同名 tag。产物全进 R2。       │
+# │ 触发：signed tag 绑定 source SHA → checkout 私有仓 exact commit。产物进 R2。 │
 # └───────────────────────────────────────────────────────────────────────┘
 #
 # Release builds. One matrix job covers every platform; release downloads
@@ -11,8 +11,8 @@ name: Build YueLink
 # target. This public builder never receives the updater-manifest private key.
 #
 # Triggers:
-#   • v*  tag → stable release
-#   • vX.Y.Z-pre[.N] tag → immutable pre-release artifacts (no updater root)
+#   • vX.Y.Z signed tag → stable release
+#   • every non-stable tag is rejected before source/R2 access
 #   • workflow_dispatch
 #
 # Analyze + integration tests live in ci.yml (master/PR/manual). The release
@@ -21,12 +21,19 @@ name: Build YueLink
 
 on:
   push:
-    # The floating `pre` tag is gone with the pre-release update channel.
-    # `vX.Y.Z-pre` still builds immutable R2 test artifacts, but no longer
-    # publishes any updater manifest.
+    # GitHub's tag filter is only the coarse trigger. source_binding below
+    # enforces exact stable vX.Y.Z syntax before querying source evidence.
     tags: ['v*']
   workflow_dispatch:
     inputs:
+      attested_source_commit:
+        description: 'Exact attested private source commit (40 lowercase hex)'
+        required: true
+        type: string
+      source_attestation_run_id:
+        description: 'Successful public source-attestation run id'
+        required: true
+        type: string
       only:
         description: '只构建某平台(测试用,正式发版 tag 触发恒为全平台)'
         type: choice
@@ -73,6 +80,121 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  source_binding:
+    name: Bind exact attested source
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+    outputs:
+      source_commit: ${{ steps.bind.outputs.source_commit }}
+      attestation_run_id: ${{ steps.bind.outputs.attestation_run_id }}
+    steps:
+      - name: Checkout exact source-attestation verifier
+        if: github.repository == 'onesyue/yuelink-ci'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.sha }}
+          path: .source-binding-tools
+          persist-credentials: false
+
+      - name: Resolve immutable source binding
+        id: bind
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          TRIGGER_COMMIT: ${{ github.sha }}
+          DISPATCH_SOURCE_COMMIT: ${{ inputs.attested_source_commit }}
+          DISPATCH_ATTESTATION_RUN_ID: ${{ inputs.source_attestation_run_id }}
+          SOURCE_ATTESTATION_VERIFIER: ${{ github.workspace }}/.source-binding-tools/scripts/verify-source-attestation.sh
+        run: |
+          set -euo pipefail
+          verify_public_attestation=0
+          if [[ "$REF" == refs/tags/* ]] &&
+             [[ ! "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::only stable vX.Y.Z release tags are supported; prerelease is retired"
+            exit 1
+          fi
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            source_commit="$DISPATCH_SOURCE_COMMIT"
+            attestation_run_id="$DISPATCH_ATTESTATION_RUN_ID"
+          elif [[ "$REF" == refs/tags/* ]] &&
+               [ "$REPOSITORY" = onesyue/yuelink-ci ]; then
+            ref_json="$(gh api "repos/$REPOSITORY/git/ref/tags/$REF_NAME")"
+            tag_object_sha="$(jq -er '.object.sha' <<<"$ref_json")"
+            [ "$(jq -er '.object.type' <<<"$ref_json")" = tag ] &&
+              [[ "$tag_object_sha" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "::error::public release ref must be an annotated tag"
+              exit 1
+            }
+            tag_json=''
+            for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+              tag_json="$(gh api "repos/$REPOSITORY/git/tags/$tag_object_sha")"
+              if jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
+                  .tag == $tag and .object.type == "commit" and
+                  .object.sha == $builder and .verification.verified == true and
+                  .verification.reason == "valid"
+                ' <<<"$tag_json" >/dev/null; then
+                break
+              fi
+              [ "$attempt" -eq 12 ] || sleep 5
+            done
+            jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
+              .tag == $tag and .object.type == "commit" and
+              .object.sha == $builder and .verification.verified == true and
+              .verification.reason == "valid"
+            ' <<<"$tag_json" >/dev/null || {
+              echo "::error::public tag is not exact builder + verified/valid"
+              exit 1
+            }
+            tag_message="$(jq -er '.message' <<<"$tag_json")"
+            [ "$(grep -Ec '^ATTESTED_SOURCE_COMMIT=[0-9a-f]{40}$' <<<"$tag_message")" -eq 1 ] &&
+              [ "$(grep -Ec '^SOURCE_ATTESTATION_RUN_ID=[1-9][0-9]*$' <<<"$tag_message")" -eq 1 ] || {
+              echo "::error::public signed tag lacks one closed source binding"
+              exit 1
+            }
+            source_commit="$(sed -nE 's/^ATTESTED_SOURCE_COMMIT=([0-9a-f]{40})$/\1/p' <<<"$tag_message")"
+            attestation_run_id="$(sed -nE 's/^SOURCE_ATTESTATION_RUN_ID=([1-9][0-9]*)$/\1/p' <<<"$tag_message")"
+            verify_public_attestation=1
+          elif [[ "$REF" == refs/tags/* ]] &&
+               [ "$REPOSITORY" = onesyue/yuelink ]; then
+            # The private workflow is retained only as a parity template. Its
+            # own tag is not an authority for the public release build.
+            source_commit="$TRIGGER_COMMIT"
+            attestation_run_id=private-template-only
+          else
+            echo "::error::unsupported source-binding event"
+            exit 1
+          fi
+          [[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::attested source commit must be exact lowercase SHA"
+            exit 1
+          }
+          if [ "$REPOSITORY" = onesyue/yuelink-ci ]; then
+            [[ "$attestation_run_id" =~ ^[1-9][0-9]*$ ]] || {
+              echo "::error::source attestation run id is missing or malformed"
+              exit 1
+            }
+            if [ "$verify_public_attestation" -eq 1 ]; then
+              [ -f "$SOURCE_ATTESTATION_VERIFIER" ] &&
+                [ ! -L "$SOURCE_ATTESTATION_VERIFIER" ] || {
+                echo "::error::exact builder source-attestation verifier is missing or unsafe"
+                exit 1
+              }
+              bash "$SOURCE_ATTESTATION_VERIFIER" \
+                "$REF_NAME" "$source_commit" "$TRIGGER_COMMIT" "$attestation_run_id"
+            fi
+          fi
+          printf 'source_commit=%s\nattestation_run_id=%s\n' \
+            "$source_commit" "$attestation_run_id" >> "$GITHUB_OUTPUT"
+          echo "ATTESTED_SOURCE_COMMIT=$source_commit"
+
   # ───────────────────────────────────────────────────────────────────────────
   # Single matrix build — one row per target platform.
   # Every row: setup go+flutter → build core → install core → flutter build
@@ -84,6 +206,7 @@ jobs:
   prepare:
     name: Prepare matrix
     runs-on: ubuntu-latest
+    needs: source_binding
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
     steps:
@@ -104,6 +227,7 @@ jobs:
   preflight:
     name: Release preflight
     runs-on: ubuntu-latest
+    needs: source_binding
     permissions:
       contents: read
     outputs:
@@ -112,11 +236,24 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: ${{ github.ref_name }}
+          ref: ${{ needs.source_binding.outputs.source_commit }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           fetch-depth: 0
           submodules: recursive
           persist-credentials: false
+
+      - name: Verify exact attested source checkout
+        shell: bash
+        env:
+          ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          BUILT_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          [ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ] || {
+            echo "::error::preflight source drift: attested=$ATTESTED_SOURCE_COMMIT built=$BUILT_SOURCE_COMMIT"
+            exit 1
+          }
+          echo "BUILT_SOURCE_COMMIT=$BUILT_SOURCE_COMMIT"
 
       - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@6285433f149d03fc8a274736fd854a9b0cd919b3 # pinned installer v1
         with:
@@ -162,7 +299,18 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           R2_KEY_ID: ${{ secrets.R2_KEY_ID }}
           R2_APP_KEY: ${{ secrets.R2_APP_KEY }}
+          CLOUDFLARE_R2_CONFIG_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
         run: bash scripts/ci/release_preflight.sh
+
+      - name: Verify live immutable version-prefix bucket lock
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          BUCKET: yuelink-dist
+          TAG: ${{ github.ref_name }}
+          R2_ACCOUNT_ID: 1e192a89cfaab399d211bb1dfe77a5cd
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
+        run: bash scripts/ci/verify_r2_bucket_lock.sh
 
       # Public mirror only: prove that the workflow revision which triggered
       # this tag is the exact generated projection of the private source tag.
@@ -178,13 +326,13 @@ jobs:
           path: .public-builder
           persist-credentials: false
 
-      - name: Verify public builder is in sync with private tag
+      - name: Verify public builder is in sync with exact source template
         if: github.repository == 'onesyue/yuelink-ci'
         run: bash .public-builder/sync-build.sh --check "$GITHUB_WORKSPACE"
 
   build:
     name: Build (${{ matrix.platform }})
-    needs: [prepare, preflight]
+    needs: [source_binding, prepare, preflight]
     runs-on: ${{ matrix.os }}
     env:
       PLATFORM: ${{ matrix.platform }}
@@ -209,14 +357,27 @@ jobs:
           sudo docker image prune -af 2>/dev/null || true
           echo "after:"; df -h / | tail -1
 
-      # CI 镜像仓：checkout 私有 onesyue/yuelink 同名 tag 源码到工作区根。
+      # CI 镜像仓：checkout public signed tag 绑定的 exact source commit。
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: ${{ github.ref_name }}
+          ref: ${{ needs.source_binding.outputs.source_commit }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           submodules: recursive
           persist-credentials: false
+
+      - name: Verify exact attested source checkout
+        shell: bash
+        env:
+          ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          BUILT_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          [ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ] || {
+            echo "::error::build source drift: attested=$ATTESTED_SOURCE_COMMIT built=$BUILT_SOURCE_COMMIT"
+            exit 1
+          }
+          echo "BUILT_SOURCE_COMMIT=$BUILT_SOURCE_COMMIT"
 
       # ── Toolchains (Go for core, Flutter for app, Java for android) ───────
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -317,13 +478,10 @@ jobs:
           done
           echo "ruleset seed OK: exact $count-file inventory, all zstd."
 
-      # ── Resolve version: pubspec for stable, append -pre for pre tag ──────
-      # Match both the legacy `pre` overwrite-channel tag and the
-      # versioned `vX.Y.Z-pre` / `vX.Y.Z-pre.N` prerelease tags. Before
-      # this expansion only `pre` was recognised, so `v1.0.20-pre`
-      # slipped through the `else` branch and shipped artifacts named
-      # `YueLink-1.0.20-*` (colliding with whatever the eventual stable
-      # v1.0.20 release would produce).
+      # ── Resolve version ──────────────────────────────────────────────────
+      # source_binding rejects every non-stable tag before this job. The
+      # prerelease case remains only as a defensive legacy branch; it cannot
+      # authorize source checkout or publication.
       - name: Extract version from pubspec
         shell: bash
         run: |
@@ -344,9 +502,9 @@ jobs:
           fi
           case "$TAG_KIND" in
             prerelease)
-              # The tag is the artifact identity. Preserve a numbered
-              # prerelease suffix (`-pre.N`) instead of collapsing every
-              # attempt onto the same `-pre` object keys.
+              # Unreachable behind stable-only source_binding. Preserve the
+              # historical parser branch solely so a future gate regression
+              # cannot collapse names onto a stable version.
               APP_VERSION="${GITHUB_REF_NAME#v}"
               ;;
             *)
@@ -1152,6 +1310,8 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_APP_KEY }}
           R2_ENDPOINT: https://1e192a89cfaab399d211bb1dfe77a5cd.r2.cloudflarestorage.com
+          R2_ACCOUNT_ID: 1e192a89cfaab399d211bb1dfe77a5cd
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
           AWS_DEFAULT_REGION: auto
           # R2 + aws-cli v2(runner 自带新版)默认发 CRC32 checksum 头, R2 对部分
           # 操作会拒 → when_required 只在必要时算/校验, 规避不兼容。
@@ -1181,8 +1341,9 @@ jobs:
     if: >-
       always() &&
       startsWith(github.ref, 'refs/tags/') &&
-      needs.preflight.result == 'success'
-    needs: [build, preflight]
+      needs.preflight.result == 'success' &&
+      needs.source_binding.result == 'success'
+    needs: [source_binding, build, preflight]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1190,11 +1351,28 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: ${{ github.ref_name }}
+          ref: ${{ needs.source_binding.outputs.source_commit }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
+
+      - name: Verify exact attested source checkout
+        id: release_source
+        shell: bash
+        env:
+          ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          BUILT_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          [ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ] || {
+            echo "::error::candidate source drift: attested=$ATTESTED_SOURCE_COMMIT built=$BUILT_SOURCE_COMMIT"
+            exit 1
+          }
+          printf 'BUILT_SOURCE_COMMIT=%s\n' "$BUILT_SOURCE_COMMIT" >> "$GITHUB_ENV"
+          printf 'built_source_commit=%s\n' "$BUILT_SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "ATTESTED_SOURCE_COMMIT=$ATTESTED_SOURCE_COMMIT"
+          echo "BUILT_SOURCE_COMMIT=$BUILT_SOURCE_COMMIT"
 
       - name: Set up Flutter for release-candidate verification
         if: needs.preflight.outputs.tag_kind == 'stable'
@@ -1215,6 +1393,8 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_APP_KEY }}
           R2_ENDPOINT: https://1e192a89cfaab399d211bb1dfe77a5cd.r2.cloudflarestorage.com
+          R2_ACCOUNT_ID: 1e192a89cfaab399d211bb1dfe77a5cd
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
           AWS_DEFAULT_REGION: auto
           # R2 + aws-cli v2(runner 自带新版)默认发 CRC32 checksum 头, R2 对部分
           # 操作会拒 → when_required 只在必要时算/校验, 规避不兼容。
@@ -1326,9 +1506,8 @@ jobs:
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           TAG="${GITHUB_REF_NAME}"
           NOTES_FILE=""
-          # Prerelease detection must mirror the manifest / release-flag
-          # branches above. `docs/releases/pre.md` is gone with the pre
-          # channel — a `vX.Y.Z-pre` tag needs its own notes file.
+          # Defensive legacy classification; stable-only source_binding makes
+          # the prerelease branch unreachable in a public release run.
           TAG_KIND="$(bash scripts/ci/release_tag.sh kind "$TAG")"
           if [ "$TAG_KIND" = "prerelease" ]; then
             VERSION="${TAG#v}"
@@ -1488,14 +1667,20 @@ jobs:
 
       # ── Unsigned updater candidate for the private signing plane ─────────
       - name: Generate updater manifest candidate
+        env:
+          ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
         run: |
+          set -euo pipefail
           VERSION="$APP_VERSION"
           TAG="${GITHUB_REF_NAME}"
-          # There is exactly one channel now — stable/`update.json`. The
-          # pre-release channel was retired, so a `vX.Y.Z-pre` tag must NOT
-          # publish a manifest at all: it still produces immutable R2 test
-          # artifacts, but writing it into update.json would flip
-          # every stable user onto an unreleased build.
+          [ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ] || {
+            echo "::error::candidate source mismatch: attested=$ATTESTED_SOURCE_COMMIT built=$BUILT_SOURCE_COMMIT"
+            exit 1
+          }
+          # There is exactly one channel now: stable/update.json. source_binding
+          # rejects prerelease tags before source/R2 access; keep this second
+          # fail-closed branch so a future upstream gate regression still
+          # cannot create an updater candidate.
           TAG_KIND="$(bash scripts/ci/release_tag.sh kind "$TAG")"
           if [ "$TAG_KIND" = "prerelease" ]; then
             echo "::notice::$TAG is a prerelease tag — skipping manifest publish (no pre channel)"
@@ -1517,6 +1702,9 @@ jobs:
           # (iOS post-download, manifest-missing platforms). Point it at
           # the real download page.
           RELEASE_URL="https://yue.to/download.html"
+          SUMS_FILE="dist/YueLink-${VERSION}-SHA256SUMS"
+          test -s "$SUMS_FILE"
+          SHA256SUMS_SHA256="$(sha256sum "$SUMS_FILE" | awk '{print $1}')"
           # User-facing notes only (generated alongside release_notes.md).
           # NEVER read release_notes.md here — by this point it carries the
           # English RELEASE-STATUS preamble meant for the operator job summary.
@@ -1584,8 +1772,10 @@ jobs:
             --arg releaseUrl "$RELEASE_URL" \
             --argjson notes "$NOTES" \
             --argjson notesEn "$NOTES_EN" \
+            --arg sourceCommit "$ATTESTED_SOURCE_COMMIT" \
+            --arg sha256SumsSha256 "$SHA256SUMS_SHA256" \
             --argjson platforms "$PLATFORMS" \
-            '{schemaVersion: $schemaVersion, keyId: $keyId, version: $version, channel: $channel, publishedAt: $publishedAt, expiresAt: $expiresAt, releaseUrl: $releaseUrl, notes: $notes, notesEn: $notesEn, platforms: $platforms}' \
+            '{schemaVersion: $schemaVersion, keyId: $keyId, version: $version, channel: $channel, publishedAt: $publishedAt, expiresAt: $expiresAt, releaseUrl: $releaseUrl, notes: $notes, notesEn: $notesEn, sourceCommit: $sourceCommit, sha256SumsSha256: $sha256SumsSha256, platforms: $platforms}' \
             > "$MANIFEST_NAME"
           echo "MANIFEST_NAME=$MANIFEST_NAME" >> "$GITHUB_ENV"
           jq . "$MANIFEST_NAME"
@@ -1615,12 +1805,16 @@ jobs:
 
       - name: Validate unsigned stable manifest candidate
         if: env.SKIP_MANIFEST != '1'
+        env:
+          ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
         run: |
           set -euo pipefail
           jq -e '
             .schemaVersion == 1 and
             .keyId == "update-manifest-2026-01" and
             .channel == "stable" and
+            .sourceCommit == env.ATTESTED_SOURCE_COMMIT and
+            (.sha256SumsSha256 | test("^[0-9a-f]{64}$")) and
             (has("sig") | not) and
             (.platforms | length) == 9 and
             all(.platforms[]; .sha256 | test("^[0-9a-f]{64}$"))
@@ -1645,6 +1839,7 @@ jobs:
           AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
           BUCKET: yuelink-dist
           TAG: ${{ github.ref_name }}
+          ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
         run: |
           set -euo pipefail
           if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
@@ -1676,19 +1871,26 @@ jobs:
               "dist/YueLink-${APP_VERSION}-SHA256SUMS.sha256"
           fi
           bash scripts/ci/publish_immutable_r2.sh
-          # Prerelease tags intentionally have no candidate. Stable candidates
-          # wait for the private signing plane; this job cannot move the root.
+          # A deliberately skipped candidate (for example an incomplete stable
+          # matrix) never moves the root; complete candidates wait for the
+          # private signing plane.
           if [ "${SKIP_MANIFEST:-0}" = "1" ]; then
-            echo "✓ 已发布安装包到 R2 ($BUCKET/$TAG/) — prerelease, 未发布 manifest"
+            echo "✓ 已发布当前可用安装包到 R2 ($BUCKET/$TAG/) — 未生成 candidate/root"
           else
             echo "✓ 已发布不可变 $TAG/$MANIFEST_NAME + 安装包"
             candidate_sha256="$(sha256sum "$MANIFEST_NAME" | awk '{print $1}')"
             source_commit="$(git rev-parse HEAD)"
+            [ "$source_commit" = "$BUILT_SOURCE_COMMIT" ] &&
+              [ "$source_commit" = "$ATTESTED_SOURCE_COMMIT" ] || {
+              echo "::error::summary source mismatch: attested=$ATTESTED_SOURCE_COMMIT built=$BUILT_SOURCE_COMMIT actual=$source_commit"
+              exit 1
+            }
             {
               echo "## Awaiting private manifest signature"
               echo
               echo "Public CI produced \`$TAG/$MANIFEST_NAME\` only."
-              echo "- Source commit: \`$source_commit\`"
+              echo "- ATTESTED_SOURCE_COMMIT: \`$ATTESTED_SOURCE_COMMIT\`"
+              echo "- BUILT_SOURCE_COMMIT: \`$BUILT_SOURCE_COMMIT\`"
               echo "- Candidate SHA-256: \`$candidate_sha256\`"
               echo "Pass both exact values to the protected local/private signing"
               echo "plane only after the artifact verification step also succeeds."
@@ -1712,8 +1914,8 @@ jobs:
           exit 1
 
   # ───────────────────────────────────────────────────────────────────────────
-  # 2026-06-02 旧版本清理已与发版解耦: 改由 prune-r2.yml 每日定时跑(+ 手动)。
-  # 理由: prune 是发布后的"清理", 不该让它的失败把整次发版标红(曾因 aws s3 rm
-  # 不支持 --no-progress exit 252 误报"发版失败")。每日 prune 保留当前 + 最近
-  # 两个完整 stable 版本(约 3GB),既能回滚也远在免费档 10GB 之下。
+  # 2026-08-21: Cloudflare bucket lock permanently protects every object below
+  # prefix `v`. The mirror's historical prune-r2.yml is now a read-only lock /
+  # signed-archive audit. No release prefix is deleted or overwritten; storage
+  # growth is an intentional supply-chain retention decision.
   # ───────────────────────────────────────────────────────────────────────────

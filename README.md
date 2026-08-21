@@ -2,7 +2,13 @@
 
 This repository contains no application source. Its workflow is generated
 from the private `onesyue/yuelink` release workflow by `sync-build.sh`; each
-public tag checks out the private repository's exact same tag.
+public signed annotated tag carries an `ATTESTED_SOURCE_COMMIT=<40hex>` and
+`SOURCE_ATTESTATION_RUN_ID=<id>` machine binding. The public build checks out
+the exact builder revision's shared `verify-source-attestation.sh`, then
+independently authenticates the referenced run identity, exact proof artifact,
+full gate closure and GitHub provenance before it checks out that private
+commit. It refuses any `BUILT_SOURCE_COMMIT` mismatch. A same-named private tag
+is release-input validation, not build authority.
 
 Stable releases are fail-closed on the Android upgrade key, immutable R2
 credentials, and private-source deploy key before a public tag is created.
@@ -44,17 +50,37 @@ gh workflow run source-attestation.yml -R onesyue/yuelink-ci \
   -f source_sha="$SOURCE_SHA"
 # Wait for every source gate and the final provenance job to succeed.
 
-# Then create/push the private source tag and mirror it. release.sh downloads
+# Then create/push the signed private source tag and mirror it. release.sh downloads
 # the proof, checks source/tag/builder/run/gate identity, and verifies its
 # GitHub artifact attestation before it can create the public tag.
 ./release.sh vX.Y.Z
 ```
 
-`release.sh` verifies the private tag exists, the public tag does not, the
-generated workflow exactly matches that private tag, every mandatory sideload
-secret is configured, and a successful source attestation from the exact
-current yuelink-ci workflow commit binds all canonical gates to the private
-tag's peeled commit before it creates an immutable public tag.
+`release.sh` verifies the private tag is a GitHub-verified signed annotated
+release input, the generated workflow exactly matches that source commit,
+every mandatory
+sideload secret is configured, and a successful source attestation from the
+exact current yuelink-ci workflow commit binds all canonical gates to the
+private tag's peeled commit. The builder commit itself must be signed and
+GitHub-verified before the script can create a signed annotated public tag.
+The remote tag namespace is handled idempotently: an existing name succeeds
+only when it is annotated, peels to the exact builder commit and has a
+GitHub `verified/valid` signature; an uncertain push is followed by a fresh
+remote read. New and existing tags are both polled for GitHub verification,
+and the script never deletes, overwrites or re-tags a failed immutable name.
+Before any push, a retained local annotated tag must also match the complete
+expected annotation bytes; matching only the builder commit is insufficient.
+Both repositories therefore authenticate the selected source and builder
+revisions instead of relying on an unsigned ref name or a successful push exit
+status.
+
+Every object below the R2 `v` prefix is now retained permanently under the
+live, enabled Cloudflare indefinite bucket-lock rule
+`yuelink-release-versioned-indefinite` (`prefix=v`). The historical
+`prune-r2.yml` filename now runs a read-only archive/lock audit; it contains no
+delete or overwrite path. There is no implicitly cleanable namespace. Any
+future ephemeral area must have a separate explicit prefix, age and ownership
+contract outside both locked `v` and `security/` prefixes.
 
 The source attestation is equal to or stronger than the private source jobs:
 it checks master ancestry, the complete unreleased Dart format delta, Android
@@ -69,8 +95,24 @@ copied into this public repository; the protected promotion step verifies the
 real key and remains independently mandatory.
 
 Every external `uses:` reference in all public workflows is pinned to a full
-40-character commit SHA. The repository-level Actions policy is correspondingly
-set to `sha_pinning_required=true`, and `.github/dependabot.yml` maintains those
+40-character commit SHA. The repository-level Actions policy enforces that
+pinning, and `.github/dependabot.yml` maintains those
 immutable pins with reviewed weekly pull requests. Local or dynamically
 resolved actions are intentionally absent; adding one requires revisiting the
 repository policy before it can merge.
+
+The live repository policy was read back on **2026-08-21** as
+`allowed_actions=selected`, `sha_pinning_required=true`,
+`github_owned_allowed=true`, and `verified_allowed=false`. GitHub-owned actions
+are covered by that dedicated switch; the selected external patterns are the
+following exact closed set, with no unused allowance:
+
+```
+android-actions/setup-android@*
+onesyue/yuelink-ci@*
+```
+
+The contract inventories all six workflow files plus the composite Flutter
+action (seven action-bearing YAML definitions), checks every `uses:` against
+this policy, and rejects mutable refs, an unknown external repository, or a
+stale/extra documented pattern.

@@ -370,30 +370,62 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self.assert_manifest_health_compares_signed_sidecars(mutated)
 
-    def assert_prune_authenticates_manifest_roots(self, workflow: str) -> None:
+    def assert_r2_archive_audit_is_immutable(self, workflow: str) -> None:
         self.assertIn("permissions:\n  contents: read", workflow)
         self.assertIn("Checkout pinned manifest verifier", workflow)
         self.assertIn(
-            'python3 scripts/verify-update-manifest.py "$ROOT_MANIFEST"', workflow
+            'python3 scripts/verify-update-manifest.py "$root_manifest"', workflow
         )
-        self.assertIn('--historical-archive "$ARCHIVED"', workflow)
+        self.assertIn('--historical-archive "$archive_manifest"', workflow)
+        for marker in (
+            "name: Audit immutable R2 releases",
+            "CLOUDFLARE_R2_CONFIG_TOKEN",
+            "LOCK_RULE_ID: yuelink-release-versioned-indefinite",
+            '.enabled == true and .prefix == "v"',
+            '.condition.type == "Indefinite"',
+            '--max-redirs 0 --max-filesize 262144',
+            'cmp -s "$root_manifest" "$archive_manifest"',
+            "all \\`v*/\\` release evidence is retained permanently",
+            "no release object was mutated",
+        ):
+            self.assertIn(marker, workflow)
 
-    def test_r2_prune_authenticates_live_and_historical_roots(self) -> None:
-        self.assert_prune_authenticates_manifest_roots(
+        # The legacy filename is retained, but it is now a read-only audit.
+        # Reject every AWS mutation primitive that could defeat permanent
+        # version retention (or simply 403 forever under the live lock).
+        for forbidden in (
+            "aws s3 rm",
+            "aws s3 mv",
+            "aws s3 sync",
+            "aws s3api delete-object",
+            "aws s3api delete-objects",
+            "aws s3api put-object",
+        ):
+            self.assertNotIn(forbidden, workflow)
+
+    def test_r2_archive_audit_authenticates_lock_and_manifest_roots(self) -> None:
+        self.assert_r2_archive_audit_is_immutable(
             PRUNE_R2.read_text(encoding="utf-8")
         )
 
-    def test_r2_prune_manifest_authentication_is_mutation_sensitive(self) -> None:
+    def test_r2_archive_audit_contract_is_mutation_sensitive(self) -> None:
         workflow = PRUNE_R2.read_text(encoding="utf-8")
         for marker in (
-            'python3 scripts/verify-update-manifest.py "$ROOT_MANIFEST"',
-            '--historical-archive "$ARCHIVED"',
+            'python3 scripts/verify-update-manifest.py "$root_manifest"',
+            '--historical-archive "$archive_manifest"',
+            "LOCK_RULE_ID: yuelink-release-versioned-indefinite",
+            '.condition.type == "Indefinite"',
+            'cmp -s "$root_manifest" "$archive_manifest"',
         ):
             with self.subTest(marker=marker):
                 mutated = workflow.replace(marker, "", 1)
                 self.assertNotEqual(mutated, workflow)
                 with self.assertRaises(AssertionError):
-                    self.assert_prune_authenticates_manifest_roots(mutated)
+                    self.assert_r2_archive_audit_is_immutable(mutated)
+
+        destructive = workflow + "\n# regression\naws s3 rm s3://yuelink-dist/v1.0.0 --recursive\n"
+        with self.assertRaises(AssertionError):
+            self.assert_r2_archive_audit_is_immutable(destructive)
 
 
 if __name__ == "__main__":

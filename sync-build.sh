@@ -52,7 +52,7 @@ must_replace(
 
 # ┌───────────────────────────────────────────────────────────────────────┐
 # │ PUBLIC CI MIRROR — 本仓不含源码。源码在私有 onesyue/yuelink。见 README。         │
-# │ 触发：在本仓打同名 tag 推送 → checkout 私有仓同名 tag。产物全进 R2。       │
+# │ 触发：signed tag 绑定 source SHA → checkout 私有仓 exact commit。产物进 R2。 │
 # └───────────────────────────────────────────────────────────────────────┘
 #
 # Release builds.""",
@@ -60,26 +60,21 @@ must_replace(
 
 # 2) preflight job checkout
 must_replace(
-"""    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+"""      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          ref: ${{ needs.source_binding.outputs.source_commit }}
           fetch-depth: 0
           submodules: recursive
           persist-credentials: false
-
-      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@6285433f149d03fc8a274736fd854a9b0cd919b3 # pinned installer v1
 """,
-"""    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+"""      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: ${{ github.ref_name }}
+          ref: ${{ needs.source_binding.outputs.source_commit }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           fetch-depth: 0
           submodules: recursive
           persist-credentials: false
-
-      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@6285433f149d03fc8a274736fd854a9b0cd919b3 # pinned installer v1
 """,
 "preflight-checkout")
 
@@ -87,14 +82,15 @@ must_replace(
 must_replace(
 """      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          ref: ${{ needs.source_binding.outputs.source_commit }}
           submodules: recursive
           persist-credentials: false
 """,
-"""      # CI 镜像仓：checkout 私有 onesyue/yuelink 同名 tag 源码到工作区根。
+"""      # CI 镜像仓：checkout public signed tag 绑定的 exact source commit。
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: ${{ github.ref_name }}
+          ref: ${{ needs.source_binding.outputs.source_commit }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           submodules: recursive
           persist-credentials: false
@@ -103,25 +99,20 @@ must_replace(
 
 # 4) release job checkout
 must_replace(
-"""    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+"""      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          ref: ${{ needs.source_binding.outputs.source_commit }}
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Set up Flutter for release-candidate verification
 """,
-"""    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+"""      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: ${{ github.ref_name }}
+          ref: ${{ needs.source_binding.outputs.source_commit }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
-
-      - name: Set up Flutter for release-candidate verification
 """,
 "release-checkout")
 

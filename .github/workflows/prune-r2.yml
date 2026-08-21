@@ -1,48 +1,38 @@
-name: Prune old versions from R2
+name: Audit immutable R2 releases
 
-# 自动删除 R2 (yuelink-dist) 里的旧版本安装包,保留当前 + 最近两个完整
-# stable 版本(默认 3 版,约 3GB)。回滚至少需要上一稳定版仍在;只留当前版
-# 会把“不可变发布”退化成不可恢复删除。
+# Historical filename retained so existing workflow_run wiring and bookmarks do
+# not break. Since 2026-08-21, every object below the `v` prefix is protected by
+# the indefinite Cloudflare bucket-lock rule
+# `yuelink-release-versioned-indefinite`. Versioned release evidence is a
+# permanent supply-chain record: this workflow is read-only and must never
+# delete, overwrite, copy-to, or otherwise mutate a v*/ release object.
 #
-# 2026-06-02: 与发版解耦 —— 改为每日定时跑(原先挂在 release 之后, prune 一失败
-# 整次发版就标红, 误导成"发版失败")。发版只管发布, 清理交给这个定时任务。
-#
-# 触发:
-#   - workflow_run : "Build YueLink" 完成后自动跑(发版末尾 update.json 已更新,
-#     正好清掉旧版)。作为独立 workflow, prune 失败只标红它自己、不污染发版状态
-#     —— 仍尊重 2026-06-02 的解耦决定。这条修掉了"GitHub cron 漏跑 → 旧版堆积"。
-#   - schedule : 每日 18:30 UTC 兜底(cron 不可靠, 可能延迟/跳过)。
-#   - workflow_dispatch : 手动触发(临时清理 / 排查)。
-#
-# 安全: 保留集只从经固定 Ed25519 根验真的 manifest 读取; 读不到或验签失败
-# 则**中止**, 绝不在不确定时删除。历史归档不套用当前防回滚地板（否则上一版
-# 一旦低于新地板就会失去恢复名额），但仍执行完整签名与 schema/policy 验证。
+# There is currently no designated ephemeral R2 namespace. If one is added, it
+# needs a separate explicit prefix/age/owner contract and must remain outside
+# both the locked `v` and `security/` namespaces; it is not implicitly eligible
+# for cleanup here.
 
 on:
   workflow_run: # zizmor: ignore[dangerous-triggers] no upstream artifacts/code; exact run identity + pinned verifier + signed R2 roots
     workflows: ["Build YueLink"]
     types: [completed]
   schedule:
-    - cron: '30 18 * * *'   # 每日 18:30 UTC ≈ 次日 02:30 北京 (兜底)
+    - cron: '30 18 * * *'
   workflow_dispatch:
 
-# 只读 checkout 固定在受信默认分支，以复用仓内的 Ed25519 验证器；R2 仍是
-# 此 workflow 唯一写权限，GITHUB_TOKEN 不拥有仓库写权。
 permissions:
   contents: read
 
-# The schedule, workflow_run hook and manual recovery path can fire together.
-# Serialize destructive bucket walks; the body independently treats any
-# incomplete/newer prefix as live and therefore remains safe alongside Build.
+# Keep the historical group name to serialize schedule/manual/workflow_run
+# audits. No bucket mutation occurs, but a single report is easier to review.
 concurrency:
   group: yuelink-r2-prune
   cancel-in-progress: false
 
 jobs:
-  prune:
-    name: Prune old version prefixes
+  audit:
+    name: Audit permanent versioned releases
     runs-on: ubuntu-latest
-    # workflow_run 触发时只在构建成功后清(失败构建不动 R2); schedule/手动恒跑。
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Validate trusted Build workflow_run identity
@@ -92,260 +82,111 @@ jobs:
       - name: Checkout pinned manifest verifier
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          # workflow_run/schedule execute the trusted default-branch workflow;
-          # pin checkout to that exact workflow revision, never the source run.
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Prune R2
+      - name: Audit live lock and permanent release archive
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_APP_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
+          R2_ACCOUNT_ID: 1e192a89cfaab399d211bb1dfe77a5cd
           R2_ENDPOINT: https://1e192a89cfaab399d211bb1dfe77a5cd.r2.cloudflarestorage.com
           AWS_DEFAULT_REGION: auto
           AWS_REQUEST_CHECKSUM_CALCULATION: when_required
           AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
           BUCKET: yuelink-dist
+          LOCK_RULE_ID: yuelink-release-versioned-indefinite
         run: |
           set -euo pipefail
-          if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
-            echo "::error::R2_KEY_ID/R2_APP_KEY 未配置 — 无法 prune"; exit 1
-          fi
-
-          # 1) 当前版本必须来自 root manifest。每个可回滚候选还必须有归档
-          #    update.json、签名字段、精确九平台和对应二进制/sidecar 对象;
-          #    半截构建或被人工删坏的前缀不占回滚名额。
-          ROOT_MANIFEST=$(mktemp)
-          PREFIXES=$(mktemp)
-          COMPLETE=$(mktemp)
-          ARCHIVED=$(mktemp)
-          trap 'rm -f "$ROOT_MANIFEST" "$PREFIXES" "$COMPLETE" "$ARCHIVED"' EXIT
-          aws s3 cp "s3://$BUCKET/update.json" "$ROOT_MANIFEST" \
-            --endpoint-url "$R2_ENDPOINT" >/dev/null 2>&1 || {
-              echo "::error::无法读取 root update.json — 中止"
+          for required in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY CLOUDFLARE_API_TOKEN; do
+            [ -n "${!required:-}" ] || {
+              echo "::error::$required is required for the immutable R2 audit"
               exit 1
             }
-          python3 scripts/verify-update-manifest.py "$ROOT_MANIFEST" || {
-            echo "::error::root update.json 未通过固定 Ed25519 根/防回滚地板 — 中止"
+          done
+          for command_name in aws curl jq python3; do
+            command -v "$command_name" >/dev/null 2>&1 || {
+              echo "::error::missing audit command: $command_name"
+              exit 1
+            }
+          done
+
+          audit_dir="$(mktemp -d)"
+          chmod 700 "$audit_dir"
+          trap 'rm -rf "$audit_dir"' EXIT
+          root_manifest="$audit_dir/update.json"
+          archive_manifest="$audit_dir/archive.json"
+          lock_response="$audit_dir/lock.json"
+          prefixes="$audit_dir/version-prefixes.txt"
+
+          aws s3 cp "s3://$BUCKET/update.json" "$root_manifest" \
+            --endpoint-url "$R2_ENDPOINT" --no-progress --only-show-errors
+          python3 scripts/verify-update-manifest.py "$root_manifest"
+          current_version="$(jq -er '.version | select(type == "string")' "$root_manifest")"
+          [[ "$current_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::signed root does not contain a stable SemVer"
             exit 1
           }
-          CURRENT_VERSION=$(jq -er \
-            '.version | select(type == "string")' "$ROOT_MANIFEST" \
-            2>/dev/null || true)
-          if ! [[ "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::无法从 root update.json 读出稳定版本 — 中止(绝不在不确定时删除)"
+          current_prefix="v$current_version"
+
+          curl --fail --silent --show-error \
+            --proto '=https' --tlsv1.2 \
+            --connect-timeout 10 --max-time 30 \
+            --retry 2 --retry-all-errors --retry-max-time 30 \
+            --max-redirs 0 --max-filesize 262144 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            --output "$lock_response" \
+            "https://api.cloudflare.com/client/v4/accounts/$R2_ACCOUNT_ID/r2/buckets/$BUCKET/lock"
+          jq -e --arg id "$LOCK_RULE_ID" --arg target "$current_prefix/" '
+            .success == true and (.errors | length) == 0 and
+            ([.result.rules[]? |
+              select(
+                .id == $id and .enabled == true and .prefix == "v" and
+                .condition.type == "Indefinite" and
+                (.prefix as $prefix | $target | startswith($prefix))
+              )] | length) == 1
+          ' "$lock_response" >/dev/null || {
+            echo "::error::required live R2 lock is missing or changed: $LOCK_RULE_ID prefix=v type=Indefinite enabled=true"
             exit 1
-          fi
-          CURRENT_PREFIX="v$CURRENT_VERSION"
+          }
+
+          aws s3 cp "s3://$BUCKET/$current_prefix/update.json" "$archive_manifest" \
+            --endpoint-url "$R2_ENDPOINT" --no-progress --only-show-errors
+          python3 scripts/verify-update-manifest.py \
+            --historical-archive "$archive_manifest"
+          cmp -s "$root_manifest" "$archive_manifest" || {
+            echo "::error::root update.json differs from permanent $current_prefix archive"
+            exit 1
+          }
 
           aws s3 ls "s3://$BUCKET/" --endpoint-url "$R2_ENDPOINT" \
             | awk '/ PRE /{print $2}' | sed 's#/##' \
-            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' > "$PREFIXES" || true
-          while read -r prefix; do
-            [ -n "$prefix" ] || continue
-            if ! aws s3 cp "s3://$BUCKET/$prefix/update.json" "$ARCHIVED" \
-                --endpoint-url "$R2_ENDPOINT" >/dev/null 2>&1; then
-              continue
-            fi
-            if ! python3 scripts/verify-update-manifest.py \
-                --historical-archive "$ARCHIVED"; then
-              echo "::warning::$prefix 归档 manifest 未通过固定 Ed25519 根 — 不计入恢复集"
-              continue
-            fi
-            if ! jq -e --arg prefix "$prefix" '
-                .schemaVersion == 1 and
-                (.keyId | type == "string" and
-                  test("^update-manifest-[0-9]{4}-[0-9]{2}$")) and
-                .channel == "stable" and
-                ("v" + .version) == $prefix and
-                (.sig | type == "string" and startswith("ed25519:")) and
-                (.platforms | keys | sort) == ([
-                  "android-arm64-v8a", "android-armeabi-v7a",
-                  "android-universal", "android-x86_64", "ios",
-                  "linux-amd64-appimage", "macos-universal",
-                  "windows-amd64-portable", "windows-amd64-setup"
-                ] | sort) and
-                all(.platforms[]; (
-                  .url | type == "string" and
-                  startswith("https://yuetong.app/" + $prefix + "/")
-                ) and (.sha256 | test("^[0-9a-f]{64}$")))
-              ' "$ARCHIVED" >/dev/null 2>&1; then
-              continue
-            fi
-            if [ "$prefix" = "$CURRENT_PREFIX" ] &&
-               ! cmp -s "$ROOT_MANIFEST" "$ARCHIVED"; then
-              echo "::error::root update.json 与 $prefix 归档不一致 — 中止"
-              exit 1
-            fi
-
-            complete=1
-            while IFS=$'\t' read -r url digest; do
-              key="${url#https://yuetong.app/}"
-              case "$key" in "$prefix/"*) ;; *) complete=0; break ;; esac
-              binary="${key##*/}"
-              if ! aws s3api head-object --bucket "$BUCKET" --key "$key" \
-                    --endpoint-url "$R2_ENDPOINT" >/dev/null 2>&1 ||
-                 ! sidecar=$(aws s3 cp "s3://$BUCKET/$key.sha256" - \
-                    --endpoint-url "$R2_ENDPOINT" 2>/dev/null) ||
-                 [ "$(printf '%s' "$sidecar" | awk 'NR == 1 {print tolower($1)}')" != "$digest" ]; then
-                echo "::warning::$prefix 不完整: $binary 或其 sidecar 缺失/不一致"
-                complete=0
-                break
-              fi
-            done < <(jq -r '.platforms[] | [.url, .sha256] | @tsv' "$ARCHIVED")
-            [ "$complete" -eq 1 ] && echo "$prefix" >> "$COMPLETE"
-          done < "$PREFIXES"
-
-          grep -qx "$CURRENT_PREFIX" "$COMPLETE" || {
-            echo "::error::当前版本 $CURRENT_PREFIX 没有完整归档 manifest — 中止"
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-pre(\.[0-9]+)?)?$' \
+            | sort -V > "$prefixes" || true
+          grep -qx "$current_prefix" "$prefixes" || {
+            echo "::error::current permanent release prefix is absent from the bucket inventory"
             exit 1
           }
 
-          # Keep current plus the two highest complete stable versions other
-          # than current. Before the second retained version exists, abort
-          # instead of pretending rollback is available.
-          KEEP=$(
-            {
-              echo "$CURRENT_PREFIX"
-              { grep -vx "$CURRENT_PREFIX" "$COMPLETE" || true; } \
-                | sort -Vr | head -2
-            } | sort -u
-          )
-          KEEP_COUNT=$(printf '%s\n' "$KEEP" | grep -c . || true)
-          if [ "$KEEP_COUNT" -lt 2 ]; then
-            echo "::warning::只有 $KEEP_COUNT 个完整 stable 版本;至少 2 个才允许删除。跳过 prune。"
-            exit 0
-          fi
-          echo "保留完整 stable 版本($KEEP_COUNT):"
-          while IFS= read -r kept; do
-            printf '  %s\n' "$kept"
-          done <<< "$KEEP"
+          inventory="$(aws s3 ls "s3://$BUCKET/v" --recursive --summarize \
+            --endpoint-url "$R2_ENDPOINT" 2>/dev/null)"
+          object_count="$(awk '/Total Objects:/{print $3}' <<<"$inventory")"
+          byte_count="$(awk '/Total Size:/{print $3}' <<<"$inventory")"
+          object_count="${object_count:-0}"
+          byte_count="${byte_count:-0}"
+          prefix_count="$(grep -c . "$prefixes" || true)"
+          gib="$(awk "BEGIN{printf \"%.2f\", $byte_count/1024/1024/1024}")"
 
-          # 2) 只删除可证明已经完成的发布前缀:
-          #    - stable 必须在上面的 COMPLETE 集合里。没有归档 manifest 的
-          #      前缀可能是正在上传的构建,也可能是历史半截构建;定时任务都
-          #      fail-safe 跳过,交给人工盘点,绝不和 release matrix 抢对象。
-          #    - prerelease 没有 manifest,以最终聚合 SHA256SUMS 作为完成标记,
-          #      且至少静置 6h 才可清理,避开 schedule 与仍在收尾的构建竞争。
-          #    - 任何不严格匹配发布 tag 的 v* 目录一律不碰。
-          #    完整 stable 始终至少保留当前 + 上一版。
-          aws s3 ls "s3://$BUCKET/" --endpoint-url "$R2_ENDPOINT" \
-            | awk '/ PRE /{print $2}' | sed 's#/##' | while read -r p; do
-            if [[ "$p" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              if ! grep -qx "$p" "$COMPLETE"; then
-                echo "::warning::跳过未完成/无可信归档的 stable 前缀 $p"
-                continue
-              fi
-            elif [[ "$p" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-pre(\.[0-9]+)?$ ]]; then
-              base_version="${BASH_REMATCH[1]}"
-              sums_key="$p/YueLink-${base_version}-SHA256SUMS"
-              last_modified="$(
-                aws s3api head-object --bucket "$BUCKET" --key "$sums_key" \
-                  --endpoint-url "$R2_ENDPOINT" \
-                  --query LastModified --output text 2>/dev/null || true
-              )"
-              if [ -z "$last_modified" ] || [ "$last_modified" = "None" ]; then
-                echo "::warning::跳过无完成标记的 prerelease 前缀 $p"
-                continue
-              fi
-              sums_epoch="$(date -u -d "$last_modified" +%s 2>/dev/null || true)"
-              now_epoch="$(date -u +%s)"
-              if [ -z "$sums_epoch" ] ||
-                 [ $((now_epoch - sums_epoch)) -lt $((6 * 60 * 60)) ]; then
-                echo "✓ 保留仍在 6h 安全窗内的 prerelease $p"
-                continue
-              fi
-            else
-              echo "✓ 跳过非严格发布前缀 $p"
-              continue
-            fi
-            if echo "$KEEP" | grep -qx "$p"; then
-              echo "✓ 保留 $p"
-            else
-              echo "🗑  删除旧版本 $p"
-              # 注意: `aws s3 rm` 不支持 --no-progress(只 cp/sync/mv 支持)→
-              # 加了会 ParamValidation exit 252。v1.2.34 prune 即栽在这。
-              aws s3 rm "s3://$BUCKET/$p/" --recursive \
-                --endpoint-url "$R2_ENDPOINT"
-            fi
-          done
-          echo "✓ prune 完成"
+          {
+            echo "### Permanent R2 release archive"
+            echo
+            echo "- Lock: \`$LOCK_RULE_ID\` (enabled, prefix \`v\`, indefinite)"
+            echo "- Current signed root/archive: \`$current_prefix\`"
+            echo "- Version prefixes: $prefix_count"
+            echo "- Versioned objects: $object_count"
+            echo "- Versioned bytes: $byte_count (${gib} GiB)"
+            echo "- Mutation: none; all \`v*/\` release evidence is retained permanently"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
-          # 2b) 回收「有目录但没有可信归档 manifest」的孤儿前缀。
-          #
-          # 上面那一段对这类前缀一律 `continue`,理由是「可能正在上传」。但它没有
-          # 任何时间维度,所以一个**失败的构建**留下的半截目录会被永远跳过 ——
-          # prune 每天照报成功,而那些字节再也回不来。2026-08-01 实测:
-          # v1.2.91(07-23)/v1.2.94(07-24)/v1.2.107(07-30)/v1.2.113(今夜失败构建)
-          # 共约 3.5 GiB 卡在桶里,桶已到 7.07/10 GiB,而每次发版还要再加约 0.9 GiB。
-          #
-          # 回收条件必须同时满足,任一不成立就继续跳过:
-          #   - 严格的发布 tag 形状,且不是当前版本、不在 KEEP 里;
-          #   - 确实没有可信归档 manifest(有的话走上面那条正常路径);
-          #   - 版本号严格小于当前版本 —— 绝不碰比已发布版本更新的目录,
-          #     那可能是正在进行的下一次发版;
-          #   - 最新对象已静置超过 ORPHAN_MIN_AGE_HOURS,证明没有构建在写它。
-          ORPHAN_MIN_AGE_HOURS="${ORPHAN_MIN_AGE_HOURS:-24}"
-          orphan_bytes=0
-          now_epoch="$(date -u +%s)"
-          while read -r p; do
-            [ -n "$p" ] || continue
-            [[ "$p" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
-            [ "$p" != "$CURRENT_PREFIX" ] || continue
-            echo "$KEEP" | grep -qx "$p" && continue
-            grep -qx "$p" "$COMPLETE" && continue
-
-            # 版本号必须严格小于当前版本(sort -V 取两者较大者判断)。
-            newest="$(printf '%s\n%s\n' "$p" "$CURRENT_PREFIX" | sort -Vr | head -1)"
-            if [ "$newest" = "$p" ]; then
-              echo "::warning::保留比当前版本更新的孤儿前缀 $p(可能是进行中的发版)"
-              continue
-            fi
-
-            last_modified="$(
-              aws s3api list-objects-v2 --bucket "$BUCKET" --prefix "$p/" \
-                --endpoint-url "$R2_ENDPOINT" \
-                --query 'sort_by(Contents,&LastModified)[-1].LastModified' \
-                --output text 2>/dev/null || true
-            )"
-            if [ -z "$last_modified" ] || [ "$last_modified" = "None" ]; then
-              echo "::warning::孤儿前缀 $p 读不到对象时间 — 跳过"
-              continue
-            fi
-            last_epoch="$(date -u -d "$last_modified" +%s 2>/dev/null || true)"
-            if [ -z "$last_epoch" ] ||
-               [ $((now_epoch - last_epoch)) -lt $((ORPHAN_MIN_AGE_HOURS * 60 * 60)) ]; then
-              echo "✓ 保留仍在 ${ORPHAN_MIN_AGE_HOURS}h 静置窗内的孤儿前缀 $p"
-              continue
-            fi
-
-            size_bytes="$(
-              aws s3 ls "s3://$BUCKET/$p/" --recursive --summarize \
-                --endpoint-url "$R2_ENDPOINT" 2>/dev/null \
-                | awk '/Total Size:/{print $3}'
-            )"
-            orphan_bytes=$((orphan_bytes + ${size_bytes:-0}))
-            echo "🗑  回收无归档 manifest 的孤儿前缀 $p (${size_bytes:-0} bytes, 静置 $(( (now_epoch - last_epoch) / 3600 ))h)"
-            aws s3 rm "s3://$BUCKET/$p/" --recursive \
-              --endpoint-url "$R2_ENDPOINT"
-          done < "$PREFIXES"
-          echo "✓ 孤儿回收完成 (${orphan_bytes} bytes)"
-
-          # 3) 存储用量报告 + 守护(免费档 10GB)。三稳定版正常约 3GB。
-          #    >8GB(80%)发 ::warning:: 提醒; 不 fail(避免噪音), 只示警。
-          BYTES=$(aws s3 ls "s3://$BUCKET/" --recursive --endpoint-url "$R2_ENDPOINT" --summarize 2>/dev/null \
-                  | awk '/Total Size:/{print $3}')
-          BYTES=${BYTES:-0}
-          GB=$(awk "BEGIN{printf \"%.2f\", $BYTES/1024/1024/1024}")
-          echo "R2 yuelink-dist 当前用量: ${GB} GB / 10 GB 免费档"
-          # 前缀数是比字节数更早的泄漏信号:prune 保留当前 + 2 个完整版本,所以
-          # 稳态就是 3 个 v* 目录。多出来的每一个都是「有目录、没 manifest、
-          # 又还没静置到可回收」——本来只会一直躺着,直到把免费档撑爆为止。
-          prefix_count="$(grep -c . "$PREFIXES" || true)"
-          echo "R2 yuelink-dist 版本前缀数: ${prefix_count} (稳态应为 3)"
-          if awk "BEGIN{exit !($BYTES > 8*1024*1024*1024)}"; then
-            echo "::warning::R2 存储 ${GB}GB 已超 8GB(免费档 80%)— 检查是否有未被 manifest 引用的残留版本没清掉"
-          fi
-          if [ "${prefix_count:-0}" -gt 5 ]; then
-            echo "::warning::R2 有 ${prefix_count} 个版本前缀(稳态 3)— 说明有构建失败留下的孤儿目录正在堆积;它们会在静置 ${ORPHAN_MIN_AGE_HOURS}h 后被下一轮回收"
-          fi
+          echo "✓ immutable R2 audit complete; no release object was mutated"
