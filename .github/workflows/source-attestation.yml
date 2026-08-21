@@ -21,7 +21,7 @@ permissions:
   contents: read
 
 env:
-  FLUTTER_VERSION: '3.44.7'
+  FLUTTER_VERSION: '3.44.9'
   GO_VERSION: '1.26.7'
   GITLEAKS_VERSION: '8.30.1'
   GITLEAKS_LINUX_X64_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
@@ -83,10 +83,9 @@ jobs:
           printf 'source_sha=%s\nrelease_tag=v%s\n' "$SOURCE_SHA" "$version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@f6bff206690c34f50ed32fd41e1434dc670f0582 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
           cache: true
 
       - name: Set up Java 17
@@ -270,10 +269,9 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Set up Flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@f6bff206690c34f50ed32fd41e1434dc670f0582 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
           cache: true
       - run: flutter config --enable-macos-desktop
       - run: flutter pub get --enforce-lockfile
@@ -297,10 +295,9 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Set up Flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@f6bff206690c34f50ed32fd41e1434dc670f0582 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
       - run: dart run tool/windows_durability_probe.dart

@@ -118,10 +118,9 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@f6bff206690c34f50ed32fd41e1434dc670f0582 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
           # This privileged tag workflow produces signed runtime artifacts.
           # Never restore or save branch-scoped tool caches in that trust
           # boundary: a cache hit is not part of the reviewed source tree.
@@ -225,10 +224,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: false
 
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@f6bff206690c34f50ed32fd41e1434dc670f0582 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
           cache: false
 
       - name: Setup Java (Android only)
@@ -1200,10 +1198,9 @@ jobs:
 
       - name: Set up Flutter for release-candidate verification
         if: needs.preflight.outputs.tag_kind == 'stable'
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@f6bff206690c34f50ed32fd41e1434dc670f0582 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
           cache: false
 
       - name: Resolve locked verification dependencies
