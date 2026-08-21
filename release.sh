@@ -208,11 +208,31 @@ inspect_remote_public_tag() {
   )" || return 1
   jq -e --arg tag "$TAG" --arg builder "$BUILDER_COMMIT" \
     --arg message "$PUBLIC_TAG_MESSAGE" '
+    # GitHub currently returns a signed annotated tag message as the exact
+    # annotation followed by the detached armor that it also exposes in
+    # verification.signature. Some API versions return only the annotation.
+    # Accept those two exact representations and nothing in between/after;
+    # verification.verified/reason below remains the cryptographic authority.
+    def has_exact_public_message:
+      .message == $message or
+      (
+        (.verification.signature // null) as $signature |
+        ($signature | type) == "string" and
+        ($signature | startswith("-----BEGIN PGP SIGNATURE-----\n")) and
+        (
+          ($signature | endswith("\n-----END PGP SIGNATURE-----\n")) or
+          ($signature | endswith("\n-----END PGP SIGNATURE-----"))
+        ) and
+        ($signature | contains("\r") | not) and
+        ($signature | split("-----BEGIN PGP SIGNATURE-----") | length) == 2 and
+        ($signature | split("-----END PGP SIGNATURE-----") | length) == 2 and
+        .message == ($message + "\n" + $signature)
+      );
     .tag == $tag and
     .object.type == "commit" and .object.sha == $builder and
-    .message == $message
+    has_exact_public_message
   ' <<<"$tag_json" >/dev/null || {
-    echo "::error::远端 $TAG 未绑定 exact builder ${BUILDER_COMMIT}；source/attestation 不匹配，绝不覆盖。" >&2
+    echo "::error::远端 $TAG 未绑定 exact builder ${BUILDER_COMMIT}；exact source/attestation message 不匹配，绝不覆盖。" >&2
     return 2
   }
   if jq -e '
