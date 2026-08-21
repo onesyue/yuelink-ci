@@ -67,7 +67,7 @@ must_replace(
           submodules: recursive
           persist-credentials: false
 
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@6285433f149d03fc8a274736fd854a9b0cd919b3 # pinned installer v1
 """,
 """    steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -79,7 +79,7 @@ must_replace(
           submodules: recursive
           persist-credentials: false
 
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@6285433f149d03fc8a274736fd854a9b0cd919b3 # pinned installer v1
 """,
 "preflight-checkout")
 
