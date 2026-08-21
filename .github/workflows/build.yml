@@ -93,7 +93,7 @@ jobs:
     steps:
       - name: Checkout exact source-attestation verifier
         if: github.repository == 'onesyue/yuelink-ci'
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: onesyue/yuelink-ci
           ref: ${{ github.sha }}
@@ -233,7 +233,7 @@ jobs:
     outputs:
       tag_kind: ${{ steps.classify.outputs.kind }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: onesyue/yuelink
           ref: ${{ needs.source_binding.outputs.source_commit }}
@@ -319,7 +319,7 @@ jobs:
       # must inspect source before that diagnostic checkout exists).
       - name: Checkout exact public builder revision for parity
         if: github.repository == 'onesyue/yuelink-ci'
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: onesyue/yuelink-ci
           ref: ${{ github.sha }}
@@ -358,7 +358,7 @@ jobs:
           echo "after:"; df -h / | tail -1
 
       # CI 镜像仓：checkout public signed tag 绑定的 exact source commit。
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: onesyue/yuelink
           ref: ${{ needs.source_binding.outputs.source_commit }}
@@ -1348,7 +1348,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: onesyue/yuelink
           ref: ${{ needs.source_binding.outputs.source_commit }}
