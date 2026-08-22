@@ -172,7 +172,7 @@ class UpdateManifestVerifierTests(unittest.TestCase):
     def test_current_promoted_production_root_is_valid(self) -> None:
         raw = CURRENT_PROMOTED_FIXTURE.read_bytes()
         manifest = json.loads(raw)
-        self.assertEqual(manifest["version"], "1.3.16")
+        self.assertEqual(manifest["version"], "1.3.18")
         self.assertEqual(
             {
                 "sourceCommit",
