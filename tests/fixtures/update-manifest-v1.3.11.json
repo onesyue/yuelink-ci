@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.11",
+  "channel": "stable",
+  "publishedAt": "2026-08-20T20:10:39Z",
+  "expiresAt": "2026-09-24T20:10:39Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "2026-08-21 发布。客服入口与全 AI 工单策略统一，不再把小悦 AI 误标成人工支持。\n\n## 修复与体验\n\n- **诊断页统一为 AI 客服**：外部客服入口、失败提示和下一步说明都明确指向小悦 AI，不再承诺不存在的人工接管。\n- **工单继续自动闭环**：原生工单由小悦 AI 在同一工单追问、核查和回复；退款与提现继续使用面板独立自助页面。\n\n## 兼容性\n\n- v1.3.9 的 Hysteria 2 自适应拥塞控制、网络类型遥测和热重载归因保持不变。\n- 现有订阅、账号和节点选择逻辑不变，本次不修改协议或线路含义。\n",
+  "notesEn": "Released 2026-08-21. Support entry points now match the AI-only ticket policy and no longer mislabel Xiaoyue AI as human support.\n\n## Fixes and usability\n\n- **Consistent AI support:** the diagnostic page's external support action, error message, and next-step guidance now point explicitly to Xiaoyue AI without promising a human handoff.\n- **Automated ticket closure:** Xiaoyue AI continues to ask follow-up questions, verify available facts, and reply in the same ticket. Refunds and withdrawals remain available through their dedicated self-service pages.\n\n## Compatibility\n\n- The adaptive Hysteria 2 congestion control, network-type telemetry, and hot-reload attribution introduced in v1.3.9 remain unchanged.\n- Existing subscriptions, accounts, and node-selection behavior are unchanged; this release does not redefine protocols or routes.\n",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-android-arm64-v8a.apk",
+      "sha256": "13d66205d8e96ea92908939d7a4c0bf2410b9ba2cc92cbbf7c74d7ff895768ae"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-android-armeabi-v7a.apk",
+      "sha256": "49586b24f6dbd2c3c9779fdf0b80e250287b76439b5e1ba768943dfe4e5cdd9f"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-android-x86_64.apk",
+      "sha256": "de60b7d9d0e60a119b22cf4073a33e08bd55ab42c68d98bce598c7410525b60e"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-android-universal.apk",
+      "sha256": "d31166d43ec028ec4e82f1aaa2b3360aac9f958e25b4fe00a6da962d29bb8df8"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-ios.ipa",
+      "sha256": "227de507fa12afc3bc3d24c07979b6833247fb08fc50f6d17a297e21c28edbba"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-macos-universal.dmg",
+      "sha256": "2c622572deda6e923ba6e0fc2c91698c339055eb08a165338a436b0687801361"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-windows-amd64-setup.exe",
+      "sha256": "2d8479808aef49ff1fe08733ab0dacc96df5f30b38225ee35651780a7b88a499"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-windows-amd64-portable.zip",
+      "sha256": "11747462c845e6ffce5ea51a430c9b2520f048b1a10f36886b03dcfa47b998d0"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.11/YueLink-1.3.11-linux-amd64.AppImage",
+      "sha256": "b79068c805e9c1dc55573f3d1c7dd42d6cf4091304212b103f8725bd8da37b70"
+    }
+  },
+  "sig": "ed25519:M7uZdS524Km4EGAlP9Ddl2Tz35139NUykSRm1MgGbZ8FovGEcFeisDUYHm7VcJv8/iZ3iP7tcGapeN1w3e4+Bw=="
+}
