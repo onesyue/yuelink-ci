@@ -15,7 +15,7 @@ PRUNE_R2 = ROOT / ".github/workflows/prune-r2.yml"
 # 归档的旧签名根，用来证明「签名合法但版本更旧」会被单调地板拒绝。
 # 指向**最近**的那一个而不是最老的：1.3.8 的重放比更早版本的重放现实得多
 # （它就是上一版真正在 CDN 上服役过的根）。更早的那些仍留在仓里。
-OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.3.16.json"
+OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.3.18.json"
 # 1.3.6 是最后一个没有可选 `notesEn` 的真实签名根。它单独覆盖旧 schema
 # 兼容性；不能复用紧邻 replay fixture，因为 1.3.7 起该字段已经存在。
 LEGACY_WITHOUT_OPTIONAL_FIXTURE = (
@@ -24,7 +24,7 @@ LEGACY_WITHOUT_OPTIONAL_FIXTURE = (
 # 当前生产根覆盖 release-only 证据字段；与 legacy 真签名根一起防止 schema
 # 前滚时把已安装客户端或公开 manifest-health 夜巡锁死。
 CURRENT_PROMOTED_FIXTURE = (
-    ROOT / "tests/fixtures/update-manifest-v1.3.18.json"
+    ROOT / "tests/fixtures/update-manifest-v1.3.19.json"
 )
 SPEC = importlib.util.spec_from_file_location(
     "verify_update_manifest", ROOT / "scripts/verify-update-manifest.py"
@@ -172,7 +172,7 @@ class UpdateManifestVerifierTests(unittest.TestCase):
     def test_current_promoted_production_root_is_valid(self) -> None:
         raw = CURRENT_PROMOTED_FIXTURE.read_bytes()
         manifest = json.loads(raw)
-        self.assertEqual(manifest["version"], "1.3.18")
+        self.assertEqual(manifest["version"], "1.3.19")
         self.assertEqual(
             {
                 "sourceCommit",
