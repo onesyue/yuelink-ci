@@ -255,6 +255,11 @@ jobs:
           }
           echo "BUILT_SOURCE_COMMIT=$BUILT_SOURCE_COMMIT"
 
+      - name: Verify Gradle wrapper supply chain
+        run: |
+          python3 scripts/ci/verify_gradle_wrapper_supply_chain.py
+          python3 scripts/ci/test_gradle_wrapper_supply_chain.py
+
       - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@6285433f149d03fc8a274736fd854a9b0cd919b3 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
