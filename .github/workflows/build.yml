@@ -260,7 +260,7 @@ jobs:
           python3 scripts/ci/verify_gradle_wrapper_supply_chain.py
           python3 scripts/ci/test_gradle_wrapper_supply_chain.py
 
-      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@6285433f149d03fc8a274736fd854a9b0cd919b3 # pinned installer v1
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@17d69267d15d794f3072b31c3d22cdd442e29293 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           # This privileged tag workflow produces signed runtime artifacts.
@@ -390,7 +390,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: false
 
-      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@6285433f149d03fc8a274736fd854a9b0cd919b3 # pinned installer v1
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@17d69267d15d794f3072b31c3d22cdd442e29293 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: false
@@ -1381,7 +1381,7 @@ jobs:
 
       - name: Set up Flutter for release-candidate verification
         if: needs.preflight.outputs.tag_kind == 'stable'
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@6285433f149d03fc8a274736fd854a9b0cd919b3 # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@17d69267d15d794f3072b31c3d22cdd442e29293 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: false
