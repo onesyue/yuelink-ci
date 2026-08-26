@@ -216,7 +216,7 @@ def source_flutter_issues(workflow: str) -> list[str]:
     issues: list[str] = []
     pin = (
         "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-        "6285433f149d03fc8a274736fd854a9b0cd919b3"
+        "17d69267d15d794f3072b31c3d22cdd442e29293"
     )
     starts = [match.start() for match in re.finditer(re.escape(pin), workflow)]
     if len(starts) != 3:
@@ -450,7 +450,7 @@ class SourceAttestationContractTests(unittest.TestCase):
     def test_each_source_attestation_flutter_cache_mutation_is_rejected(self) -> None:
         pin = (
             "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-            "6285433f149d03fc8a274736fd854a9b0cd919b3"
+            "17d69267d15d794f3072b31c3d22cdd442e29293"
         )
         starts = [
             match.start() for match in re.finditer(re.escape(pin), self.workflow)
