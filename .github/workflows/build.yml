@@ -57,9 +57,9 @@ permissions:
 
 env:
   # 3.44.8 修了魔改安卓 ROM 上 AccessibilityBridge 的崩溃（sideload 安卓
-  # 用户画像正中）+ Xcode 27 工具链 lipo 构建失败；3.44.9 只有 tooling 修复。
+  # 用户画像正中）+ Xcode 27 工具链 lipo 构建失败；3.47.1 只有 tooling 修复。
   # Dart 仍是 3.12.2，无语言侧变化。
-  FLUTTER_VERSION: '3.44.9'
+  FLUTTER_VERSION: '3.47.1'
   # Go 1.26.7 (2026-08-21): 包含 1.26.6 对 asn1/xml 栈耗尽与
   # crypto/tls KeyUpdate 的修复，并修复其 h2c ReadHeaderTimeout 回归
   # (golang/go#80927)。mihomo 本身只走客户端 h2c transport，但同一正式

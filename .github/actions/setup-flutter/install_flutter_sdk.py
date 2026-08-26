@@ -21,17 +21,17 @@ import tarfile
 
 BASE_URL = "https://storage.googleapis.com/flutter_infra_release/releases/"
 RELEASES = {
-    ("3.44.9", "Linux"): (
-        "stable/linux/flutter_linux_3.44.9-stable.tar.xz",
-        "a9120fa4a01048bdef438ddc3a2d4b7389662ea98a95db86eeaf10382bc4efcb",
+    ("3.47.1", "Linux"): (
+        "stable/linux/flutter_linux_3.47.1-stable.tar.xz",
+        "a1d8166c0309267cb7dc99f1424eecf08b86946ad3b50723c6f59945964aea45",
     ),
-    ("3.44.9", "Darwin"): (
-        "stable/macos/flutter_macos_3.44.9-stable.zip",
-        "4ffed93b2059aa4cfa829723ce3a31c48988bbdbfc014af870c7dfe937ecc0fa",
+    ("3.47.1", "Darwin"): (
+        "stable/macos/flutter_macos_3.47.1-stable.zip",
+        "21e06435c50be9a43ffea8abb549bd7640cd38197e7741dd780f0680afbb64ba",
     ),
-    ("3.44.9", "Windows"): (
-        "stable/windows/flutter_windows_3.44.9-stable.zip",
-        "8ef1107d226654736755bc51b969d6bd46787ff0241650f942e774fb0ca7d0ac",
+    ("3.47.1", "Windows"): (
+        "stable/windows/flutter_windows_3.47.1-stable.zip",
+        "4cbf94fde1f5f8d6b9fc50b2483b57cf2077f61712282c2f4cf92560168f442b",
     ),
 }
 RECEIPT_NAME = ".yue-flutter-sdk.json"
