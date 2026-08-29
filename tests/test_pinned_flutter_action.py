@@ -36,17 +36,17 @@ def test_release_table_is_exact_and_closed() -> None:
         "https://storage.googleapis.com/flutter_infra_release/releases/"
     )
     assert installer.RELEASES == {
-        ("3.47.1", "Linux"): (
-            "stable/linux/flutter_linux_3.47.1-stable.tar.xz",
-            "a1d8166c0309267cb7dc99f1424eecf08b86946ad3b50723c6f59945964aea45",
+        ("3.47.2", "Linux"): (
+            "stable/linux/flutter_linux_3.47.2-stable.tar.xz",
+            "447878859d01ca9bfdb99a85f245af07ed8a15fedcd9d189c4749e8e92d1f185",
         ),
-        ("3.47.1", "Darwin"): (
-            "stable/macos/flutter_macos_3.47.1-stable.zip",
-            "21e06435c50be9a43ffea8abb549bd7640cd38197e7741dd780f0680afbb64ba",
+        ("3.47.2", "Darwin"): (
+            "stable/macos/flutter_macos_3.47.2-stable.zip",
+            "b6fd6ba98c8503d5ee06a6670627b5b1c36167ece3427435ec83b66e9b28c6b5",
         ),
-        ("3.47.1", "Windows"): (
-            "stable/windows/flutter_windows_3.47.1-stable.zip",
-            "4cbf94fde1f5f8d6b9fc50b2483b57cf2077f61712282c2f4cf92560168f442b",
+        ("3.47.2", "Windows"): (
+            "stable/windows/flutter_windows_3.47.2-stable.zip",
+            "37934f2128a55d77a38baba12fd611157ed23a47bf7d2b7d17e9e84da118409d",
         ),
     }
 
@@ -61,7 +61,7 @@ def test_archive_member_validation_rejects_traversal_and_absolute_paths() -> Non
 
 def test_tar_links_allow_only_targets_resolving_inside_archive_root() -> None:
     installer = _installer_module()
-    # Present in Flutter 3.47.1's official Linux archive: the target resolves
+    # Present in Flutter 3.47.2's official Linux archive: the target resolves
     # to flutter/engine/src/flutter/lib/web_ui/test/webparagraph/... .
     assert installer._safe_tar_link(
         "flutter/engine/src/flutter/lib/web_ui/test/ui/paragraph_performance_test.dart",
@@ -87,7 +87,7 @@ def test_tar_links_allow_only_targets_resolving_inside_archive_root() -> None:
 
 def test_cache_receipt_binds_platform_arch_version_and_archive_hash(tmp_path: Path) -> None:
     installer = _installer_module()
-    expected = installer.receipt("3.47.1", "Linux", "X64", "a" * 64)
+    expected = installer.receipt("3.47.2", "Linux", "X64", "a" * 64)
     target = tmp_path / "flutter"
     (target / "bin").mkdir(parents=True)
     (target / "bin/flutter").write_text("runtime", encoding="utf-8")
@@ -128,14 +128,14 @@ def test_windows_runtime_probe_uses_command_processor_and_call() -> None:
                 stdout=(
                     "Resolving dependencies...\n"
                     "Got dependencies.\n"
-                    '{"frameworkVersion":"3.47.1"}\n'
+                    '{"frameworkVersion":"3.47.2"}\n'
                 ),
                 stderr="Building flutter tool...\nRunning pub upgrade...\n",
             )
 
         with mock.patch.dict(os.environ, {"COMSPEC": str(command_processor)}):
             with mock.patch.object(installer.subprocess, "run", run):
-                installer.verify_runtime(target, "3.47.1", "Windows")
+                installer.verify_runtime(target, "3.47.2", "Windows")
 
         assert observed == [
             [
@@ -161,7 +161,7 @@ def test_windows_runtime_probe_fails_closed_without_command_processor() -> None:
         environment.pop("COMSPEC", None)
         with mock.patch.dict(os.environ, environment, clear=True):
             try:
-                installer.verify_runtime(target, "3.47.1", "Windows")
+                installer.verify_runtime(target, "3.47.2", "Windows")
             except SystemExit as exc:
                 assert "Windows command processor is absent" in str(exc)
             else:  # pragma: no cover - fail-closed assertion
@@ -181,7 +181,7 @@ def test_windows_runtime_probe_rejects_command_metacharacters() -> None:
             )
             with mock.patch.dict(os.environ, {"COMSPEC": str(command_processor)}):
                 try:
-                    installer.verify_runtime(target, "3.47.1", "Windows")
+                    installer.verify_runtime(target, "3.47.2", "Windows")
                 except SystemExit as exc:
                     assert "command-processor metacharacters" in str(exc)
                 else:  # pragma: no cover - fail-closed assertion
@@ -191,14 +191,14 @@ def test_windows_runtime_probe_rejects_command_metacharacters() -> None:
 def test_machine_document_parser_is_closed_after_the_final_object() -> None:
     installer = _installer_module()
     assert installer.parse_machine_document(
-        'first-run progress\n{"frameworkVersion":"3.47.1"}\r\n'
-    ) == {"frameworkVersion": "3.47.1"}
+        'first-run progress\n{"frameworkVersion":"3.47.2"}\r\n'
+    ) == {"frameworkVersion": "3.47.2"}
 
     for invalid in (
         "first-run progress only\n",
-        '[{"frameworkVersion":"3.47.1"}]\n',
-        '{"frameworkVersion":"3.47.1"}\ntrailing output\n',
-        '{"frameworkVersion":"3.47.1"}\n{"frameworkVersion":"3.47.1"}\n',
+        '[{"frameworkVersion":"3.47.2"}]\n',
+        '{"frameworkVersion":"3.47.2"}\ntrailing output\n',
+        '{"frameworkVersion":"3.47.2"}\n{"frameworkVersion":"3.47.2"}\n',
     ):
         try:
             installer.parse_machine_document(invalid)
