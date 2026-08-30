@@ -58,7 +58,7 @@ permissions:
 env:
   # 3.44.8 修了魔改安卓 ROM 上 AccessibilityBridge 的崩溃（sideload 安卓
   # 用户画像正中）+ Xcode 27 工具链 lipo 构建失败；3.47.2 只有 tooling 修复。
-  # Dart 仍是 3.12.2，无语言侧变化。
+  # 3.47.x 带 Dart 3.13.2。
   FLUTTER_VERSION: '3.47.2'
   # Go 1.26.7 (2026-08-21): 包含 1.26.6 对 asn1/xml 栈耗尽与
   # crypto/tls KeyUpdate 的修复，并修复其 h2c ReadHeaderTimeout 回归
@@ -260,7 +260,7 @@ jobs:
           python3 scripts/ci/verify_gradle_wrapper_supply_chain.py
           python3 scripts/ci/test_gradle_wrapper_supply_chain.py
 
-      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@17d69267d15d794f3072b31c3d22cdd442e29293 # pinned installer v1
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@635b8e875d5a9931656808ad31033f6d8c075f72 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           # This privileged tag workflow produces signed runtime artifacts.
@@ -390,7 +390,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: false
 
-      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@17d69267d15d794f3072b31c3d22cdd442e29293 # pinned installer v1
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@635b8e875d5a9931656808ad31033f6d8c075f72 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: false
@@ -1381,7 +1381,7 @@ jobs:
 
       - name: Set up Flutter for release-candidate verification
         if: needs.preflight.outputs.tag_kind == 'stable'
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@17d69267d15d794f3072b31c3d22cdd442e29293 # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@635b8e875d5a9931656808ad31033f6d8c075f72 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: false
