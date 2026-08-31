@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.31",
+  "version": "1.3.32",
   "channel": "stable",
-  "publishedAt": "2026-08-31T09:16:10Z",
-  "expiresAt": "2026-10-05T09:16:10Z",
+  "publishedAt": "2026-08-31T11:59:13Z",
+  "expiresAt": "2026-10-05T11:59:13Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "更简洁：移除「暂停代理」，主开关就是全部。\n\n## 移除\n\n- **「暂停代理」功能整体下线**（托盘三档子菜单、首页暂停按钮、倒计时横幅、\n  定时自动重连）。它只是「断开 + 定时重连」的一层包装，与主开关一键\n  断开/连接高度重叠；相关的持久化状态、冷启动守卫与自动连接豁免逻辑\n  一并拆除，连接路径更短、更可预期。需要暂停就点断开，需要恢复就点连接。\n\n## 优化\n\n- 托盘菜单与首页卡片随之精简；断开状态不再有「已暂停」分支状态。\n\n## 兼容性\n\n账号、订阅、协议、更新签名公钥、各平台升级身份均未改变。\n内核基线 mihomo v1.19.30。Flutter 3.47.2 / Dart 3.13.2。\n",
-  "notesEn": "Simpler: the pause feature is gone — the main switch is all you need.\n\n## Removed\n\n- **The \"pause connection\" feature is fully removed** (tray submenu with three\n  durations, home-screen pause button, countdown banner, timed auto-resume).\n  It was a wrapper around \"disconnect + a reconnect timer\" and overlapped the\n  main switch's one-tap disconnect/connect; its persisted state, cold-start\n  hydration guard and auto-connect exemptions are removed with it, leaving a\n  shorter, more predictable connection path. To pause, disconnect; to resume,\n  connect.\n\n## Improved\n\n- The tray menu and home card are simpler accordingly; the disconnected state\n  no longer has a separate \"paused\" variant.\n\n## Compatibility\n\nAccounts, subscriptions, protocols, update-signing keys, and per-platform\nupgrade identities are unchanged. Core baseline mihomo v1.19.30.\nFlutter 3.47.2 / Dart 3.13.2.\n",
-  "sourceCommit": "4f61cf0b5c6da879c0ac9221187d217cfa5f5d04",
-  "sha256SumsSha256": "26add7d5f8bfd4a12485758e0260be0a6056b3a75544246f81eeaeaf0c5f735a",
+  "notes": "IPv6 切换更可靠、日志更安全。\n\n## 修复\n\n- **IPv6 热切换在 TUN / fake-ip 模式下真正生效**：此前该模式下切换 IPv6 偏好\n  存在「承诺了却没真正重建路由」的情况，现已修正为真实生效，切换后连接行为\n  与设置一致。\n\n## 安全\n\n- **`core.log` 现以 0o600 创建并加固存量文件**：日志在 info/debug 级会记录逐连接\n  的目的地信息，此前以 0o644 创建，在多用户桌面上任意本地用户可读；现与\n  `config.yaml` 一致收紧为仅属主可读，并对升级前的旧文件补做加固。\n\n## 兼容性\n\n账号、订阅、协议、更新签名公钥、各平台升级身份均未改变。\n内核基线 mihomo v1.19.30。Flutter 3.47.2 / Dart 3.13.2。\n",
+  "notesEn": "More reliable IPv6 switching, safer logs.\n\n## Fixed\n\n- **IPv6 hot-switch now actually takes effect in TUN / fake-ip mode**: in that\n  mode, switching the IPv6 preference previously \"promised but did not truly\n  rebuild routing\"; it now applies for real, so connection behavior matches the\n  setting right after you switch.\n\n## Security\n\n- **`core.log` is now created 0o600, and existing files are hardened**: at\n  info/debug level the log records per-connection destination lines; it was\n  created 0o644, readable by any local user on multi-user desktops. It is now\n  owner-only, matching `config.yaml`, and pre-upgrade files are chmod-hardened.\n\n## Compatibility\n\nAccounts, subscriptions, protocols, update-signing keys, and per-platform\nupgrade identities are unchanged. Core baseline mihomo v1.19.30.\nFlutter 3.47.2 / Dart 3.13.2.\n",
+  "sourceCommit": "41395b3bd39a9909bf73de16d75527b5ac14d438",
+  "sha256SumsSha256": "f66f4ec4be95115280ed1f805b97e77ec179b7db868118aab4441e2c4c43ad67",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.31/YueLink-1.3.31-android-arm64-v8a.apk",
-      "sha256": "bdcf39456af1827b1f7cb6faca5158f9743f9f8dcb7192d0be374d9bfad447a8"
+      "url": "https://yuetong.app/v1.3.32/YueLink-1.3.32-android-arm64-v8a.apk",
+      "sha256": "c83be70ba853be423c80c1a58e9cd71c484838745694344c74b6553beef69fd7"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.31/YueLink-1.3.31-android-armeabi-v7a.apk",
-      "sha256": "313b1a05437c0c29ddbcff4de0506e6f012e0e47ae429a14d491c2dca212d792"
+      "url": "https://yuetong.app/v1.3.32/YueLink-1.3.32-android-armeabi-v7a.apk",
+      "sha256": "e783107b99b6f320585492111a89a29be366324da4466ebf776578ad399e85ac"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.31/YueLink-1.3.31-android-x86_64.apk",
-      "sha256": "390c12d147018938408953cc09edea573f27151b016b2647306803b13bc38ea0"
+      "url": "https://yuetong.app/v1.3.32/YueLink-1.3.32-android-x86_64.apk",
+      "sha256": "4a2242dacd557283f8f91f5768eca76e8bde5d721724601b9a47504c4a0e9692"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.31/YueLink-1.3.31-android-universal.apk",
-      "sha256": "3e0d951d0d59cd437d4818af85b126e3deded3944e8aee93f4c5acac625a4d98"
+      "url": "https://yuetong.app/v1.3.32/YueLink-1.3.32-android-universal.apk",
+      "sha256": "44460e1ed078ca9db8026aa239eca520765bb54107c7efd9cb8e9fd343fc1949"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.31/YueLink-1.3.31-ios.ipa",
-      "sha256": "d1a1300b464b3d147e6a7372ae2acc42d293ce337c7dabd420cafb5cd435a643"
+      "url": "https://yuetong.app/v1.3.32/YueLink-1.3.32-ios.ipa",
+      "sha256": "c1f90d146d8420dda4db21ffafb7b929d68d9a45042a01882e87212a931d0a57"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.31/YueLink-1.3.31-macos-universal.dmg",
-      "sha256": "053073c784b7688443a0f9d1a64d615e4917d0e55ff115d01b637ede8d1c5c02"
+      "url": "https://yuetong.app/v1.3.32/YueLink-1.3.32-macos-universal.dmg",
+      "sha256": "baea9814d8fd5e2ef278bdaa7425d6be097aa828d0c84fdb00a291eabc58eef2"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.31/YueLink-1.3.31-windows-amd64-setup.exe",
-      "sha256": "004bb18f766b09a728c1fcedfc5e41aab4601ce18922fd9e25d4c1acf5a587ab"
+      "url": "https://yuetong.app/v1.3.32/YueLink-1.3.32-windows-amd64-setup.exe",
+      "sha256": "7354e7258d6262739ea66cc9b9b2d0479fcb36b8a991860ab15263777e4d90ee"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.31/YueLink-1.3.31-windows-amd64-portable.zip",
-      "sha256": "081f9f8585306bd578c4b3b4b4a9759cf1290aee579b4f52b2a6a965d22ff905"
+      "url": "https://yuetong.app/v1.3.32/YueLink-1.3.32-windows-amd64-portable.zip",
+      "sha256": "c55f048d7fb22e63aef7aae683debb61dfd94b8a72505e58b9e3eec8cfaff1f1"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.31/YueLink-1.3.31-linux-amd64.AppImage",
-      "sha256": "a543851e4a842907f57b0bb8b66b744fb40c92b9ae1479077413d4a21d66f91c"
+      "url": "https://yuetong.app/v1.3.32/YueLink-1.3.32-linux-amd64.AppImage",
+      "sha256": "905cb79e99d9a1d63399188e8fbd6249c6c5e073da4ca48b643481361d272c81"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "5ae3dc45ba1504062d77b8873435129e596f0408f98c77e4168756b7e6deff9c",
-    "sha256SumsSha256": "26add7d5f8bfd4a12485758e0260be0a6056b3a75544246f81eeaeaf0c5f735a",
-    "payloadBundleSha256": "8ae687e2a59acd5f406b0da27ceaccb04d1773bd21a0fb26857227e96b333aab",
+    "candidateSha256": "dbf3a6ca1fc5203a424016fdf8b3536314f6e1adaab2239227069828817fa970",
+    "sha256SumsSha256": "f66f4ec4be95115280ed1f805b97e77ec179b7db868118aab4441e2c4c43ad67",
+    "payloadBundleSha256": "b510cf3e07430d9d36e3926d3b03d738556576f32cf68d005e30ddd5d925a222",
     "payloadCount": 19
   },
-  "sig": "ed25519:CdsWi+sOgoOrxTEXgFPU9F8YRq1WJL2iL9G7d/w5rtBpV8bnWBvvNv3yWahQJzJvvg9etK7hXrK60zf5bQhNCw=="
+  "sig": "ed25519:wADOySoL2p5+wk6NZj2gwcjYSmKQarPXmnkyIT5mJhbjSpAuM/cFoZaAHWkeF25OcC526m3HRuiAFyZsFsWBAw=="
 }
