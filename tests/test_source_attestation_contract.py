@@ -259,6 +259,17 @@ def contract_issues(
     for marker in WORKFLOW_MARKERS:
         if marker not in workflow:
             issues.append(f"source workflow missing {marker!r}")
+    # 2026-08-31 并行化后，SOURCE_SHA 输入校验从 source_contract 独有变成
+    # 五个 job（source_contract + 四个探针）逐 job 自带。存在性检查对
+    # "删掉其中一处"失明（其余四处仍命中 `in`），必须按精确计数钉住——
+    # 少一处 = 某个探针在未经校验的输入上跑，多一处 = 出现了未登记的 job。
+    validation_marker = '[[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]'
+    validation_count = workflow.count(validation_marker)
+    if validation_count != 5:
+        issues.append(
+            "SOURCE_SHA validation must appear in exactly 5 jobs "
+            f"(source_contract + 4 probes), found {validation_count}"
+        )
     for marker in RELEASE_MARKERS:
         if marker not in release:
             issues.append(f"release gate missing {marker!r}")
