@@ -86,13 +86,24 @@ jobs:
         uses: onesyue/yuelink-ci/.github/actions/setup-flutter@635b8e875d5a9931656808ad31033f6d8c075f72 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: false
+          # Cache ON — reviewed 2026-08-31 decision (receipt-verified SDK,
+          # fails closed to a fresh verified download); full rationale at the
+          # build workflow's preflight setup-flutter step. This attestation
+          # run doubles as the cache warmer for the tag build that follows:
+          # master-scope caches written here are readable by tag runs.
+          cache: true
 
       - name: Set up Java 17
         uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Restore pub cache (lockfile-verified)
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ~/.pub-cache
+          key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
 
       - name: Resolve locked Flutter dependencies
         run: flutter pub get --enforce-lockfile
@@ -180,18 +191,36 @@ jobs:
           python3 .source-attestation-tools/scripts/count-flutter-machine-tests.py \
             /tmp/flutter-tests.jsonl --minimum 2044
 
+  # 2026-08-31: the four probe jobs below no longer `needs: source_contract`.
+  # They only ever consumed its validated copy of `inputs.source_sha`, and
+  # serializing them behind the 9-minute contract job put the 7-minute macOS
+  # integration run on the critical path (16.5 min total). Each job now
+  # validates the input itself and checks out the exact SHA directly; the
+  # binding authority is unchanged — `attest` still requires source_contract
+  # AND every probe, so nothing is attested unless the full contract holds.
+  # Public-runner minutes are free; a wasted probe on a bad input costs
+  # nothing, while the serialization cost 7 wall-clock minutes per release.
   gitleaks:
     name: Gitleaks full history
-    needs: source_contract
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
+      - name: Validate source SHA input
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::source_sha must be exactly 40 lowercase hexadecimal characters"
+            exit 1
+          fi
       - name: Checkout exact private source with full history
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: ${{ needs.source_contract.outputs.source_sha }}
+          ref: ${{ inputs.source_sha }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           fetch-depth: 0
           submodules: recursive
@@ -224,7 +253,6 @@ jobs:
 
   govulncheck:
     name: govulncheck (${{ matrix.module }})
-    needs: source_contract
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -233,11 +261,21 @@ jobs:
       matrix:
         module: [core, service]
     steps:
+      - name: Validate source SHA input
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::source_sha must be exactly 40 lowercase hexadecimal characters"
+            exit 1
+          fi
       - name: Checkout exact private source with recursive modules
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: ${{ needs.source_contract.outputs.source_sha }}
+          ref: ${{ inputs.source_sha }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           fetch-depth: 0
           submodules: recursive
@@ -246,7 +284,10 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: false
+          # go.sum-verified module cache — reviewed 2026-08-31 decision, see
+          # the build workflow's preflight setup-flutter comment.
+          cache: true
+          cache-dependency-path: '**/go.sum'
       - name: Scan production target graphs
         env:
           MODULE: ${{ matrix.module }}
@@ -254,16 +295,25 @@ jobs:
 
   macos_integration:
     name: Integration tests (macOS)
-    needs: source_contract
     runs-on: macos-latest
     permissions:
       contents: read
     steps:
+      - name: Validate source SHA input
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::source_sha must be exactly 40 lowercase hexadecimal characters"
+            exit 1
+          fi
       - name: Checkout exact private source with full history
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: ${{ needs.source_contract.outputs.source_sha }}
+          ref: ${{ inputs.source_sha }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           fetch-depth: 0
           submodules: recursive
@@ -272,7 +322,12 @@ jobs:
         uses: onesyue/yuelink-ci/.github/actions/setup-flutter@635b8e875d5a9931656808ad31033f6d8c075f72 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: false
+          cache: true
+      - name: Restore pub cache (lockfile-verified)
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ~/.pub-cache
+          key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
       - run: flutter config --enable-macos-desktop
       - run: flutter pub get --enforce-lockfile
       - name: Run integration tests on macOS host
@@ -280,16 +335,25 @@ jobs:
 
   windows_durability:
     name: Windows durability probe
-    needs: source_contract
     runs-on: windows-latest
     permissions:
       contents: read
     steps:
+      - name: Validate source SHA input
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::source_sha must be exactly 40 lowercase hexadecimal characters"
+            exit 1
+          fi
       - name: Checkout exact private source with full history
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: ${{ needs.source_contract.outputs.source_sha }}
+          ref: ${{ inputs.source_sha }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           fetch-depth: 0
           submodules: recursive
@@ -298,7 +362,12 @@ jobs:
         uses: onesyue/yuelink-ci/.github/actions/setup-flutter@635b8e875d5a9931656808ad31033f6d8c075f72 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: false
+          cache: true
+      - name: Restore pub cache (lockfile-verified)
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ~\AppData\Local\Pub\Cache
+          key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
       - run: flutter pub get --enforce-lockfile
       - run: dart run tool/windows_durability_probe.dart
 

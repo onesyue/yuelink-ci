@@ -263,15 +263,33 @@ jobs:
       - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@635b8e875d5a9931656808ad31033f6d8c075f72 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          # This privileged tag workflow produces signed runtime artifacts.
-          # Never restore or save branch-scoped tool caches in that trust
-          # boundary: a cache hit is not part of the reviewed source tree.
-          cache: false
+          # 2026-08-31 reviewed decision — verified-artifact caches are ON in
+          # this trust boundary (was: blanket `cache: false`, ~10 machine-min
+          # of redundant SDK installs per release, ~5 min on the critical
+          # path). The prior comment said "a cache hit is not part of the
+          # reviewed source tree"; the answer is that every cache we restore
+          # is bound to reviewed content and fails closed:
+          #   * Flutter SDK: the pinned installer stores a receipt carrying
+          #     the exact archive SHA-256 it verified at download; on a cache
+          #     hit it re-checks the receipt AND re-probes the SDK's reported
+          #     version/channel (verify_runtime). Receipt mismatch → fresh
+          #     verified download.
+          #   * Go module cache: extraction is verified against the reviewed
+          #     go.sum; `-mod=readonly` stays in force.
+          #   * pub cache: `pub get --enforce-lockfile` verifies the content
+          #     hashes recorded in the reviewed pubspec.lock.
+          # Write access to the restored scope is limited to trusted refs
+          # (master / tags / dispatch on this repo); fork-PR cache scopes are
+          # isolated by GitHub and cannot poison ours. Object-level GOCACHE
+          # trusts that scoping — the same trust already extended to the
+          # buildx gha cache in yueto-ci.
+          cache: true
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: false
+          cache: true
+          cache-dependency-path: '**/go.sum'
 
       - name: Classify release tag once
         id: classify
@@ -385,15 +403,35 @@ jobs:
           echo "BUILT_SOURCE_COMMIT=$BUILT_SOURCE_COMMIT"
 
       # ── Toolchains (Go for core, Flutter for app, Java for android) ───────
+      # Caches ON per the reviewed 2026-08-31 decision documented at the
+      # preflight setup-flutter step: receipt-verified SDK cache, go.sum-
+      # verified module cache, trusted-ref-scoped GOCACHE. The Go caches are
+      # what turn the five per-platform from-scratch mihomo core builds
+      # (126–453 s each) into warm incremental ones.
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: false
+          cache: true
+          cache-dependency-path: '**/go.sum'
 
       - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@635b8e875d5a9931656808ad31033f6d8c075f72 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: false
+          cache: true
+
+      - name: Restore pub cache (lockfile-verified)
+        if: runner.os != 'Windows'
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ~/.pub-cache
+          key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+
+      - name: Restore pub cache (lockfile-verified, Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ~\AppData\Local\Pub\Cache
+          key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
 
       - name: Setup Java (Android only)
         if: matrix.platform == 'android'
@@ -1384,7 +1422,9 @@ jobs:
         uses: onesyue/yuelink-ci/.github/actions/setup-flutter@635b8e875d5a9931656808ad31033f6d8c075f72 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: false
+          # Cache ON — reviewed 2026-08-31 decision, see the preflight
+          # setup-flutter step. This install was 116 s of the assemble tail.
+          cache: true
 
       - name: Resolve locked verification dependencies
         if: needs.preflight.outputs.tag_kind == 'stable'

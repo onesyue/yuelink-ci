@@ -213,10 +213,21 @@ def actions_policy_issues(automation: dict[str, str], readme: str) -> list[str]:
 
 
 def source_flutter_issues(workflow: str) -> list[str]:
+    # 2026-08-31: two deliberate policy updates in one repair.
+    #   1. The installer pin tracks the CURRENT approved commit. The previous
+    #      value (17d69267…) went stale when the installer advanced to
+    #      635b8e87…, which turned this guard permanently red — and that
+    #      standing red hid every later contract failure behind background
+    #      noise (policy-ci was failing on push for days, unnoticed).
+    #   2. `cache: true` is now the reviewed state (receipt-verified SDK
+    #      cache, fails closed to a fresh verified download; rationale at the
+    #      build workflow's preflight setup-flutter step). `cache: false`
+    #      here is drift — it silently restores ~5 wall-clock minutes per
+    #      attestation.
     issues: list[str] = []
     pin = (
         "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-        "17d69267d15d794f3072b31c3d22cdd442e29293"
+        "635b8e875d5a9931656808ad31033f6d8c075f72"
     )
     starts = [match.start() for match in re.finditer(re.escape(pin), workflow)]
     if len(starts) != 3:
@@ -226,9 +237,12 @@ def source_flutter_issues(workflow: str) -> list[str]:
         if end < 0:
             end = len(workflow)
         block = workflow[start:end]
-        if block.count("cache: false") != 1:
-            issues.append(f"source installer usage {index + 1} must disable cache")
-        if "cache: true" in block or "channel:" in block:
+        if block.count("cache: true") != 1:
+            issues.append(
+                f"source installer usage {index + 1} must enable the "
+                "receipt-verified cache (reviewed 2026-08-31)"
+            )
+        if "cache: false" in block or "channel:" in block:
             issues.append(f"source installer usage {index + 1} has legacy inputs")
     return issues
 
@@ -448,21 +462,23 @@ class SourceAttestationContractTests(unittest.TestCase):
         self.assertEqual(actions_policy_issues(self.automation, self.readme), [])
 
     def test_each_source_attestation_flutter_cache_mutation_is_rejected(self) -> None:
+        # Reversed direction since the 2026-08-31 decision: the reviewed
+        # state is `cache: true`; a quiet flip back to `false` must go red.
         pin = (
             "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-            "17d69267d15d794f3072b31c3d22cdd442e29293"
+            "635b8e875d5a9931656808ad31033f6d8c075f72"
         )
         starts = [
             match.start() for match in re.finditer(re.escape(pin), self.workflow)
         ]
         self.assertEqual(len(starts), 3)
         for index, start in enumerate(starts):
-            cache = self.workflow.index("cache: false", start)
+            cache = self.workflow.index("cache: true", start)
             with self.subTest(usage=index + 1):
                 mutated = (
                     self.workflow[:cache]
-                    + "cache: true"
-                    + self.workflow[cache + len("cache: false") :]
+                    + "cache: false"
+                    + self.workflow[cache + len("cache: true") :]
                 )
                 self.assertTrue(source_flutter_issues(mutated))
 
