@@ -25,6 +25,12 @@ the private signing plane, which authenticates the current signed root, signs
 the candidate, enforces a monotonic version transition, publishes the signed
 archive/root, and verifies the live artifacts.
 
+Since 2026-09-03 that promotion runs **inside** the public build (`release`
+job, last step `Sign root manifest and promote (in-pipeline)` →
+`scripts/ci/promote_in_pipeline.sh`): a green stable build moves the signed
+root itself. The private signer workflow and the local/bastion wrapper remain
+only as fallback.
+
 The independent public manifest watchdog also keeps a reviewed, signed minimum
 root at `tests/fixtures/update-manifest-v1.json`. It rejects a live root whose
 semantic version or `publishedAt` predates that floor even when the old root's

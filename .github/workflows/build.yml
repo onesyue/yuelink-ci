@@ -1933,9 +1933,9 @@ jobs:
               exit 1
             }
             {
-              echo "## Awaiting private manifest signature"
+              echo "## Candidate published; in-pipeline promotion follows"
               echo
-              echo "Public CI produced \`$TAG/$MANIFEST_NAME\` only."
+              echo "Public CI produced \`$TAG/$MANIFEST_NAME\`; the signed root moves in the last step of this job."
               echo "- ATTESTED_SOURCE_COMMIT: \`$ATTESTED_SOURCE_COMMIT\`"
               echo "- BUILT_SOURCE_COMMIT: \`$BUILT_SOURCE_COMMIT\`"
               echo "- Candidate SHA-256: \`$candidate_sha256\`"
@@ -1959,6 +1959,41 @@ jobs:
           done
           echo "::error::candidate verification failed after CDN propagation window"
           exit 1
+      # In-pipeline promotion (2026-09-03). Build green ⇒ the signed root
+      # update.json moves to this version, here, with no operator and no
+      # second machine. The previous "protected plane" promoters (private
+      # sign-release-manifest workflow / bastion sealed signer / workstation
+      # wrapper) stay as fallback but are no longer on the release path: they
+      # were billing-frozen, never had a successful live run, or ran 40x slower
+      # to R2 and burned two version numbers (v1.3.34, v1.3.36) with
+      # half-finished immutable bindings. Owner accepted the trade-off of the
+      # signing seed living in this public repo's secrets; every check the
+      # protected promoter performed is reused inside the script.
+      - name: Sign root manifest and promote (in-pipeline)
+        if: env.SKIP_MANIFEST != '1' && needs.preflight.outputs.tag_kind == 'stable'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_APP_KEY }}
+          R2_ENDPOINT: https://1e192a89cfaab399d211bb1dfe77a5cd.r2.cloudflarestorage.com
+          R2_ACCOUNT_ID: 1e192a89cfaab399d211bb1dfe77a5cd
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          BUCKET: yuelink-dist
+          TAG: ${{ github.ref_name }}
+          UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64: ${{ secrets.UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64 }}
+          ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
+          SOURCE_ATTESTATION_RUN_ID: ${{ needs.source_binding.outputs.attestation_run_id }}
+          BUILDER_COMMIT: ${{ github.workflow_sha }}
+          BUILD_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [ -z "${UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64:-}" ]; then
+            echo "::error::UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64 secret is not configured; root manifest was NOT promoted (fallback: scripts/ci/release-promote-local.sh on bastion)"
+            exit 1
+          fi
+          bash scripts/ci/promote_in_pipeline.sh "$APP_VERSION"
 
   # ───────────────────────────────────────────────────────────────────────────
   # 2026-08-21: Cloudflare bucket lock permanently protects every object below

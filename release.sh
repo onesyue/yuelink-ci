@@ -359,9 +359,10 @@ fi
 echo "✓ 已确认远端 exact verified signed tag ${TAG}；对应构建已触发或可幂等续跑"
 echo "  看进度: gh run watch -R onesyue/yuelink-ci"
 if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-  echo "  构建绿仅代表 unsigned candidate 就绪；随后在受保护的私仓/本机签名平面运行:"
-  echo "  bash scripts/ci/promote_signed_manifest.sh ${BASH_REMATCH[1]}"
-  echo "  (private Actions 可用时也可 workflow_dispatch sign-release-manifest.yml)"
-  echo "  promotion 验收后:把精确签名根更新到 tests/fixtures/update-manifest-v1.json"
-  echo "  并把旧根保留为 replay regression fixture；不得从 CDN 动态学习地板。"
+  echo "  构建绿 = 已上线：release job 最后一步「Sign root manifest and promote (in-pipeline)」
+  会签名并 CAS 切根（2026-09-03 起），看 run 摘要里的 "Root manifest promoted in-pipeline"。
+  兜底（该步失败且需人工时，只在 bastion 起一次、绝不中途杀）:
+  bash scripts/ci/release-promote-local.sh <X.Y.Z> <source40hex> <candidate64hex>
+  上线验收后:把精确签名根更新到 tests/fixtures/update-manifest-v1.json
+  并把旧根保留为 replay regression fixture；不得从 CDN 动态学习地板。"
 fi
