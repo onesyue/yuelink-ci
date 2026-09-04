@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.39",
+  "channel": "stable",
+  "publishedAt": "2026-09-04T09:10:12Z",
+  "expiresAt": "2026-10-09T09:10:12Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "## 修复\n\n- **Windows 的 Emby 页面重试不再永久转圈**：WebView 首次加载失败后的重试导航现在有\n  15 秒硬超时。此前重试路径直接等待 `loadUrl`；底层 WebView 如果既不完成也不抛错，\n  加载遮罩会永久留在屏幕上，只能强退应用。\n\n## 兼容性\n\n账号、订阅、协议、更新签名公钥与各平台升级身份均未改变。\n内核基线 mihomo v1.19.30；Flutter 3.47.2 / Dart 3.13.2。\n",
+  "notesEn": "## Fixed\n\n- **Retrying the Emby page on Windows can no longer spin forever**: navigation\n  after an initial WebView load failure now has a hard 15-second timeout. The\n  retry path previously awaited `loadUrl` without a bound; if the underlying\n  WebView neither completed nor threw, the loading overlay stayed on screen\n  until the application was force-quit.\n\n## Compatibility\n\nAccounts, subscriptions, protocols, update-signing keys, and per-platform\nupgrade identities are unchanged. Core baseline mihomo v1.19.30;\nFlutter 3.47.2 / Dart 3.13.2.\n",
+  "sourceCommit": "b6af59fe1b26b29b046bf75384aaeb4ac52d7c7b",
+  "sha256SumsSha256": "b56cfdb98a7e46cf0d216125de42ff085377008aef5642cd1929c735c698b450",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-android-arm64-v8a.apk",
+      "sha256": "767fbcc83ff30c33894a859e7998e1885d5b3adba1d4d9ac24c525b88dbc9a2c"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-android-armeabi-v7a.apk",
+      "sha256": "6725471b9f54fa0eecff2f9685608b81bb361d20ab24688d81500430e18d7f5a"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-android-x86_64.apk",
+      "sha256": "da2e33ff3f64acf72429d55fcdfc58d5713fc5862e501efe2d65a9cebc8e519b"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-android-universal.apk",
+      "sha256": "2ef098a6385d6ea658db03a8411a931849d8516870ddf64f42adb40827d751a5"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-ios.ipa",
+      "sha256": "708fdcbcfcc458a1bc8d38ab22493d4f9b7b7c5ac04578603bd86149474de5f5"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-macos-universal.dmg",
+      "sha256": "87af28c212e48275cec568c3b86f1452213d1239c26e0c8650b32b237fece282"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-windows-amd64-setup.exe",
+      "sha256": "fa9c20927ff56bd449dfa446127e618286138029397604cb882ff6586b5eb429"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-windows-amd64-portable.zip",
+      "sha256": "095a68d0a8d58c18b29b64344acd5eaf6ee400dd0bb561e0b419560717b55195"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-linux-amd64.AppImage",
+      "sha256": "bb444e62ac335419f1677abc359cf2fe4691f8eccab28b8e4e889644c5bda2e1"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "414b6fe5e11f5924b0198e660dd2fe79f1f91aedb2358af4e30b0445628b5946",
+    "sha256SumsSha256": "b56cfdb98a7e46cf0d216125de42ff085377008aef5642cd1929c735c698b450",
+    "payloadBundleSha256": "577293088f9797c9001ed32a794b9614742f676dc3367c42c6801890568c392e",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:w6r3hOcGeNEilVaQbDw0fZbrOnDJ8/OCNU+4Q+rx1/vzwe/NfKtpjHsGzn6//QS8ToIgGqXcPZxaVTgDHs7ZAQ=="
+}
