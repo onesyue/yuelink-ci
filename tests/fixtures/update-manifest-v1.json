@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.38",
+  "version": "1.3.39",
   "channel": "stable",
-  "publishedAt": "2026-09-04T02:11:09Z",
-  "expiresAt": "2026-10-09T02:11:09Z",
+  "publishedAt": "2026-09-04T09:10:12Z",
+  "expiresAt": "2026-10-09T09:10:12Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "发版链根治：构建完成即自动上线，不再有人工 promote。\n\n## 改进\n\n- **更新上线不再依赖人手和第二台机器**：公开构建流水线在验证完全部 19 件产物后，\n  直接签名并切换更新根清单。此前签名与切根要在另一台机器上人工执行，慢、易中断，\n  一次中断就会烧掉一个版本号（v1.3.34、v1.3.36 都因此从未发布）。\n- 本版的流水线改动本身不影响客户端行为。\n\n## 修复\n\n- **国内 App 的 QUIC 不再被客户端黑洞**：`all` 策略注入的全局 UDP/443 REJECT 改为按\n  订阅声明的 DIRECT 规则集收窄，国内应用不再等 QUIC 超时才回退 TCP；默认嗅探块对\n  TLS/QUIC 不再改写目的地。**并补齐了此前只搬了一半的部分**——服务端后来又加了十条\n  字面直连排除，客户端没跟上，差集里包含订阅下发域与分发 CDN。\n- **礼品卡的流量奖励不再显示成「+0.0 MB」**：面板按 GB 下发，客户端此前当字节读，\n  差了 1073741824 倍，三处显示全错。\n- **没有悦视频权限时看到升级引导，不再是红色报错**。\n- **四处会让界面永久转圈的等待都加了上限**：开机窗口显示、悦视频移动/Apple 入口、\n  连通性自检、安全存储调用。此前只能强杀应用。\n\n## 安全\n\n- **公告与更新说明的 HTML 解析器补上上游安全修复**：`html` 升到 0.15.7，修掉\n  `htmlToCodeMarkup()` 的 XSS、外来命名空间里 script/style 类标签的文本未转义、\n  带多余括号的 CDATA 不闭合，以及深层嵌套格式化标签的 O(N²) 退化。公告正文由服务端\n  下发并经这个解析器渲染，属于不可信输入路径。\n\n## 内部\n\n- 依赖锁在各约束内重新解算到最新版（36 个包，全部为 patch/minor）。工具链不变：\n  Flutter 3.47.2 / Dart 3.13.2 已是上游最新稳定版；内核基线不变。\n- `cached_network_image` 4.x 与 `dynamic_color` 2.x 刻意不升——两者的全部内容都是改用\n  `material_ui` 包替代 SDK 的 material 库，无修复、无安全内容、无用户可见收益。\n\n## 兼容性\n\n账号、订阅、协议、更新签名公钥、各平台升级身份均未改变。\n内核基线 mihomo v1.19.30。Flutter 3.47.2 / Dart 3.13.2。\n",
-  "notesEn": "Release chain fixed for good: a green build now publishes itself.\n\n## Improved\n\n- **Updates no longer wait for a person or a second machine**: after the public\n  build pipeline has verified all 19 release artifacts, it signs and switches\n  the update root manifest itself. Signing and promotion previously ran by hand\n  on another machine — slow, easy to interrupt, and one interruption burned a\n  version number (v1.3.34 and v1.3.36 were never published for that reason).\n- The pipeline change itself does not alter client behavior.\n\n## Fixed\n\n- **QUIC from domestic (CN) apps is no longer black-holed by the client**: the\n  global UDP/443 REJECT injected under the `all` policy is now narrowed to the\n  DIRECT rule sets the subscription declares, so domestic apps no longer wait\n  for a QUIC timeout before falling back to TCP; the default sniffer block no\n  longer rewrites TLS/QUIC destinations. **The half that had been left behind is\n  now ported too** — the server later added ten literal DIRECT exclusions that\n  the client never picked up, and the gap included the subscription-delivery\n  domain and the distribution CDN.\n- **Gift-card traffic rewards no longer show as \"+0.0 MB\"**: the panel sends the\n  amount in GB and the client was formatting it as bytes — off by 1073741824 in\n  all three places it is displayed.\n- **Without a video-service entitlement you now get the upgrade prompt**, not a\n  red error.\n- **Four unbounded waits that could leave the UI spinning forever are now\n  bounded**: window presentation at startup, the mobile/Apple entry points of\n  the video page, the connectivity self-check, and secure-storage calls. Until\n  now the only way out was to force-quit.\n\n## Security\n\n- **Upstream security fixes for the HTML parser behind announcements and\n  release notes**: `html` moves to 0.15.7, which fixes an XSS in\n  `htmlToCodeMarkup()`, unescaped text inside script/style-like tags in foreign\n  namespaces, CDATA blocks with extra brackets failing to close, and an O(N^2)\n  blowup on deeply nested formatting elements. Announcement bodies are served\n  by the panel and rendered through this parser, so that is an untrusted-input\n  path.\n\n## Internal\n\n- Dependency lock re-resolved to the newest versions each constraint allows\n  (36 packages, all patch or minor). Toolchain unchanged: Flutter 3.47.2 /\n  Dart 3.13.2 is already the latest upstream stable. Core baseline unchanged.\n- `cached_network_image` 4.x and `dynamic_color` 2.x are deliberately not\n  taken: both releases consist entirely of swapping the Flutter SDK's material\n  library for the `material_ui` package. No fixes, no security content, no\n  user-visible gain.\n\n## Compatibility\n\nAccounts, subscriptions, protocols, update-signing keys, and per-platform\nupgrade identities are unchanged. Core baseline mihomo v1.19.30.\nFlutter 3.47.2 / Dart 3.13.2.\n",
-  "sourceCommit": "4aabf4a0f41d1104487d26af02c16479b06f0bb6",
-  "sha256SumsSha256": "04dcf829a53bfbcfb92c963ca81c5ed00db824f5c8de27990544b556f3818151",
+  "notes": "## 修复\n\n- **Windows 的 Emby 页面重试不再永久转圈**：WebView 首次加载失败后的重试导航现在有\n  15 秒硬超时。此前重试路径直接等待 `loadUrl`；底层 WebView 如果既不完成也不抛错，\n  加载遮罩会永久留在屏幕上，只能强退应用。\n\n## 兼容性\n\n账号、订阅、协议、更新签名公钥与各平台升级身份均未改变。\n内核基线 mihomo v1.19.30；Flutter 3.47.2 / Dart 3.13.2。\n",
+  "notesEn": "## Fixed\n\n- **Retrying the Emby page on Windows can no longer spin forever**: navigation\n  after an initial WebView load failure now has a hard 15-second timeout. The\n  retry path previously awaited `loadUrl` without a bound; if the underlying\n  WebView neither completed nor threw, the loading overlay stayed on screen\n  until the application was force-quit.\n\n## Compatibility\n\nAccounts, subscriptions, protocols, update-signing keys, and per-platform\nupgrade identities are unchanged. Core baseline mihomo v1.19.30;\nFlutter 3.47.2 / Dart 3.13.2.\n",
+  "sourceCommit": "b6af59fe1b26b29b046bf75384aaeb4ac52d7c7b",
+  "sha256SumsSha256": "b56cfdb98a7e46cf0d216125de42ff085377008aef5642cd1929c735c698b450",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.38/YueLink-1.3.38-android-arm64-v8a.apk",
-      "sha256": "6fd37329c8f64a2e0a5d60c403fba79b5d8c448a13c0411f4b90fc96be0cb8ca"
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-android-arm64-v8a.apk",
+      "sha256": "767fbcc83ff30c33894a859e7998e1885d5b3adba1d4d9ac24c525b88dbc9a2c"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.38/YueLink-1.3.38-android-armeabi-v7a.apk",
-      "sha256": "20a35c4bcc116fcfd954bde742b58cf758e4be0fc864c8398c8f447308303f42"
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-android-armeabi-v7a.apk",
+      "sha256": "6725471b9f54fa0eecff2f9685608b81bb361d20ab24688d81500430e18d7f5a"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.38/YueLink-1.3.38-android-x86_64.apk",
-      "sha256": "0afd7e7cd97f86309e3ec990df1355b7ef244030ff79f852d5691354a8ac8732"
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-android-x86_64.apk",
+      "sha256": "da2e33ff3f64acf72429d55fcdfc58d5713fc5862e501efe2d65a9cebc8e519b"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.38/YueLink-1.3.38-android-universal.apk",
-      "sha256": "237348b26ee3c8a75678a15d1fbd7aa2fd9f1737b2fa5ab4a60466c288440eed"
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-android-universal.apk",
+      "sha256": "2ef098a6385d6ea658db03a8411a931849d8516870ddf64f42adb40827d751a5"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.38/YueLink-1.3.38-ios.ipa",
-      "sha256": "35bc430a8a3e46d4fa2c41d50a5bef7416aca3225694b5235b229158ca3a8d8b"
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-ios.ipa",
+      "sha256": "708fdcbcfcc458a1bc8d38ab22493d4f9b7b7c5ac04578603bd86149474de5f5"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.38/YueLink-1.3.38-macos-universal.dmg",
-      "sha256": "0f92e7496a150dda51da6ac075871870fc16373605fe39f5647a7c76ea7a484f"
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-macos-universal.dmg",
+      "sha256": "87af28c212e48275cec568c3b86f1452213d1239c26e0c8650b32b237fece282"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.38/YueLink-1.3.38-windows-amd64-setup.exe",
-      "sha256": "58f64bb372b218c371f481ae88a281dd62b112ec28fc008e5b30e347ac161924"
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-windows-amd64-setup.exe",
+      "sha256": "fa9c20927ff56bd449dfa446127e618286138029397604cb882ff6586b5eb429"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.38/YueLink-1.3.38-windows-amd64-portable.zip",
-      "sha256": "9b8ad7af6a098fd2387e4d08ae38713e383bab505fa0ceacc236b3202c0c03be"
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-windows-amd64-portable.zip",
+      "sha256": "095a68d0a8d58c18b29b64344acd5eaf6ee400dd0bb561e0b419560717b55195"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.38/YueLink-1.3.38-linux-amd64.AppImage",
-      "sha256": "b37b11eeb30e9d6715c2023a787ef844f819854c8170b72bb9e6cd42a17f216c"
+      "url": "https://yuetong.app/v1.3.39/YueLink-1.3.39-linux-amd64.AppImage",
+      "sha256": "bb444e62ac335419f1677abc359cf2fe4691f8eccab28b8e4e889644c5bda2e1"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "70c89ef7b1e5c249680fce23477f80b14cd02d23539f81e6254034b0bd96f085",
-    "sha256SumsSha256": "04dcf829a53bfbcfb92c963ca81c5ed00db824f5c8de27990544b556f3818151",
-    "payloadBundleSha256": "b975dc248c8b1abf245afad57517ade423bf8b9959528c5da05902e42e3d5675",
+    "candidateSha256": "414b6fe5e11f5924b0198e660dd2fe79f1f91aedb2358af4e30b0445628b5946",
+    "sha256SumsSha256": "b56cfdb98a7e46cf0d216125de42ff085377008aef5642cd1929c735c698b450",
+    "payloadBundleSha256": "577293088f9797c9001ed32a794b9614742f676dc3367c42c6801890568c392e",
     "payloadCount": 19
   },
-  "sig": "ed25519:X5MgUV3HoJK1p18lZDuv7RYhbBbwAZuMAZLFUoJI1GQdS2aZ0WnZbhndCspKbEy7Bkf0C/f7Y8HAL+VCTmsxDA=="
+  "sig": "ed25519:w6r3hOcGeNEilVaQbDw0fZbrOnDJ8/OCNU+4Q+rx1/vzwe/NfKtpjHsGzn6//QS8ToIgGqXcPZxaVTgDHs7ZAQ=="
 }
