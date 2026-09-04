@@ -119,9 +119,13 @@ tests, the release security scanner, Wintun hashes, release metadata and
 manifest schema, full-history Gitleaks, core and service production-target
 govulncheck, macOS integration tests, and the Windows durability probe. The
 final JSON proof is uploaded under the exact source SHA and receives GitHub
-build-provenance attestation. Updater signing material is intentionally not
-copied into this public repository; the protected promotion step verifies the
-real key and remains independently mandatory.
+build-provenance attestation. Updater signing material is never copied into
+Git. It remains in protected repository Secrets; the protected promotion step
+verifies the real key and remains independently mandatory. A manually
+dispatched recovery workflow may read those same canonical Android/updater
+Secrets, verifies both public signing identities, and emits only a
+two-recipient age ciphertext to the recovery bucket plus a one-day encrypted
+artifact. It has no pull-request trigger and no plaintext upload path.
 
 Every external `uses:` reference in all public workflows is pinned to a full
 40-character commit SHA. The repository-level Actions policy enforces that
@@ -141,7 +145,7 @@ android-actions/setup-android@*
 onesyue/yuelink-ci@*
 ```
 
-The contract inventories all seven workflow files plus the composite Flutter
-action (eight action-bearing YAML definitions), checks every `uses:` against
+The contract inventories all eight workflow files plus the composite Flutter
+action (nine action-bearing YAML definitions), checks every `uses:` against
 this policy, and rejects mutable refs, an unknown external repository, or a
 stale/extra documented pattern.

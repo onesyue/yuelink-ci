@@ -13,6 +13,7 @@ DEPENDABOT = ROOT / ".github/dependabot.yml"
 
 EXPECTED_ACTION_YAML = {
     ".github/actions/setup-flutter/action.yml",
+    ".github/workflows/backup-critical-workstation-keys.yml",
     ".github/workflows/build.yml",
     ".github/workflows/ephemeral-signer-bridge.yml",
     ".github/workflows/manifest-health.yml",
@@ -164,7 +165,7 @@ def actions_policy_issues(automation: dict[str, str], readme: str) -> list[str]:
     issues: list[str] = []
     if set(automation) != EXPECTED_ACTION_YAML:
         issues.append(
-            "public automation inventory must remain seven workflows plus one composite action"
+            "public automation inventory must remain eight workflows plus one composite action"
         )
 
     repositories: set[str] = set()

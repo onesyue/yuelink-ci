@@ -1,0 +1,77 @@
+name: Backup critical workstation keys
+
+# The private YueLink repository can exhaust paid Actions minutes.  This
+# public, manually dispatched job owns the canonical signing secrets already
+# used by the release builder and emits only an age-encrypted recovery archive.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-critical-workstation-keys
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Install age
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends age
+
+      - name: Build encrypted archive
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64: ${{ secrets.UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64 }}
+          UPDATE_MANIFEST_ED25519_PUBLIC_KEY_B64: ${{ vars.UPDATE_MANIFEST_ED25519_PUBLIC_KEY_B64 }}
+          YUEOPS_KEYVAULT_BREAKGLASS_RECIPIENT: ${{ vars.YUEOPS_KEYVAULT_BREAKGLASS_RECIPIENT }}
+          YUEOPS_KEYVAULT_VERIFIER_RECIPIENT: ${{ vars.YUEOPS_KEYVAULT_VERIFIER_RECIPIENT }}
+        run: |
+          set -euo pipefail
+          umask 077
+          bash scripts/build-keyvault-workstation-archive.sh \
+            "$RUNNER_TEMP/yueops-keyvault-workstation.tar.age"
+
+      # Keep the ciphertext even if the R2 credential or bucket policy is the
+      # thing that needs recovery.  No plaintext enters the artifact service.
+      - name: Retain encrypted recovery artifact for one day
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: yueops-keyvault-workstation-${{ github.run_id }}
+          path: ${{ runner.temp }}/yueops-keyvault-workstation.tar.age
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Round-trip encrypted archive through R2
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_APP_KEY }}
+          R2_ENDPOINT: https://1e192a89cfaab399d211bb1dfe77a5cd.r2.cloudflarestorage.com
+        run: |
+          set -euo pipefail
+          umask 077
+          out="$RUNNER_TEMP/yueops-keyvault-workstation.tar.age"
+          aws s3 cp "$out" \
+            s3://yueops-backup/critical-keys/yueops-keyvault-workstation.tar.age \
+            --endpoint-url "$R2_ENDPOINT" --no-progress --only-show-errors
+          aws s3 cp \
+            s3://yueops-backup/critical-keys/yueops-keyvault-workstation.tar.age \
+            "$RUNNER_TEMP/roundtrip.tar.age" \
+            --endpoint-url "$R2_ENDPOINT" --no-progress --only-show-errors
+          cmp "$out" "$RUNNER_TEMP/roundtrip.tar.age"
+          sha256sum "$out"
