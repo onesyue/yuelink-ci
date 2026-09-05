@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.41",
+  "version": "1.3.42",
   "channel": "stable",
-  "publishedAt": "2026-09-04T22:57:44Z",
-  "expiresAt": "2026-10-09T22:57:44Z",
+  "publishedAt": "2026-09-05T03:02:23Z",
+  "expiresAt": "2026-10-10T03:02:23Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "签到自动绕过失联边缘节点。\n\n## 修复\n\n- **签到与状态查询跨 edge 自动接管**：生产复核发现 `hub.edgemetrics.dev` 和\n  `cdn.edgemetrics.dev` 能完成 TLS，却不返回 HTTP；旧客户端固定请求第一条 host，\n  因此另外两条健康线路也无法接管。现在先采用 EndpointPool 的并发健康竞速赢家，\n  遇到 timeout、socket、TLS、HTTP 协议错误或 502/503/504 时再按序切换其它 host。\n- **冷启动也从健康入口开始**：内置首选前滚到实测 `/healthz` 为 200、受保护端点\n  无 token 为 401 的 `api.edgemetrics.dev`，避免 EndpointPool 尚未完成启动时先等待\n  已知黑洞；Bunny CDN 是紧随其后的独立 fallback。\n- **账户与 AI 诊断一起补齐容灾**：账户总览、通知与签到共享健康赢家和 fallback；\n  AI 故障诊断仍坚持直连，但不再只有一个 edge host。\n\n## 安全与一致性\n\n- 401/403、429 和业务拒绝不会触发跨 host 重发；只有可归因于路由的故障才切换。\n- 签到 POST 最多只跨到一个备用 host；响应丢失后的这一次重试由服务端当日唯一\n  签到记录及 reward/points ledger 幂等键兜底，不会重复发放流量、余额或积分。\n\n## 兼容性\n\n账号 token、签到/账户 API 路径和响应结构、节点协议、更新签名公钥、mihomo pin\n均未改变；Flutter 3.47.2 / Dart 3.13.2 与 Go 1.26.8 保持不变。\n",
-  "notesEn": "Check-in now routes around unreachable edge hosts.\n\n## Fixed\n\n- **Check-in and status requests now fail over across edge hosts**: production\n  probes found that `hub.edgemetrics.dev` and `cdn.edgemetrics.dev` complete\n  TLS but return no HTTP bytes. The old client stayed pinned to the first host,\n  so the two healthy routes could not take over. Requests now start with\n  EndpointPool's raced winner and move to another host only for timeout,\n  socket, TLS, HTTP protocol, or 502/503/504 failures.\n- **Cold starts begin on a live builtin**: `api.edgemetrics.dev`, verified with\n  `/healthz` 200 and the expected unauthenticated 401, is now first; Bunny CDN\n  remains the next independent fallback.\n- **Account and AI diagnosis paths share the repair**: account overview,\n  notices, and check-in use the complete health-selected route set. Diagnosis\n  remains direct by design, but can now move between edge hosts.\n\n## Safety and consistency\n\n- 401/403, 429, and business rejections are never replayed across hosts. Only\n  route-specific transport or gateway failures trigger failover.\n- A check-in POST can cross to at most one fallback host. If its response is\n  lost after commit, the server's existing daily unique record and\n  reward/points-ledger idempotency keys prevent duplicate traffic, balance,\n  or point grants.\n\n## Compatibility\n\nAccount tokens, check-in/account paths and response shapes, node protocols,\nupdate-signing keys, and the mihomo pin are unchanged. Flutter 3.47.2, Dart\n3.13.2, and Go 1.26.8 remain the release toolchains.\n",
-  "sourceCommit": "e61406f9e034734e58ebd0a0a8eb636ee643e786",
-  "sha256SumsSha256": "0a662014f8897b6903126a55ef3ec1f2b8e8a786fae46f644b556c222b982bad",
+  "notes": "换号签到与更新记录更可靠。\n\n## 修复\n\n- 换号或重新登录后，上一会话未完成的签到请求不再改变当前账号的状态，也不会弹出\n  旧账号的奖励或错误。签到奖励与护盾确认记录按账号分别保存。\n- AI 连接诊断在请求已经发送后不会因响应丢失而自动重复执行；连接尚未建立时，仍会\n  自动尝试备用入口。签到继续支持按用户和日期去重的故障转移。\n- 自动检查与手动检查更新同时进行时，较慢的旧清单不会覆盖已确认的新发布记录；\n  更新防回放记录立即保存，避免退出应用时尚未落盘。\n\n## 兼容性\n\n账号、订阅和节点协议兼容现有服务。更新签名公钥与平台安装身份保持一致。\nFlutter 3.47.2、Dart 3.13.2、Go 1.26.8 和 Mihomo v1.19.30 稳定基线不变。\n",
+  "notesEn": "More reliable check-in and update records.\n\n## Fixed\n\n- Switching accounts or signing in again invalidates pending check-in results\n  from the previous session. Old rewards and errors no longer appear in the\n  current account. Saved rewards and streak-shield acknowledgements are scoped\n  to each account.\n- AI connection diagnosis no longer repeats a submitted request when its\n  response is lost. Connection failures before sending can still use another\n  edge host; check-in retains its server-deduplicated retry by user and day.\n- Concurrent automatic and manual update checks cannot replace a newer\n  authenticated publication record with a slower, older response. The replay\n  record is saved immediately before the check returns.\n\n## Compatibility\n\nAccounts, subscriptions, node protocols, update-signing keys, and platform\ninstallation identities remain compatible. Release toolchains stay on Flutter\n3.47.2, Dart 3.13.2, Go 1.26.8, and the Mihomo v1.19.30 stable baseline.\n",
+  "sourceCommit": "0cb4daf095860bcc911348e558d7e0efca643420",
+  "sha256SumsSha256": "e1c7951c5a2115d9a8854bac82b7859eb4ee1f4f8e568051b5b7825da85b9fc2",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.41/YueLink-1.3.41-android-arm64-v8a.apk",
-      "sha256": "630b49592302690dcf53b93f1c4638066c45d095e113383a9d47b9dadd36ce58"
+      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-android-arm64-v8a.apk",
+      "sha256": "4ca0ccdad2948b368e25d773ec647d6b19d40915fdd797572a4c75ba80da8e86"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.41/YueLink-1.3.41-android-armeabi-v7a.apk",
-      "sha256": "518a7d150a19a28f5c46f900565ec3937e83d5af3386202a54d8b91e2999c9fa"
+      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-android-armeabi-v7a.apk",
+      "sha256": "36c07ba30ea86ff99d079adcba38eb1cee5f1c3de42f2b225eb82ea3975df2ea"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.41/YueLink-1.3.41-android-x86_64.apk",
-      "sha256": "f743d197e360fa07c33f7d299012d1d2061a84ae11fba9bf0769f6d56fc7ec22"
+      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-android-x86_64.apk",
+      "sha256": "2c7ab7bf28602cd145689dd53494594d86e715da5785ac17cb641744cd2692c3"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.41/YueLink-1.3.41-android-universal.apk",
-      "sha256": "2e422754d092936628923fdc1d6dcb4840597d6a3cb59893038fb6141172424a"
+      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-android-universal.apk",
+      "sha256": "044dc0cc5357a1ed289c5ff8141df840680f3415808fae28d61ef71c1a0461a6"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.41/YueLink-1.3.41-ios.ipa",
-      "sha256": "5266a5343af718fc429eb31429255025e84da913ca2e7aedd045d4b4fe805a48"
+      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-ios.ipa",
+      "sha256": "1472fbd9d5570bd397c9404fc63512f258ebb702b913ce10aa8af75704573486"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.41/YueLink-1.3.41-macos-universal.dmg",
-      "sha256": "ce18adf7fe9a868c9bf1de3c91bc0c4866a940285288fb8efdc7fa775ccfd456"
+      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-macos-universal.dmg",
+      "sha256": "a914f733ddfd901b866afce924797a36a58878153b2b6741cef417baf9e3ad59"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.41/YueLink-1.3.41-windows-amd64-setup.exe",
-      "sha256": "59464285443a2ae53ffb8b9cd87938be98296e2dee80af9862c9d2499c24e466"
+      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-windows-amd64-setup.exe",
+      "sha256": "fe27ea42b88db3622fc5763b4429b61e2ba58ff3bb660e257a79958e31f98705"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.41/YueLink-1.3.41-windows-amd64-portable.zip",
-      "sha256": "a88be462a95152b6d62f7e3bc1e55268dd9da51a9ffdf80d3363a46fed75e239"
+      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-windows-amd64-portable.zip",
+      "sha256": "6e5c8e8746ad84d445f26b303e838470c54f2b0358480c0a4a4c6d6a60544d20"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.41/YueLink-1.3.41-linux-amd64.AppImage",
-      "sha256": "cfee35f252a34bbf66fdb6977451e86f2dac8482c71a9793ff46abbdac9fc5aa"
+      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-linux-amd64.AppImage",
+      "sha256": "5be5d1512e96887db71fdd24cdeab1d039c22b8cb911254b2508bee9fdfc28d3"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "7c0a3e5f635bc46660128b184d66a052f8711429cbcd5122c83770f7a2c95e01",
-    "sha256SumsSha256": "0a662014f8897b6903126a55ef3ec1f2b8e8a786fae46f644b556c222b982bad",
-    "payloadBundleSha256": "b305799b87e758ecb5d2210cd3b63f493ac0b2185214c75ecf28cf484b43291a",
+    "candidateSha256": "507c80761631b10d7d96403412fc20830703891f54fb8a0e4f787d995efde40c",
+    "sha256SumsSha256": "e1c7951c5a2115d9a8854bac82b7859eb4ee1f4f8e568051b5b7825da85b9fc2",
+    "payloadBundleSha256": "6711bde6b6fd478ca0db6c86de99509d5d7b43b75611d1477ef6130bbae86050",
     "payloadCount": 19
   },
-  "sig": "ed25519:HZT5OGjrH29gu6FWKJ2bQmDmZTxmYiejP250RAmIp82vuiukT9ZBqRNAdFQ6nWxKr1Tyr/sdMZJ90G8U7+LBCw=="
+  "sig": "ed25519:stcNYwpwaMdAagsUMKFhw/SEJrApECwqpNuL/9OjZ8CBp40hQC281SmmqIidMGsKra0gmG8oeO+/r6kFEVVCBg=="
 }
