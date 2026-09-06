@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.42",
+  "version": "1.3.43",
   "channel": "stable",
-  "publishedAt": "2026-09-05T03:02:23Z",
-  "expiresAt": "2026-10-10T03:02:23Z",
+  "publishedAt": "2026-09-06T05:35:51Z",
+  "expiresAt": "2026-10-11T05:35:51Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "换号签到与更新记录更可靠。\n\n## 修复\n\n- 换号或重新登录后，上一会话未完成的签到请求不再改变当前账号的状态，也不会弹出\n  旧账号的奖励或错误。签到奖励与护盾确认记录按账号分别保存。\n- AI 连接诊断在请求已经发送后不会因响应丢失而自动重复执行；连接尚未建立时，仍会\n  自动尝试备用入口。签到继续支持按用户和日期去重的故障转移。\n- 自动检查与手动检查更新同时进行时，较慢的旧清单不会覆盖已确认的新发布记录；\n  更新防回放记录立即保存，避免退出应用时尚未落盘。\n\n## 兼容性\n\n账号、订阅和节点协议兼容现有服务。更新签名公钥与平台安装身份保持一致。\nFlutter 3.47.2、Dart 3.13.2、Go 1.26.8 和 Mihomo v1.19.30 稳定基线不变。\n",
-  "notesEn": "More reliable check-in and update records.\n\n## Fixed\n\n- Switching accounts or signing in again invalidates pending check-in results\n  from the previous session. Old rewards and errors no longer appear in the\n  current account. Saved rewards and streak-shield acknowledgements are scoped\n  to each account.\n- AI connection diagnosis no longer repeats a submitted request when its\n  response is lost. Connection failures before sending can still use another\n  edge host; check-in retains its server-deduplicated retry by user and day.\n- Concurrent automatic and manual update checks cannot replace a newer\n  authenticated publication record with a slower, older response. The replay\n  record is saved immediately before the check returns.\n\n## Compatibility\n\nAccounts, subscriptions, node protocols, update-signing keys, and platform\ninstallation identities remain compatible. Release toolchains stay on Flutter\n3.47.2, Dart 3.13.2, Go 1.26.8, and the Mihomo v1.19.30 stable baseline.\n",
-  "sourceCommit": "0cb4daf095860bcc911348e558d7e0efca643420",
-  "sha256SumsSha256": "e1c7951c5a2115d9a8854bac82b7859eb4ee1f4f8e568051b5b7825da85b9fc2",
+  "notes": "每条失败都有下一步，回前台不再误断。\n\n## 修复\n\n- 从后台或托盘回到前台时，不再因一次慢探测就断开连接：会再探一次并核对数据面，\n  只有两边都无响应才断开。\n- 登录：面板限频立即按原话提示，不再报成网络错误；本机与服务端的异常各自有准确\n  提示；会话失效的原因留在登录页；网络错误可直接进入诊断。\n- 订阅：手动订阅 401/403/404/410 进入「检查套餐 / 诊断 / 重试」对话框；已过期或流量\n  用尽的账号订阅卡上可直接续费；登录后同步失败可点提示重试；「更新全部」不再可\n  重复点击。\n- 账户：修改密码有内联校验与显示切换，密码不再被去除首尾空格；未登录时设备页与\n  诊断页直接提供登录入口；「我的」显示待回复工单数。\n- 引导与更新：每一屏都能直接登录；打开下载页失败时给出可复制地址；缺少 SHA-256\n  的更新资产不再应用内安装。\n\n## 兼容性\n\n账号、订阅和节点协议兼容现有服务。更新签名公钥与平台安装身份保持一致。\nFlutter 3.47.2、Dart 3.13.2、Go 1.26.8 和 Mihomo v1.19.30 稳定基线不变。\n",
+  "notesEn": "Every failure now has a next step, and coming back to the foreground no longer drops you.\n\n## Fixes\n\n- Returning from the background or the tray no longer disconnects after a single slow\n  probe: the core is probed again and the data plane is checked; only silence on both\n  disconnects.\n- Sign-in: a panel rate limit is shown in the panel's own words instead of \"network\n  error\"; local and server-side failures each get an accurate message; the reason for\n  an expired session stays on the sign-in page; a network error offers diagnostics.\n- Subscriptions: a manual subscription answering 401/403/404/410 opens the \"check plan /\n  diagnose / retry\" dialog; expired or used-up account subscriptions offer Renew on the\n  card; a failed post-login sync can be retried from the notice; \"Update all\" is\n  single-flight.\n- Account: the change-password dialog validates inline and can show the password; it no\n  longer trims whitespace. Signed-out users get a sign-in action on the devices and\n  diagnosis pages; \"Me\" shows how many tickets await your reply.\n- Onboarding and updates: sign in from any onboarding screen; a failed \"open download\n  page\" leaves a copyable address; an update asset without a SHA-256 is never installed\n  in-app.\n\n## Compatibility\n\nAccounts, subscriptions and node protocols remain compatible with the current service.\nThe update signing key and platform install identities are unchanged. Flutter 3.47.2,\nDart 3.13.2, Go 1.26.8 and Mihomo v1.19.30 remain the stable baseline.\n",
+  "sourceCommit": "4411bb18f0d934735e189dba1c975a9aed2e049d",
+  "sha256SumsSha256": "78178949bbfa3cca11be01e3d196b14cfc71e06cf834b3738b1f68daa064075e",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-android-arm64-v8a.apk",
-      "sha256": "4ca0ccdad2948b368e25d773ec647d6b19d40915fdd797572a4c75ba80da8e86"
+      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-android-arm64-v8a.apk",
+      "sha256": "484d9f6b51f3c6ec6c0edecfb339a602830414370c4c69a8af3c02700bb696c2"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-android-armeabi-v7a.apk",
-      "sha256": "36c07ba30ea86ff99d079adcba38eb1cee5f1c3de42f2b225eb82ea3975df2ea"
+      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-android-armeabi-v7a.apk",
+      "sha256": "edba72b352c7385aba1ba8abd553df8343b4173d242f37839466024d86424d64"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-android-x86_64.apk",
-      "sha256": "2c7ab7bf28602cd145689dd53494594d86e715da5785ac17cb641744cd2692c3"
+      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-android-x86_64.apk",
+      "sha256": "34592d1fde485c80c897fa733b0eec70dfc697138498f2c7ef5ad637d7f28394"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-android-universal.apk",
-      "sha256": "044dc0cc5357a1ed289c5ff8141df840680f3415808fae28d61ef71c1a0461a6"
+      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-android-universal.apk",
+      "sha256": "864c574feefe397968f8b499a26fc90601b92c575861c87d1c66c8b238d7f4ab"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-ios.ipa",
-      "sha256": "1472fbd9d5570bd397c9404fc63512f258ebb702b913ce10aa8af75704573486"
+      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-ios.ipa",
+      "sha256": "018642698d3531233688bc64346bb1fbb7ede10dc59de5b66e9d49cdc8cdc9f9"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-macos-universal.dmg",
-      "sha256": "a914f733ddfd901b866afce924797a36a58878153b2b6741cef417baf9e3ad59"
+      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-macos-universal.dmg",
+      "sha256": "e2f89cd1f747d3ef350ff70cb1a29ae401596ac2bbb53e81435880e5b699f39d"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-windows-amd64-setup.exe",
-      "sha256": "fe27ea42b88db3622fc5763b4429b61e2ba58ff3bb660e257a79958e31f98705"
+      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-windows-amd64-setup.exe",
+      "sha256": "c02494eda4cfe09846dc85dc8ba5812d7693df729abdb0d0d475f5d9545ef897"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-windows-amd64-portable.zip",
-      "sha256": "6e5c8e8746ad84d445f26b303e838470c54f2b0358480c0a4a4c6d6a60544d20"
+      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-windows-amd64-portable.zip",
+      "sha256": "05d34e232e87f6817a355346533de6b6c0c1a9863093e4615c1b2d7fb0baf92e"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.42/YueLink-1.3.42-linux-amd64.AppImage",
-      "sha256": "5be5d1512e96887db71fdd24cdeab1d039c22b8cb911254b2508bee9fdfc28d3"
+      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-linux-amd64.AppImage",
+      "sha256": "003b0f580bae7cb714e7e678f8cd238b181b74d1ff0c1acecfe0c52b02dc4913"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "507c80761631b10d7d96403412fc20830703891f54fb8a0e4f787d995efde40c",
-    "sha256SumsSha256": "e1c7951c5a2115d9a8854bac82b7859eb4ee1f4f8e568051b5b7825da85b9fc2",
-    "payloadBundleSha256": "6711bde6b6fd478ca0db6c86de99509d5d7b43b75611d1477ef6130bbae86050",
+    "candidateSha256": "70231233e498a37698b4130bbe388ae69cb315e9e2df675c7b2047a3747cd5c6",
+    "sha256SumsSha256": "78178949bbfa3cca11be01e3d196b14cfc71e06cf834b3738b1f68daa064075e",
+    "payloadBundleSha256": "150085952a1f5ed0ffb38ea3f4418e7e6b87e9f1ee0e72a3fbeeed763711d379",
     "payloadCount": 19
   },
-  "sig": "ed25519:stcNYwpwaMdAagsUMKFhw/SEJrApECwqpNuL/9OjZ8CBp40hQC281SmmqIidMGsKra0gmG8oeO+/r6kFEVVCBg=="
+  "sig": "ed25519:yv84EdOKef5/8ds+J1p2k5gscAvQ2Qsdva2pwdosTlVIYkUfzyWXEU0QzmiHlg0ONr+d34rGyTcxchGuWSRJBw=="
 }
