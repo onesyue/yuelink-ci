@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.43",
+  "version": "1.3.44",
   "channel": "stable",
-  "publishedAt": "2026-09-06T05:35:51Z",
-  "expiresAt": "2026-10-11T05:35:51Z",
+  "publishedAt": "2026-09-07T11:01:15Z",
+  "expiresAt": "2026-10-12T11:01:15Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "每条失败都有下一步，回前台不再误断。\n\n## 修复\n\n- 从后台或托盘回到前台时，不再因一次慢探测就断开连接：会再探一次并核对数据面，\n  只有两边都无响应才断开。\n- 登录：面板限频立即按原话提示，不再报成网络错误；本机与服务端的异常各自有准确\n  提示；会话失效的原因留在登录页；网络错误可直接进入诊断。\n- 订阅：手动订阅 401/403/404/410 进入「检查套餐 / 诊断 / 重试」对话框；已过期或流量\n  用尽的账号订阅卡上可直接续费；登录后同步失败可点提示重试；「更新全部」不再可\n  重复点击。\n- 账户：修改密码有内联校验与显示切换，密码不再被去除首尾空格；未登录时设备页与\n  诊断页直接提供登录入口；「我的」显示待回复工单数。\n- 引导与更新：每一屏都能直接登录；打开下载页失败时给出可复制地址；缺少 SHA-256\n  的更新资产不再应用内安装。\n\n## 兼容性\n\n账号、订阅和节点协议兼容现有服务。更新签名公钥与平台安装身份保持一致。\nFlutter 3.47.2、Dart 3.13.2、Go 1.26.8 和 Mihomo v1.19.30 稳定基线不变。\n",
-  "notesEn": "Every failure now has a next step, and coming back to the foreground no longer drops you.\n\n## Fixes\n\n- Returning from the background or the tray no longer disconnects after a single slow\n  probe: the core is probed again and the data plane is checked; only silence on both\n  disconnects.\n- Sign-in: a panel rate limit is shown in the panel's own words instead of \"network\n  error\"; local and server-side failures each get an accurate message; the reason for\n  an expired session stays on the sign-in page; a network error offers diagnostics.\n- Subscriptions: a manual subscription answering 401/403/404/410 opens the \"check plan /\n  diagnose / retry\" dialog; expired or used-up account subscriptions offer Renew on the\n  card; a failed post-login sync can be retried from the notice; \"Update all\" is\n  single-flight.\n- Account: the change-password dialog validates inline and can show the password; it no\n  longer trims whitespace. Signed-out users get a sign-in action on the devices and\n  diagnosis pages; \"Me\" shows how many tickets await your reply.\n- Onboarding and updates: sign in from any onboarding screen; a failed \"open download\n  page\" leaves a copyable address; an update asset without a SHA-256 is never installed\n  in-app.\n\n## Compatibility\n\nAccounts, subscriptions and node protocols remain compatible with the current service.\nThe update signing key and platform install identities are unchanged. Flutter 3.47.2,\nDart 3.13.2, Go 1.26.8 and Mihomo v1.19.30 remain the stable baseline.\n",
-  "sourceCommit": "4411bb18f0d934735e189dba1c975a9aed2e049d",
-  "sha256SumsSha256": "78178949bbfa3cca11be01e3d196b14cfc71e06cf834b3738b1f68daa064075e",
+  "notes": "换账号后不再看到上一个账号的工单。\n\n## 修复\n\n- 在同一台设备上退出并换一个账号登录后，工单列表与「我的」页的待回复角标会立即\n  作废并按新账号重新拉取，不再短暂显示上一个账号的内容。\n\n## 兼容性\n\n账号、订阅和节点协议兼容现有服务。更新签名公钥与平台安装身份保持一致。\nFlutter 3.47.2、Dart 3.13.2、Go 1.26.8 和 Mihomo v1.19.30 稳定基线不变。\n",
+  "notesEn": "Switching accounts no longer shows the previous account's tickets.\n\n## Fixes\n\n- After signing out and signing in with a different account on the same device, the\n  ticket list and the \"awaiting reply\" badge on the Me page are invalidated immediately\n  and refetched for the new account. Previously the first frame could still render the\n  previous account's tickets, and — since v1.3.43 wired that count into the Me badge —\n  its awaiting-reply number as well. While the list has not loaded, the badge now shows\n  0 instead of carrying over the previous account's number.\n\n## Compatibility\n\nAccounts, subscriptions and the node protocol remain compatible with the current\nservice. The update signing key and the per-platform install identity are unchanged.\nThe Flutter 3.47.2 / Dart 3.13.2 / Go 1.26.8 / Mihomo v1.19.30 baseline is unchanged.\n",
+  "sourceCommit": "5f8dd78a2f3d05279b797b31d51719809dfd1faf",
+  "sha256SumsSha256": "6cde31ffa00373376186309426d772b83bd011c5135cb97c32e20284e77b8e94",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-android-arm64-v8a.apk",
-      "sha256": "484d9f6b51f3c6ec6c0edecfb339a602830414370c4c69a8af3c02700bb696c2"
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-android-arm64-v8a.apk",
+      "sha256": "89d8437184948653486a767ac2d0ecb4a0fe8f9bfe31705782e9e2b3f60365e5"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-android-armeabi-v7a.apk",
-      "sha256": "edba72b352c7385aba1ba8abd553df8343b4173d242f37839466024d86424d64"
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-android-armeabi-v7a.apk",
+      "sha256": "204a609dc561fd8ec3de7501efa7d2e2f289a4679bf6d1b70b8a5e8fff80bfd4"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-android-x86_64.apk",
-      "sha256": "34592d1fde485c80c897fa733b0eec70dfc697138498f2c7ef5ad637d7f28394"
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-android-x86_64.apk",
+      "sha256": "1eb4f274d69129b7a34a12ae3b1c0e6eaa6b2a02310aa391a5c1dfc95bdcbab4"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-android-universal.apk",
-      "sha256": "864c574feefe397968f8b499a26fc90601b92c575861c87d1c66c8b238d7f4ab"
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-android-universal.apk",
+      "sha256": "486ea30aa29b10feb1a85135ba3f3fb788139563abe2ba6a9f2008e8082c3c74"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-ios.ipa",
-      "sha256": "018642698d3531233688bc64346bb1fbb7ede10dc59de5b66e9d49cdc8cdc9f9"
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-ios.ipa",
+      "sha256": "64e86be0b6498cccadead3dad15b27ae4b135c53422c3599a579e5d9755bf8ed"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-macos-universal.dmg",
-      "sha256": "e2f89cd1f747d3ef350ff70cb1a29ae401596ac2bbb53e81435880e5b699f39d"
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-macos-universal.dmg",
+      "sha256": "ab136e5a17a61887b2b31b9be1f932272c986bbc9ad08738aca400afb0865662"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-windows-amd64-setup.exe",
-      "sha256": "c02494eda4cfe09846dc85dc8ba5812d7693df729abdb0d0d475f5d9545ef897"
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-windows-amd64-setup.exe",
+      "sha256": "e908a67c19a5c892ce878f88555bffb6068f5ed8c95ed7792ea0010ab30e615b"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-windows-amd64-portable.zip",
-      "sha256": "05d34e232e87f6817a355346533de6b6c0c1a9863093e4615c1b2d7fb0baf92e"
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-windows-amd64-portable.zip",
+      "sha256": "82ad67641f02f9a2b8dd5b29a552b58e8827cbc12a3ec24efdd569d0b7ffbc20"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.43/YueLink-1.3.43-linux-amd64.AppImage",
-      "sha256": "003b0f580bae7cb714e7e678f8cd238b181b74d1ff0c1acecfe0c52b02dc4913"
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-linux-amd64.AppImage",
+      "sha256": "5b1d39e62ff63de9d690e7534e0a8f6854ee439186c9c7066b4e2bd37a3004f1"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "70231233e498a37698b4130bbe388ae69cb315e9e2df675c7b2047a3747cd5c6",
-    "sha256SumsSha256": "78178949bbfa3cca11be01e3d196b14cfc71e06cf834b3738b1f68daa064075e",
-    "payloadBundleSha256": "150085952a1f5ed0ffb38ea3f4418e7e6b87e9f1ee0e72a3fbeeed763711d379",
+    "candidateSha256": "b1d351fbc7f6588cc64c0b491c4154b59de7a6fd5afda8dac9fdda580018ff82",
+    "sha256SumsSha256": "6cde31ffa00373376186309426d772b83bd011c5135cb97c32e20284e77b8e94",
+    "payloadBundleSha256": "6ce753fa1fd99dc0e7469c534010b21bd357d13e16e75be51994c9f86f053838",
     "payloadCount": 19
   },
-  "sig": "ed25519:yv84EdOKef5/8ds+J1p2k5gscAvQ2Qsdva2pwdosTlVIYkUfzyWXEU0QzmiHlg0ONr+d34rGyTcxchGuWSRJBw=="
+  "sig": "ed25519:rXV7l6gLJNg8fNh1zam7M7CuD+22FFR0772ktwG5ozQ9RLw/Vv1wMh+i8DrBF5VwhAqNmDtMWR2EXVVXmKoyCw=="
 }
