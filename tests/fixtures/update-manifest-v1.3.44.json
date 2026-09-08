@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.44",
+  "channel": "stable",
+  "publishedAt": "2026-09-07T11:01:15Z",
+  "expiresAt": "2026-10-12T11:01:15Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "换账号后不再看到上一个账号的工单。\n\n## 修复\n\n- 在同一台设备上退出并换一个账号登录后，工单列表与「我的」页的待回复角标会立即\n  作废并按新账号重新拉取，不再短暂显示上一个账号的内容。\n\n## 兼容性\n\n账号、订阅和节点协议兼容现有服务。更新签名公钥与平台安装身份保持一致。\nFlutter 3.47.2、Dart 3.13.2、Go 1.26.8 和 Mihomo v1.19.30 稳定基线不变。\n",
+  "notesEn": "Switching accounts no longer shows the previous account's tickets.\n\n## Fixes\n\n- After signing out and signing in with a different account on the same device, the\n  ticket list and the \"awaiting reply\" badge on the Me page are invalidated immediately\n  and refetched for the new account. Previously the first frame could still render the\n  previous account's tickets, and — since v1.3.43 wired that count into the Me badge —\n  its awaiting-reply number as well. While the list has not loaded, the badge now shows\n  0 instead of carrying over the previous account's number.\n\n## Compatibility\n\nAccounts, subscriptions and the node protocol remain compatible with the current\nservice. The update signing key and the per-platform install identity are unchanged.\nThe Flutter 3.47.2 / Dart 3.13.2 / Go 1.26.8 / Mihomo v1.19.30 baseline is unchanged.\n",
+  "sourceCommit": "5f8dd78a2f3d05279b797b31d51719809dfd1faf",
+  "sha256SumsSha256": "6cde31ffa00373376186309426d772b83bd011c5135cb97c32e20284e77b8e94",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-android-arm64-v8a.apk",
+      "sha256": "89d8437184948653486a767ac2d0ecb4a0fe8f9bfe31705782e9e2b3f60365e5"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-android-armeabi-v7a.apk",
+      "sha256": "204a609dc561fd8ec3de7501efa7d2e2f289a4679bf6d1b70b8a5e8fff80bfd4"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-android-x86_64.apk",
+      "sha256": "1eb4f274d69129b7a34a12ae3b1c0e6eaa6b2a02310aa391a5c1dfc95bdcbab4"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-android-universal.apk",
+      "sha256": "486ea30aa29b10feb1a85135ba3f3fb788139563abe2ba6a9f2008e8082c3c74"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-ios.ipa",
+      "sha256": "64e86be0b6498cccadead3dad15b27ae4b135c53422c3599a579e5d9755bf8ed"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-macos-universal.dmg",
+      "sha256": "ab136e5a17a61887b2b31b9be1f932272c986bbc9ad08738aca400afb0865662"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-windows-amd64-setup.exe",
+      "sha256": "e908a67c19a5c892ce878f88555bffb6068f5ed8c95ed7792ea0010ab30e615b"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-windows-amd64-portable.zip",
+      "sha256": "82ad67641f02f9a2b8dd5b29a552b58e8827cbc12a3ec24efdd569d0b7ffbc20"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.44/YueLink-1.3.44-linux-amd64.AppImage",
+      "sha256": "5b1d39e62ff63de9d690e7534e0a8f6854ee439186c9c7066b4e2bd37a3004f1"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "b1d351fbc7f6588cc64c0b491c4154b59de7a6fd5afda8dac9fdda580018ff82",
+    "sha256SumsSha256": "6cde31ffa00373376186309426d772b83bd011c5135cb97c32e20284e77b8e94",
+    "payloadBundleSha256": "6ce753fa1fd99dc0e7469c534010b21bd357d13e16e75be51994c9f86f053838",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:rXV7l6gLJNg8fNh1zam7M7CuD+22FFR0772ktwG5ozQ9RLw/Vv1wMh+i8DrBF5VwhAqNmDtMWR2EXVVXmKoyCw=="
+}
