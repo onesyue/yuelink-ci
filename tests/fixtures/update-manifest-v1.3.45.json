@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.45",
+  "channel": "stable",
+  "publishedAt": "2026-09-08T02:26:28Z",
+  "expiresAt": "2026-10-13T02:26:28Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "桌面 TUN 换成批量系统调用，同一节点上更快。\n\n## 优化\n\n- macOS 的 TUN 数据面改用批量系统调用（`recvmsgx` / `sendmsgx`）。此前对虚拟网卡\n  是逐包一次系统调用，现在一次最多搬 59 个包，同一节点上吞吐更高、CPU 更低。\n- Linux 的 TUN 打开 GSO，内核可以整块交付分片卸载的超帧，同样省掉逐包的系统调用。\n- 桌面的 geosite 匹配改用最小完美哈希，DNS 分流查表更快（移动端维持原有的省内存实现）。\n\n三项都只改系统调用与查表的形状，不改路由、DNS 语义或协议行为。Windows 与手机端\n的数据面不变。\n\n## 韧性\n\n- 万一 TUN 加速在某台机器上起不来，客户端会自动不带加速重试一次并记下来，\n  30 天后再试一次，不需要手动处理。\n\n## 兼容性\n\n账号、订阅和节点协议兼容现有服务。更新签名公钥与平台安装身份保持一致。\nFlutter 3.47.2、Dart 3.13.2、Go 1.26.8 和 Mihomo v1.19.30 稳定基线不变。\n",
+  "notesEn": "Desktop TUN now moves packets in batched syscalls — faster on the same node.\n\n## Improvements\n\n- The macOS TUN data path switches to batched syscalls (`recvmsgx` / `sendmsgx`).\n  It used to issue one syscall per packet on the virtual interface; it now moves up\n  to 59 packets per syscall, which raises throughput and lowers CPU on the same node.\n- The Linux TUN enables GSO, so the kernel can hand over segmentation-offloaded\n  super-frames in one piece instead of one MTU-sized packet per syscall.\n- Desktop geosite matching switches to a minimal perfect hash, making DNS policy\n  lookups faster. Mobile keeps the memory-frugal implementation.\n\nAll three only change the shape of syscalls and table lookups — routing, DNS\nsemantics and protocol behaviour are untouched. The Windows and mobile data paths\nare unchanged.\n\n## Resilience\n\n- If the TUN acceleration cannot start on a given machine, the client retries the\n  same start once without it and remembers that, then tries again 30 days later.\n  Nothing to do by hand.\n\n## Compatibility\n\nAccounts, subscriptions and the node protocol remain compatible with the current\nservice. The update signing key and the per-platform install identity are unchanged.\nThe Flutter 3.47.2 / Dart 3.13.2 / Go 1.26.8 / Mihomo v1.19.30 baseline is unchanged.\n",
+  "sourceCommit": "2795e2ffae7221b4eac014c3eee62360a5e74e2c",
+  "sha256SumsSha256": "f82ddb7cec8a03e7304936d94fea2ab05fdbced1a6b257e090c4cbfdf9875a5c",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.45/YueLink-1.3.45-android-arm64-v8a.apk",
+      "sha256": "b9b3f947b9857d2a561d08b3d68638c38005f6ce10e057015694f433706037e4"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.45/YueLink-1.3.45-android-armeabi-v7a.apk",
+      "sha256": "a04e533eafa86a7cf1c6b847a70a97f7561e3213e3c3aa3645264e15b37bc062"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.45/YueLink-1.3.45-android-x86_64.apk",
+      "sha256": "408db2d712b67662f135af59b4c5c76fd27c4fa193017e6621d6b15dc63e3bd4"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.45/YueLink-1.3.45-android-universal.apk",
+      "sha256": "a0c5b7ccc3574783517d9e0e1ea5c33e8fa37cd8b044a39a2ee6c14d785af8f3"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.45/YueLink-1.3.45-ios.ipa",
+      "sha256": "a02d41d3289e83eff799653a83b41746c567263c08ac5e68d4b095c86a8d7b93"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.45/YueLink-1.3.45-macos-universal.dmg",
+      "sha256": "56421bca8d8cd3a801006a9cf2be590deac27b10aa76746b2a996e758c00a77f"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.45/YueLink-1.3.45-windows-amd64-setup.exe",
+      "sha256": "706f93c8e350cb6cb726a9b4924f4fbe5e976b05ccc8ac347c3afc27c233a0aa"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.45/YueLink-1.3.45-windows-amd64-portable.zip",
+      "sha256": "eb6255a11483e9379e11dfc2d9a2151c45db63f16e62c41f46706eec797382d1"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.45/YueLink-1.3.45-linux-amd64.AppImage",
+      "sha256": "aad422099136d2910d8b50189db852c2442828d2222b2707e25dde12fb52ade1"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "7b263be0b00c3fd826692d963ee65fe68c107804465ec05bffe80c141cf31211",
+    "sha256SumsSha256": "f82ddb7cec8a03e7304936d94fea2ab05fdbced1a6b257e090c4cbfdf9875a5c",
+    "payloadBundleSha256": "04aee2b8b08bd7d42216c2f5c255b9e8092b9150dbd18ff9ea20b78dbb93b4b6",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:sjOQ376E93F5+XeeN42G0xtt7OkibytOMAr1teNihhiUvmLP5WniPGdfaTaRNl+iBZio0iWpfPzla/mNMs+tAQ=="
+}
