@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.46",
+  "version": "1.3.47",
   "channel": "stable",
-  "publishedAt": "2026-09-08T03:29:54Z",
-  "expiresAt": "2026-10-13T03:29:54Z",
+  "publishedAt": "2026-09-09T09:30:30Z",
+  "expiresAt": "2026-10-14T09:30:30Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "苹果 / iCloud 终于走境内 DNS 解析。\n\n## 修复\n\n- 苹果与 iCloud 的域名现在走境内 DNS 解析。此前它们被订阅里的「非国内」兜底规则先\n  一步匹配掉，一直由境外解析器回答，而境外解析器没有理由返回国内的苹果节点——\n  表现就是 App Store、iCloud 同步和系统更新偏慢。客户端原本有这条策略，但只在\n  「订阅完全没有 DNS 策略」时才会写进去，而实际订阅总是自带策略，所以它从未生效。\n\n## 优化\n\n- Linux 客户端发送 HY2 流量时打开 GSO，由内核批量切分 UDP 报文，减少系统调用、\n  提升上行吞吐。这是 mihomo 上游的默认值，此前 YueLink 是唯一关着它的客户端。\n- 这个开关在 Linux 之外不产生任何作用（内核里的 GSO 路径只为 Linux 编译），\n  Android、iOS、macOS、Windows 的行为完全不变。\n\n## 修复\n\n- 修正一处一直没生效的设置：这项此前只在订阅没写的时候才补，而订阅本身就写了相反的\n  值，于是客户端那一半从落地起就是空转。现在由客户端权威决定。\n\n## 兼容性\n\n账号、订阅和节点协议兼容现有服务。更新签名公钥与平台安装身份保持一致。\nFlutter 3.47.2、Dart 3.13.2、Go 1.26.8 和 Mihomo v1.19.30 稳定基线不变。\n",
-  "notesEn": "Apple and iCloud finally resolve through domestic DNS.\n\n## Fixes\n\n- Apple and iCloud domains now resolve through domestic DNS. They were being\n  matched first by the subscription's \"non-China\" catch-all and answered by\n  overseas resolvers, which have no reason to return a China-side Apple edge —\n  so the App Store, iCloud sync and system updates were slower than they had to\n  be. The client already carried this policy, but only wrote it when a\n  subscription shipped no DNS policy at all; real subscriptions always ship one,\n  so it never took effect.\n\n## Improvements\n\n- The Linux client enables GSO when sending HY2 traffic, letting the kernel\n  segment UDP datagrams in batches. That cuts syscalls and raises upload\n  throughput. This is upstream mihomo's default; YueLink was the only client\n  shipping it disabled.\n- The switch has no effect outside Linux — the core compiles its GSO path for\n  Linux only — so Android, iOS, macOS and Windows behaviour is unchanged.\n\n## Fixes\n\n- Corrected a setting that never took effect: the client only filled it in when\n  the subscription omitted it, and the subscription always shipped the opposite\n  value, so the client half was inert from the day it landed. The client now\n  owns the value.\n\n## Compatibility\n\nAccounts, subscriptions and the node protocol remain compatible with the current\nservice. The update signing key and the per-platform install identity are unchanged.\nThe Flutter 3.47.2 / Dart 3.13.2 / Go 1.26.8 / Mihomo v1.19.30 baseline is unchanged.\n",
-  "sourceCommit": "baf029e0a4dbff7822b9d5c07dba81933b2d2b2d",
-  "sha256SumsSha256": "f7f566919507c47bd2c4cff41b82868a2e17defc1ecc82d4e4a58b659229e70c",
+  "notes": "用真实用户数据判断线路快不快。\n\n## 新增\n\n- **被动传输质量上报**。客户端每 5 分钟读一次内核已有的连接字节计数，对两次快照\n  求差，按实际出口节点归并后匿名上报。这让服务端第一次能回答「某条线路对某个地区的\n  用户到底快不快」——此前只测得到「入口活着没有」，测不到「传得快不快」。\n- 它**只读已经发生的流量，不发起任何探测连接**。这不是为了省事：本服务的抗封锁依赖\n  「端点不可被主动探测」，任何会规律性连接节点的测量装置，本身就是一个可被识别的\n  模式。用你已经产生的流量做统计，不增加一个新连接。\n- 同时补上了地区维度（取自设备语言设置的国家部分）。此前服务端定义了这个字段但客户端\n  从来没传过，于是三十天两百多万条上报里几乎全部地区未知。\n\n## 隐私\n\n**不上报**：你的 IP、你访问的任何地址或域名、任何能识别到你个人的标识。\n\n**只上报**：节点名称、这段时间传了多少字节、时间窗口多长、几条连接。数据 30 天后\n删除，与既有的入口健康上报是同一条边界。\n\n## 兼容性\n\n账号、订阅和节点协议兼容现有服务。更新签名公钥与平台安装身份保持一致。\nFlutter 3.47.2、Dart 3.13.2、Go 1.26.8 和 Mihomo v1.19.30 稳定基线不变。\n",
+  "notesEn": "Judging line quality from real user data.\n\n## New\n\n- **Passive transport-quality reporting.** Every five minutes the client reads the\n  byte counters the core already keeps for each connection, diffs two snapshots,\n  groups them by the node that actually carried the traffic, and reports the result\n  anonymously. This lets the service answer, for the first time, whether a given\n  line is *fast* for users in a given region — until now it could only tell whether\n  an entry point was *alive*.\n- It **only reads traffic that already happened; it never opens a probe connection.**\n  That is not a shortcut: this service's censorship resistance depends on endpoints\n  not being probeable, and any measurement device that connects to nodes on a regular\n  schedule is itself a recognisable pattern. Statistics come from the traffic you\n  already generate, with no additional connection.\n- Region is now included as well (taken from the device's language setting). The\n  server had defined that field for a long time, but the client never sent it — so\n  almost every one of the last thirty days' two million reports had no region at all.\n\n## Privacy\n\n**Not reported**: your IP address, any address or domain you visit, or anything that\nidentifies you personally.\n\n**Reported**: the node name, how many bytes moved in the window, how long the window\nwas, and how many connections contributed. Data is deleted after 30 days — the same\nboundary as the existing entry-health reporting.\n\n## Compatibility\n\nAccounts, subscriptions and the node protocol remain compatible with the current\nservice. The update signing key and the per-platform install identity are unchanged.\nThe Flutter 3.47.2 / Dart 3.13.2 / Go 1.26.8 / Mihomo v1.19.30 baseline is unchanged.\n",
+  "sourceCommit": "a094c93d045c598a04d0d91191ded760d8e8ee0b",
+  "sha256SumsSha256": "adb747e281f33b6a0f36c89cf9e75752b3d2f4d31b8722e7fce93b9213ba4cc7",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.46/YueLink-1.3.46-android-arm64-v8a.apk",
-      "sha256": "69336920c85c01778bbc3f87c47a77cf3e8023aea8a6997a6a530cc580e69538"
+      "url": "https://yuetong.app/v1.3.47/YueLink-1.3.47-android-arm64-v8a.apk",
+      "sha256": "f7abc1d6fcca92d7093679565008c12eaf395bf4ecd1d3c1e27d0522e16660ba"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.46/YueLink-1.3.46-android-armeabi-v7a.apk",
-      "sha256": "a20190ca1d743cf064bf5d1d380fd9a7164b25ba099d1a8bc7ed3fb160951fc6"
+      "url": "https://yuetong.app/v1.3.47/YueLink-1.3.47-android-armeabi-v7a.apk",
+      "sha256": "a57922d24150dd544c4ea6e8fc955845b608215a25e8deed9f92ef3797dc3919"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.46/YueLink-1.3.46-android-x86_64.apk",
-      "sha256": "9d84c8fb991f79279b6e95b776e5fffd8485089da9bbc55596c2d800e8ed1dae"
+      "url": "https://yuetong.app/v1.3.47/YueLink-1.3.47-android-x86_64.apk",
+      "sha256": "4a13eaf7c60014a9d6618f99e4629e12b4b54d65bda7d9f092acd1bfdad8a431"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.46/YueLink-1.3.46-android-universal.apk",
-      "sha256": "7005a5364dbdd1750cb739473ccd0fb8642bfcd76d4388ee20a5ac150ade973f"
+      "url": "https://yuetong.app/v1.3.47/YueLink-1.3.47-android-universal.apk",
+      "sha256": "ccddaf24aad4d53f23eec9439eebc4958720c7c649edd8237f8fb88d7080c8ce"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.46/YueLink-1.3.46-ios.ipa",
-      "sha256": "c947e93c24de794b2d307c89051b8f285152180e09af6a503076bb372cb97447"
+      "url": "https://yuetong.app/v1.3.47/YueLink-1.3.47-ios.ipa",
+      "sha256": "bc8719b1c18a5d2efe8f079f1a1cae3355a30ad009eaead269c0440e27fee19a"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.46/YueLink-1.3.46-macos-universal.dmg",
-      "sha256": "45353097320a1c0143482450f7d9c6ef97131196f1edd40741048847d840d0d6"
+      "url": "https://yuetong.app/v1.3.47/YueLink-1.3.47-macos-universal.dmg",
+      "sha256": "3f4821b08e4c2144773493a2e1f4828bba1c080699b4f8f6476add16d4a54259"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.46/YueLink-1.3.46-windows-amd64-setup.exe",
-      "sha256": "9b3644244ea4b0521c26daa175472bc8a57fc8412179fdbb1301e7d6b10ad2c2"
+      "url": "https://yuetong.app/v1.3.47/YueLink-1.3.47-windows-amd64-setup.exe",
+      "sha256": "5693b78f0f68a563ad603817da1ced0337b13aa4128fb8f7599cd0915a549f77"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.46/YueLink-1.3.46-windows-amd64-portable.zip",
-      "sha256": "48d093131de2d63a4505cc906b946316964d13cdf164b9998fd8ccdca6e208d1"
+      "url": "https://yuetong.app/v1.3.47/YueLink-1.3.47-windows-amd64-portable.zip",
+      "sha256": "6621919df0dfc5fb10b7bfe9bf7e29f492b3263c3e78794fa9ed4aaa70c13779"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.46/YueLink-1.3.46-linux-amd64.AppImage",
-      "sha256": "55c2dca48e5ad72d233ee20edc5d203add5b47df8bbd3626c9f16a950546a5b2"
+      "url": "https://yuetong.app/v1.3.47/YueLink-1.3.47-linux-amd64.AppImage",
+      "sha256": "428be04fbba6ac0ed853716a47919979f019ea7836ea3bbac0c58a165129c7b3"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "881b5b9f7e50b3184253ff04a9faea46f498380994e291d2aef7f11894275336",
-    "sha256SumsSha256": "f7f566919507c47bd2c4cff41b82868a2e17defc1ecc82d4e4a58b659229e70c",
-    "payloadBundleSha256": "e7011d5c4f7af2926df2072c822891ab00e82aa2b7ec0c3e91465b5193317115",
+    "candidateSha256": "87879ff32e54aad72f7140119f2761fb8a57d2ba1c915e5aa1223a0977dbc8be",
+    "sha256SumsSha256": "adb747e281f33b6a0f36c89cf9e75752b3d2f4d31b8722e7fce93b9213ba4cc7",
+    "payloadBundleSha256": "29d49f7e228a9312a476046d8554975a7855ace6887c0783444b84b93aa389e9",
     "payloadCount": 19
   },
-  "sig": "ed25519:RrpS/Fu5+0nSUGhJp0anFfGysdWcpORMwCJAf9WZUFM65HBrmas6Jtz7wnI7QG/jcGw8Gyi5mO5hJx2ioP1tBg=="
+  "sig": "ed25519:bS7qfSPtumTl3/CmGYEB4VNciu4UUIgOl2u4oERRyGzohQ6KV2mvI1l4eSeHcOTWh7xTQPvS0T6EPupG1oYLDQ=="
 }
