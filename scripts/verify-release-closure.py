@@ -98,15 +98,24 @@ def main() -> int:
         if spec["sha256"] not in declared:
             failures.append(f"{name}: 清单里的哈希没有出现在 SHA256SUMS 里")
 
-    for name, spec in sorted(platforms.items()):
-        got, size = _sha256_of_url(spec["url"])
+    # 逐件重算的对象是 **SHA256SUMS 的每一条**，不是只有 platforms 里那 9 个 URL。
+    # 闭包还包含每个平台的 INSTALL-NOTICE.txt 与 RELEASE.json —— 只验安装包会漏掉
+    # 一半条目，而「验了 9 件」和「验了 19 件」在结论里长得一样。
+    base = any_url.rsplit("/", 1)[0] + "/"
+    entries = [
+        (line.split()[1], line.split()[0])
+        for line in sums_body.decode("utf-8", "replace").splitlines()
+        if line.strip()
+    ]
+    for filename, want in entries:
+        got, size = _sha256_of_url(base + filename)
         grand_total += size
-        ok = got == spec["sha256"]
+        ok = got == want
         if not ok:
-            failures.append(f"{name}: 期望 {spec['sha256']} 实得 {got}")
-        print(f"{'OK ' if ok else 'BAD'}  {name:<24} {size:>12,} bytes  {got}")
+            failures.append(f"{filename}: 期望 {want} 实得 {got}")
+        print(f"{'OK ' if ok else 'BAD'}  {filename:<48} {size:>12,} bytes  {got}")
 
-    print(f"\nv{version} · {len(platforms)} 件 · 合计 {grand_total:,} 字节")
+    print(f"\nv{version} · {len(entries)} 件 · 合计 {grand_total:,} 字节")
     if failures:
         print(f"\n失败 {len(failures)} 条：")
         for line in failures:
