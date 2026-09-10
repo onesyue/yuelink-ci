@@ -1268,6 +1268,15 @@ jobs:
             appimagetool "$APPDIR" "$OUTPUT"
           ls -lh "$OUTPUT"
 
+      - name: Verify packaged iOS native delegation
+        if: matrix.platform == 'ios'
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -- dist/YueLink-*-ios.ipa
+          [ "$#" -eq 1 ] && [ -f "$1" ] || { echo "Expected exactly one iOS IPA" >&2; exit 1; }
+          python3 scripts/ci/verify_ios_core_delegation.py --artifact "$1" --output "$RUNNER_TEMP/yuelink-ios-native-linkage.json"
+
       - name: Exercise native core from packaged desktop artifact
         if: matrix.platform == 'macos' || matrix.platform == 'windows' || matrix.platform == 'linux'
         shell: bash
