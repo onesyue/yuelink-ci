@@ -113,6 +113,9 @@ jobs:
       - name: Android release signing contract
         run: bash scripts/ci/test_android_release_signing.sh
 
+      - name: Android native TUN ownership
+        run: bash scripts/ci/test_android_tun_ownership.sh
+
       - name: Format check for the complete unreleased delta
         shell: bash
         run: |

@@ -292,6 +292,12 @@ jobs:
           cache: true
           cache-dependency-path: '**/go.sum'
 
+      - name: Set up Java for native ownership tests
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Classify release tag once
         id: classify
         env:
