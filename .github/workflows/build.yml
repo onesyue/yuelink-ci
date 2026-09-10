@@ -564,6 +564,10 @@ jobs:
         if: matrix.platform == 'windows'
         run: dart run tool/windows_durability_probe.dart
 
+      - name: Verify native packet tunnel config editor
+        if: matrix.platform == 'ios'
+        run: python3 scripts/ci/test_packet_tunnel_config.py --sanitize --check-ios
+
       # ── Compile Go core (platform-aware) and copy into Flutter dirs ───────
       # Windows + Linux: setup.dart's default builds BOTH amd64 + arm64, but
       # the runners are x86_64 with no arm64 cross-toolchain, so the arm64
