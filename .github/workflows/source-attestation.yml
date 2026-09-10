@@ -376,6 +376,31 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - run: dart run tool/windows_durability_probe.dart
 
+      - name: Verify real Windows port reclamation checks
+        shell: bash
+        run: python3 scripts/ci/test_core_package_runtime.py -v
+
+      - name: Set up Go for native Windows runtime
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            core/go.sum
+            service/go.sum
+
+      - name: Build and exercise native Windows core before release tags
+        shell: bash
+        env:
+          GOTOOLCHAIN: local
+          GOFLAGS: -mod=readonly
+        run: |
+          set -euo pipefail
+          dart setup.dart build -p windows -a amd64
+          python3 -m zipfile -c "$RUNNER_TEMP/yuelink-native-core.zip" core/build/windows-amd64/libclash.dll
+          python3 scripts/performance/core_package_probe.py \
+            --artifact "$RUNNER_TEMP/yuelink-native-core.zip" --require-leases \
+            --output "$RUNNER_TEMP/yuelink-native-core-runtime.json"
+
   attest:
     name: Bind green gates to source SHA
     needs: [source_contract, gitleaks, govulncheck, macos_integration, windows_durability]
@@ -428,11 +453,12 @@ jobs:
                 "gitleaks-full-history",
                 "govulncheck-core-service",
                 "macos-integration",
-                "windows-durability"
+                "windows-durability",
+                "windows-native-core-runtime"
               ]
             }' > source-attestation.json
           jq -e --arg sha "$SOURCE_SHA" \
-            '.sourceSha == $sha and (.gates | length) == 16' \
+            '.sourceSha == $sha and (.gates | length) == 17' \
             source-attestation.json >/dev/null
           cat source-attestation.json
 

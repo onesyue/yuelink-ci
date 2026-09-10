@@ -59,6 +59,11 @@ WORKFLOW_MARKERS = (
     'bash scripts/ci/govulncheck_targets.sh "$MODULE"',
     "flutter test integration_test/ -d macos --reporter expanded",
     "dart run tool/windows_durability_probe.dart",
+    "python3 scripts/ci/test_core_package_runtime.py -v",
+    "dart setup.dart build -p windows -a amd64",
+    'python3 -m zipfile -c "$RUNNER_TEMP/yuelink-native-core.zip" core/build/windows-amd64/libclash.dll',
+    'python3 scripts/performance/core_package_probe.py',
+    '--artifact "$RUNNER_TEMP/yuelink-native-core.zip" --require-leases',
     "needs: [source_contract, gitleaks, govulncheck, macos_integration, windows_durability]",
     "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
     "actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32",
@@ -67,6 +72,7 @@ WORKFLOW_MARKERS = (
     '"govulncheck-core-service"',
     '"macos-integration"',
     '"windows-durability"',
+    '"windows-native-core-runtime"',
 )
 
 RELEASE_MARKERS = (
@@ -134,6 +140,7 @@ SOURCE_VERIFIER_MARKERS = (
     '.releaseTag == $release',
     '.workflowSha == $builder and .runId == $run and .runAttempt == $attempt',
     "(.gates | sort) == ([",
+    '"windows-native-core-runtime"',
     'gh attestation verify "$proof"',
     '--repo "$REPOSITORY"',
     '--signer-workflow "$WORKFLOW_IDENTITY"',
@@ -248,6 +255,38 @@ def source_flutter_issues(workflow: str) -> list[str]:
     return issues
 
 
+def windows_runtime_issues(workflow: str) -> list[str]:
+    issues: list[str] = []
+    match = re.search(r"(?ms)^  windows_durability:\n(?P<body>.*?)(?=^  attest:)", workflow)
+    if match is None:
+        return ["Windows native runtime job is missing"]
+    body = match.group("body")
+    if "runs-on: windows-latest" not in body:
+        issues.append("Windows native runtime must execute on Windows")
+    if re.search(r"(?m)^\s*(?:if|continue-on-error):", body):
+        issues.append("Windows native runtime must be unconditional and fatal")
+    steps = re.split(r"(?m)^      - ", body)
+    required = {
+        "Verify real Windows port reclamation checks": [
+            "        run: python3 scripts/ci/test_core_package_runtime.py -v",
+        ],
+        "Build and exercise native Windows core before release tags": [
+            "        run: |",
+            "          set -euo pipefail",
+            "          dart setup.dart build -p windows -a amd64",
+            '          python3 -m zipfile -c "$RUNNER_TEMP/yuelink-native-core.zip" core/build/windows-amd64/libclash.dll',
+            '          python3 scripts/performance/core_package_probe.py \\',
+            '            --artifact "$RUNNER_TEMP/yuelink-native-core.zip" --require-leases \\',
+            '            --output "$RUNNER_TEMP/yuelink-native-core-runtime.json"',
+        ],
+    }
+    for name, commands in required.items():
+        matches = [step for step in steps if step.startswith("name: " + name + "\n")]
+        if len(matches) != 1 or any(command not in matches[0].splitlines() for command in commands):
+            issues.append(f"Windows native runtime executable step changed: {name}")
+    return issues
+
+
 def contract_issues(
     workflow: str,
     release: str,
@@ -291,6 +330,7 @@ def contract_issues(
                 f"release gate must contain exactly {expected_count} occurrences of {marker!r}"
             )
     issues.extend(source_flutter_issues(workflow))
+    issues.extend(windows_runtime_issues(workflow))
 
     source_checkouts = re.findall(
         r"(?m)^\s*repository:\s*onesyue/yuelink\s*$", workflow
@@ -384,6 +424,23 @@ class SourceAttestationContractTests(unittest.TestCase):
                 mutated = self.workflow.replace(marker, "", 1)
                 self.assertNotEqual(mutated, self.workflow)
                 self.assertTrue(contract_issues(mutated, self.release, self.readme))
+
+    def test_windows_native_runtime_cannot_be_skipped_or_commented(self) -> None:
+        step = "      - name: Build and exercise native Windows core before release tags\n"
+        for replacement in (
+            step + "        continue-on-error: true\n",
+            step + "        if: false\n",
+        ):
+            with self.subTest(replacement=replacement):
+                self.assertTrue(windows_runtime_issues(self.workflow.replace(step, replacement)))
+        for command in (
+            "python3 scripts/ci/test_core_package_runtime.py -v",
+            "dart setup.dart build -p windows -a amd64",
+            "python3 scripts/performance/core_package_probe.py",
+        ):
+            with self.subTest(command=command):
+                self.assertTrue(windows_runtime_issues(self.workflow.replace(command, "# " + command)))
+        self.assertTrue(windows_runtime_issues(self.workflow.replace("--require-leases", "")))
 
     def test_each_release_enforcement_is_mutation_sensitive(self) -> None:
         for marker in RELEASE_MARKERS:

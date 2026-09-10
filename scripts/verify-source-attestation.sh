@@ -127,7 +127,8 @@ jq -e \
       "gitleaks-full-history",
       "govulncheck-core-service",
       "macos-integration",
-      "windows-durability"
+      "windows-durability",
+      "windows-native-core-runtime"
     ] | sort)
   ' "$proof" >/dev/null || {
   echo "::error::source-attestation proof is not the exact source/tag/builder/run/gate closure" >&2
