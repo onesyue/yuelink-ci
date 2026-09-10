@@ -1268,6 +1268,25 @@ jobs:
             appimagetool "$APPDIR" "$OUTPUT"
           ls -lh "$OUTPUT"
 
+      - name: Exercise native core from packaged desktop artifact
+        if: matrix.platform == 'macos' || matrix.platform == 'windows' || matrix.platform == 'linux'
+        shell: bash
+        env:
+          CORE_PROBE_PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          case "$CORE_PROBE_PLATFORM" in
+            macos) set -- dist/YueLink-*-macos-universal.dmg ;;
+            windows) set -- dist/YueLink-*-windows-amd64-portable.zip ;;
+            linux) set -- dist/YueLink-*-linux-amd64.AppImage ;;
+            *) echo "::error::unexpected desktop core probe platform"; exit 1 ;;
+          esac
+          [ "$#" -eq 1 ] && [ -f "$1" ] || {
+            echo "::error::expected one exact packaged desktop artifact"; exit 1;
+          }
+          python3 scripts/performance/core_package_probe.py \
+            --artifact "$1" --output "$RUNNER_TEMP/yuelink-packaged-core-runtime.json"
+
       # ── 2026-06-01 解耦发布: 平台产物直接传 R2, release job 从 R2 取, 不再依赖
       #    GHA artifact。根因: GitHub Actions 存储配额"计量"每 6-12h 才重算, 即使删光
       #    旧 artifact, 配额表仍显示满 → 所有 upload-artifact 失败(含构建产物)→ 卡发布。
