@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.49",
+  "channel": "stable",
+  "publishedAt": "2026-09-10T06:37:58Z",
+  "expiresAt": "2026-10-15T06:37:58Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "大订阅更轻，连接更顺。\n\n## 性能\n\n- 桌面内嵌核心的启动和停止改为原生后台执行，大订阅加载时界面继续响应。超时会取消旧启动，并等核心停止、系统代理清理后再接纳下一次连接。\n- 连接页面由原生核心先选取最新的 500 条，显示实际总连接数；大量连接不再全部跨桥传输和解析。\n- 节点快照在原生侧直接生成，只传界面需要的最近一次测速记录；保留完整节点和分组选择，减少编码、传输与 Dart 对象分配。\n- 配置转换减少重复扫描，关闭页面时释放对应的实时订阅，核心停止时同步关闭客户端持有的 WebSocket。\n\n## 本机验证\n\n相同合成配置下，50,000 条连接的 Dart 解析及建模中位数由 121.932 ms 降至 0.638 ms；10,000 节点的原生快照生成由 48.882 ms 降至 3.843 ms。配置转换实验的整进程 CPU 时间下降约 43.5–47.1%，输出逐字节相同。这些是指定本机数据集的结果，不代表公网带宽提升比例，也不代表整机常驻内存同幅下降。\n\n## 兼容性\n\n保留 Flutter AOT 界面。新异步启动仅用于桌面内嵌核心；桌面服务模式继续通过原生助手启动，Android 与 iOS 保留现有 VPN/TUN 接管顺序。移动平台同时获得适用的快照与配置优化。\n\n账号、订阅、节点协议和更新签名身份兼容现有版本。\n",
+  "notesEn": "Lighter large profiles and smoother connections.\n\n## Performance\n\n- Embedded desktop core startup and shutdown now run on a native background worker, keeping the interface responsive during large-profile loading. A timed-out attempt is cancelled, and the next connection waits for core shutdown and system proxy cleanup.\n- The native core selects the 500 most recent connections before sending the connection view. The actual total remains visible, without transferring and parsing every connection.\n- Native proxy snapshots retain every node and group selection while sending only the latest recorded delay. This reduces encoding, transfer and Dart object allocation.\n- Configuration processing avoids repeated scans. Closing a page releases its live subscriptions, and stopping the core closes client-owned WebSockets.\n\n## Local measurements\n\nOn the same synthetic fixtures, median Dart parsing and model construction for 50,000 connections fell from 121.932 ms to 0.638 ms. Native snapshot generation for 10,000 nodes fell from 48.882 ms to 3.843 ms. Configuration experiments reduced whole-process CPU time by approximately 43.5-47.1%, with byte-identical output. These fixture-specific local results do not establish an equivalent improvement in Internet bandwidth or resident memory.\n\n## Compatibility\n\nThe Flutter AOT interface is retained. Asynchronous startup applies to the embedded desktop core. Desktop service mode still uses its native helper, and Android and iOS retain their existing VPN/TUN ownership sequence while receiving the applicable snapshot and configuration improvements.\n\nAccounts, subscriptions, node protocols and update signing identity remain compatible.\n",
+  "sourceCommit": "3f2f307e1fa55838b64dbdb0a18ab082b34623a2",
+  "sha256SumsSha256": "d0b0b430818d60ad37c124f6897a2d610bb677e3e7633d9152d2c6a6408a18bb",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.49/YueLink-1.3.49-android-arm64-v8a.apk",
+      "sha256": "92b645851130e24a85a60522927fb63af3d42573a83e8b87c22045a8601fc003"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.49/YueLink-1.3.49-android-armeabi-v7a.apk",
+      "sha256": "b392fa0bf636e50db687a847bd90769a85b10dcae8d2fd5785a4d7c8fbc6a5e2"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.49/YueLink-1.3.49-android-x86_64.apk",
+      "sha256": "f3c27aa51ee2480114627fc06988728ce3979b760e2131c61ee654c1303da19c"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.49/YueLink-1.3.49-android-universal.apk",
+      "sha256": "875471e097bcb56d75abfd0038d3aa5761e76bf053c6a6c0ae3abcfe99f029c0"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.49/YueLink-1.3.49-ios.ipa",
+      "sha256": "cf4f20b6fe421891b896cbf158b41974d8049029c04ca34275527709f5e798e1"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.49/YueLink-1.3.49-macos-universal.dmg",
+      "sha256": "67cf9b0c7cc43f098337c06fada681dc7273746cb71a9057700d0b49df095663"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.49/YueLink-1.3.49-windows-amd64-setup.exe",
+      "sha256": "6a749182951afd30bd991503d8638ab711bfdc7b19b998bd57e43726862ddd83"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.49/YueLink-1.3.49-windows-amd64-portable.zip",
+      "sha256": "1f44ad276d4a7ff8c06e3418ea353500ca9de8239f7ad32f573ab4817e085f04"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.49/YueLink-1.3.49-linux-amd64.AppImage",
+      "sha256": "1e2724c553db3e861f2538746f4af4d5ecd651255bca92b005beb07c64e306f7"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "4c578aa1d7df2dca207436b67dc339e0536eb878b1927a6bca9caf14453af0dc",
+    "sha256SumsSha256": "d0b0b430818d60ad37c124f6897a2d610bb677e3e7633d9152d2c6a6408a18bb",
+    "payloadBundleSha256": "2efb90ee87be8301d57a5c8e9e4958b99781d908c0fc18a7d7c60629482df05c",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:Gd6v5RBx38W/+Jy8G0So9rXxPY/6D6ELg6i2BUQs4iYb7ImJCcQ+Wemluq0SSxmLD/R5G/vNTSNDHnFWC2i3AQ=="
+}
