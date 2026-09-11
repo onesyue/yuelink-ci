@@ -9,7 +9,8 @@
 # canonical signed payload, and then applies the shape/freshness policy. The
 # Cloudflare-challenged release page is covered by a separate, fixed-purpose
 # probe whose fresh result is verified against a second pinned Ed25519 public
-# key. Neither private signing seed is present in GitHub.
+# key. The probe signing seed stays outside GitHub; the owner-approved public
+# release pipeline holds the updater seed and signs its final promoted root.
 name: Manifest health
 
 on:

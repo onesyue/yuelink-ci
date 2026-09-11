@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.52",
+  "channel": "stable",
+  "publishedAt": "2026-09-10T13:28:29Z",
+  "expiresAt": "2026-10-15T13:28:29Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "大订阅更轻，连接与退出更稳。\n\n- 节点页与连接页按可见区域创建条目，并按测量后的行高直接定位，保留完整节点选择、搜索、排序和连接关闭操作；节点离屏后释放状态订阅，避免状态按浏览历史累积。\n- 停止后取消订阅刷新、文件监听与健康检查；修复健康检查和日志级别切换的数据竞争。完整关闭时归还日志文件句柄，避免 Windows 文件占用。\n- 桌面与 Android 的核心生命周期由原生工作线程执行。Android 平台与核心分别持有自己的 TUN 句柄，覆盖启动失败、重试、撤销和引擎退出的回收。\n- 修正 iOS 主应用对 VPN 扩展核心的运行模式判断。扩展在原生串行队列中校验配置、切换核心；结构错误保留当前会话，启动失败尝试恢复上次可用配置，并返回真实结果。\n\n本机 Flutter profile 模式、相同 5,000 节点数据集：展开的最慢构建帧由 899.615 ms 降至 5.724 ms，展开时进程 RSS 由 1,133.8 MiB 降至 189.9 MiB。500 条连接的远距离滚动慢路径由 246.526 ms 降至 4.544 ms。最后一次基准让测试窗口保持可见。原始异常、追加修复和测量条件见 [完整实测](../performance/native-closeout-20260910/ui-followup/README.md)。这些是指定本机负载结果，不代表公网带宽提升比例或所有设备的表现。\n\n保留 Flutter AOT 界面与 Go 原生数据路径。账号、订阅、节点协议和更新签名身份保持兼容。Windows、macOS、Linux 发布包增加实际核心启动、流量和退出检查。公网吞吐仍取决于设备、线路和目标站点。\n",
+  "notesEn": "Lighter large profiles and more reliable connection cleanup.\n\n- Node and connection lists build visible rows and use measured row heights for direct scrolling. Every node remains selectable and searchable, with sorting and connection-close actions preserved. Node state subscriptions are released when cards leave the viewport, so state does not accumulate with browsing history.\n- Stopping cancels provider refreshes, file watchers and health checks. Health-check snapshots and log-level changes are synchronized. Full shutdown releases the log file handle, preventing Windows file locks.\n- Desktop and Android core lifecycle work runs on a native worker. Android and the core own separate TUN descriptors, including cleanup after failed starts, retries, revocation and engine exit.\n- iOS now delegates core state to the VPN extension. A native serial queue validates and switches configurations. Structural errors preserve the current session; a failed start attempts to restore the last working configuration and reports the actual outcome.\n\nOn the same local Flutter profile workload with 5,000 nodes, the slowest expansion build frame fell from 899.615 ms to 5.724 ms, and process RSS at expansion fell from 1,133.8 MiB to 189.9 MiB. The slow path when scrolling across 500 connections fell from 246.526 ms to 4.544 ms. The final benchmark kept its window visible; [the detailed report](../performance/native-closeout-20260910/ui-followup/README.md) preserves earlier outliers, the follow-up fix and measurement conditions. These workload-specific measurements do not establish a proportional Internet speed increase or performance on every device.\n\nThe Flutter AOT interface and native Go data path are retained. Accounts, subscriptions, protocols and update signing identity remain compatible. Windows, macOS and Linux packages now exercise the actual packaged core for startup, traffic and shutdown. Internet throughput still depends on the device, route and destination.\n",
+  "sourceCommit": "5a9525663385b47fb98dd45ff39f3899695f73c5",
+  "sha256SumsSha256": "c59749cefad96f9a43c0cbf674725c44805a8953a01a01c0cea2a693cc8fb093",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.52/YueLink-1.3.52-android-arm64-v8a.apk",
+      "sha256": "b18e65f39925b94785ffbf44b6424954f72421f4157d28382fe3ced87583158a"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.52/YueLink-1.3.52-android-armeabi-v7a.apk",
+      "sha256": "09302438342f8072b7c7785ad9b450ea2a31e6441a7a9335419ef7a48cfeb833"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.52/YueLink-1.3.52-android-x86_64.apk",
+      "sha256": "01fe93c64e5e1db84433737d96ba5adbb0b1b6680e4cd7abd764fa24adce84b1"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.52/YueLink-1.3.52-android-universal.apk",
+      "sha256": "3ffac65560dddaee9f21e827806b0499b058f698a038005c5695715e80054efe"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.52/YueLink-1.3.52-ios.ipa",
+      "sha256": "959d77e723562a219642b13d207da30af242f90656b6bbc9ba62d01d8e97584e"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.52/YueLink-1.3.52-macos-universal.dmg",
+      "sha256": "7652723afde83ce186af6f297c897f3ad6dee150586ea2c6665b51d318f7fedb"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.52/YueLink-1.3.52-windows-amd64-setup.exe",
+      "sha256": "13cc0cf2609a1f6859cf77198d00e5e8f1cda0eb80ca22fcc2889999562c3110"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.52/YueLink-1.3.52-windows-amd64-portable.zip",
+      "sha256": "95ca8eaeabdf3f28ba5303170cca702f127e6e6df1ecad54d89dfb95d8ebc956"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.52/YueLink-1.3.52-linux-amd64.AppImage",
+      "sha256": "d1952a2f1fb9c1197bca001348401c57326e01d5d914058e1210ff594a0f5b22"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "f07ab61637befedd8614d0ee8533fed6dfd76c96aee9276bff0391130fb596c8",
+    "sha256SumsSha256": "c59749cefad96f9a43c0cbf674725c44805a8953a01a01c0cea2a693cc8fb093",
+    "payloadBundleSha256": "45556571ee6deb3da0e178c9830e79db1d0acf8a1034c1c32796848602c53440",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:xLhpBBHfKW67wnUyQ7IMrubfwyVBKRTAqZh6H9AnzmrnYyfREc5MIpmVTCHbROx+KmGuuzF8yc3od0Wb2xj+AQ=="
+}
