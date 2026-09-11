@@ -48,6 +48,18 @@ def test_release_table_is_exact_and_closed() -> None:
             "stable/windows/flutter_windows_3.47.2-stable.zip",
             "37934f2128a55d77a38baba12fd611157ed23a47bf7d2b7d17e9e84da118409d",
         ),
+        ("3.47.3", "Linux"): (
+            "stable/linux/flutter_linux_3.47.3-stable.tar.xz",
+            "988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1",
+        ),
+        ("3.47.3", "Darwin"): (
+            "stable/macos/flutter_macos_3.47.3-stable.zip",
+            "cd1e1a877db74b8928251225d38469077994e904b1b5bb359f3376c43ac0495c",
+        ),
+        ("3.47.3", "Windows"): (
+            "stable/windows/flutter_windows_3.47.3-stable.zip",
+            "44822ab53afb543c6fb446c078ba4f495e3eeddaafb88d879bde606447ddce24",
+        ),
     }
 
 
@@ -206,3 +218,13 @@ def test_machine_document_parser_is_closed_after_the_final_object() -> None:
             pass
         else:  # pragma: no cover - fail-closed assertion
             raise AssertionError(f"invalid Flutter machine output was accepted: {invalid!r}")
+
+
+def test_native_apple_silicon_sdk_is_official_and_pinned() -> None:
+    installer = _installer_module()
+    assert installer.ARCH_RELEASES == {
+        ("3.47.3", "Darwin", "ARM64"): (
+            "stable/macos/flutter_macos_arm64_3.47.3-stable.zip",
+            "66144a7cd691059c8c73bfce24178fb9ea2c95d798db8d56d1e2411e760f6583",
+        ),
+    }
