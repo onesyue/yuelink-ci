@@ -21,7 +21,7 @@ permissions:
   contents: read
 
 env:
-  FLUTTER_VERSION: '3.47.2'
+  FLUTTER_VERSION: '3.47.3'
   # Match the exact patch used by the private release builder; an attestation
   # on an older standard library would not prove the shipped Go graph.
   GO_VERSION: '1.26.8'
@@ -85,7 +85,7 @@ jobs:
           printf 'source_sha=%s\nrelease_tag=v%s\n' "$SOURCE_SHA" "$version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Flutter
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@635b8e875d5a9931656808ad31033f6d8c075f72 # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@77737f79d3011a27d82e23e56be5b8112d824f51 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           # Cache ON — reviewed 2026-08-31 decision (receipt-verified SDK,
@@ -324,7 +324,7 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Set up Flutter
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@635b8e875d5a9931656808ad31033f6d8c075f72 # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@77737f79d3011a27d82e23e56be5b8112d824f51 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
@@ -364,7 +364,7 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Set up Flutter
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@635b8e875d5a9931656808ad31033f6d8c075f72 # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@77737f79d3011a27d82e23e56be5b8112d824f51 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true

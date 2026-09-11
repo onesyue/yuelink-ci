@@ -235,7 +235,7 @@ def source_flutter_issues(workflow: str) -> list[str]:
     issues: list[str] = []
     pin = (
         "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-        "635b8e875d5a9931656808ad31033f6d8c075f72"
+        "77737f79d3011a27d82e23e56be5b8112d824f51"
     )
     starts = [match.start() for match in re.finditer(re.escape(pin), workflow)]
     if len(starts) != 3:
@@ -535,7 +535,7 @@ class SourceAttestationContractTests(unittest.TestCase):
         # state is `cache: true`; a quiet flip back to `false` must go red.
         pin = (
             "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-            "635b8e875d5a9931656808ad31033f6d8c075f72"
+            "77737f79d3011a27d82e23e56be5b8112d824f51"
         )
         starts = [
             match.start() for match in re.finditer(re.escape(pin), self.workflow)
