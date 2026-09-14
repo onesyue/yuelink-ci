@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.53",
+  "version": "1.3.54",
   "channel": "stable",
-  "publishedAt": "2026-09-11T02:56:59Z",
-  "expiresAt": "2026-10-16T02:56:59Z",
+  "publishedAt": "2026-09-14T06:20:29Z",
+  "expiresAt": "2026-10-19T06:20:29Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "原生网络更稳，扫码更顺。\n\n- 修复多路复用写入超时后的缓冲复用竞态，避免加密数据损坏；连接关闭与读写并发时保留准确错误并回收一次性回调。\n- 消除 Restls 调试计数的读写竞争，保留双向传输；修复 Windows 原生网卡最终回收时传错句柄的问题。\n- 网络缓冲由原生栈在接收流量前配置，保留 iOS、Android 和桌面各自的内存边界，减少启动时序问题。\n- 修复默认网卡更新遗漏、NAT 端口绕回覆盖活连接及异常协议族数据包问题；断开后停止网卡重试，避免重复连接累积后台任务。\n- 跟进 Flutter 3.47.3 的 Android PowerVR 画面与性能、键盘操作回调和平台构建修复。\n- Android 扫码不再因未释放相机帧持续停滞，相机初始化失败通过正常错误界面反馈；更新安全存储的密钥迁移修复和 HTML 内容展示组件。\n\n桌面继续使用现有 Skia 渲染选择。本轮核对了新引擎读取这些选项的源码；未以 Intel Mac 或 PowerVR 真机画面结果替代源码审查。网络收益取决于设备、线路与负载，本版不承诺固定公网提速比例。\n",
-  "notesEn": "Steadier networking and scanning.\n\n- Prevent reused buffers from corrupting encrypted data after a multiplexed write times out, and synchronize stream closure with concurrent reads, writes, and cleanup callbacks.\n- Remove Restls diagnostic counter races without serializing full-duplex traffic, and fix native Windows adapter finalizer cleanup.\n- Configure network buffers in the native stack before traffic starts, preserving separate iOS, Android and desktop memory budgets.\n- Include upstream fixes for missed interface updates, NAT port reuse and packets from unconfigured address families. Closing the core now stops interface retries.\n- Update to Flutter 3.47.3 for Android PowerVR rendering and performance fixes, keyboard action callbacks and platform build fixes.\n- Update Android scanning to release camera frames on every exit path and report camera initialization errors normally. Include secure-storage key migration and asynchronous HTML rendering fixes.\n\nDesktop rendering keeps its current Skia selection. The updated engine source still reads these options; Intel Mac and PowerVR hardware were not tested in this review. Actual internet throughput depends on the device, route and workload.\n",
-  "sourceCommit": "83b70c5add759d6cd484dd793f079ee19d9181b9",
-  "sha256SumsSha256": "2cf5fe888f599af2a320f8011d694b9f018e78a96b2b55bcd1b70a0587a0c4ed",
+  "notes": "UDP 更稳，规则更准。\n\n- 修复 Hysteria2 连接关闭时 UDP 会话未随之释放的问题；已关闭的连接不再新建 UDP 会话。\n- 修复域名规则集通配符与更长规则重叠时的漏匹配（`*.example.com` 与 `dead.a.example.com` 并存时 `a.example.com` 曾被判为不匹配）。\n- Hysteria2 出站的初始 QUIC 包按最小路径收敛到 1200 字节，以适配 MTU 受限的线路；握手后仍会自动探测更大的包。\n- 升级 Flutter 3.47.4：本次仅含构建工具修复（iOS 设备支持符号、Windows 安全策略、SwiftPM 诊断），引擎与框架不变。\n- 安全存储在 Android 上改为读取已保存的密钥标记；跟进文件选择器、语言解析与数据库组件的小版本修复。\n\n以上两处内核修复来自上游尚未进入稳定版的提交，已逐条评估并附回归测试；未整体跟进上游预发布分支。网络收益取决于设备、线路与负载，本版不承诺固定公网提速比例。\n",
+  "notesEn": "Steadier UDP, more accurate rules.\n\n- Close every Hysteria2 UDP session when its connection closes, and stop creating UDP sessions on a closed connection.\n- Fix domain rule sets missing a match when a wildcard rule overlaps a longer rule (`a.example.com` was rejected with both `*.example.com` and `dead.a.example.com` present).\n- Hysteria2 outbound now starts with a 1200-byte QUIC initial packet (the RFC 9000 minimum path) to fit MTU-constrained routes; native PMTUD still grows the packet size after the handshake.\n- Update to Flutter 3.47.4, a build-tool-only hotfix (iOS device support symbols, Windows security policy handling, SwiftPM diagnostics); engine and framework are unchanged.\n- Secure storage on Android now reads the saved key-cipher marker; file picker, locale resolution and database components take minor upstream fixes.\n\nBoth core fixes are upstream commits not yet in a stable release, reviewed individually and covered by regression tests; the upstream pre-release branch was not adopted wholesale. Actual internet throughput depends on the device, route and workload.\n",
+  "sourceCommit": "37a6e24527d278793cac517f9fb353116916c67d",
+  "sha256SumsSha256": "f270ccf43deb9c9018f298203cbb7cc0c675dc97e046e840f58257aa75d85520",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.53/YueLink-1.3.53-android-arm64-v8a.apk",
-      "sha256": "a308b576249858a775bcdf2506b7a7e6d2fff9f136eacb3102f15d39f9c715df"
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-android-arm64-v8a.apk",
+      "sha256": "28bdc577f2712e2695805aeb127dfff26f6097db19dbef881c1ce24f552b9b5b"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.53/YueLink-1.3.53-android-armeabi-v7a.apk",
-      "sha256": "42b11e097146ebe911a7000b4fb35e5c0e55fd466a8ab2b4f8781cef9016ce2a"
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-android-armeabi-v7a.apk",
+      "sha256": "6bff00aa92c4f617f4d15f8966a15099c0900dc94cc97b0ba8f32b7fc1b19d96"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.53/YueLink-1.3.53-android-x86_64.apk",
-      "sha256": "16635a2c4cd0760ed739f71b69566e5737960e3d9c8a50d9fb7119f78f567d1a"
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-android-x86_64.apk",
+      "sha256": "274a8bc597a46035b6e876f192917af4063d5170e3d9f82dfb9ebcaa852bc6a0"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.53/YueLink-1.3.53-android-universal.apk",
-      "sha256": "fdaaa49f0c27e82fc78cde86df527e74d3907db5f9f2956cbd4f04cb9d657408"
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-android-universal.apk",
+      "sha256": "3b25a521e04aeeef166f79d3931a4c29a465d58527d2efc1eb04f4365894af51"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.53/YueLink-1.3.53-ios.ipa",
-      "sha256": "babb97e00868c66d1d2af38ecabbf710eac54ce009a063aefc35ce09e5d398da"
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-ios.ipa",
+      "sha256": "4d2d69a6ac99bca70a639df07a885657a4eba9aa397341552ee82798f3ac0931"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.53/YueLink-1.3.53-macos-universal.dmg",
-      "sha256": "8454d5a4a7b7eb28d262aaec389c15e6f37e6050230b4c5c3a2a3660ec6acae2"
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-macos-universal.dmg",
+      "sha256": "4a998af1f1fc6bc917060832eb538c0128601e192687386fbeb4da1c42318b19"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.53/YueLink-1.3.53-windows-amd64-setup.exe",
-      "sha256": "52b7c5bf0c613d6fc35d1eeadf92c64127971fe6e60ab143777b45390be8cb82"
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-windows-amd64-setup.exe",
+      "sha256": "7ebbd7d62fd88fca211b78b25cf70072afac09099ba5ffa0bd6e8ca9d71e86f6"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.53/YueLink-1.3.53-windows-amd64-portable.zip",
-      "sha256": "19af59e6bdb99e147f5aa443760576cade1c641d7808b2f5542aafd087957bfd"
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-windows-amd64-portable.zip",
+      "sha256": "0d2d6dc38f0d6c40360336e130ad94f306704c96fbe52f06f0b423dd0b657dfe"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.53/YueLink-1.3.53-linux-amd64.AppImage",
-      "sha256": "4cdf93e2d322659ecde458fe675e7236f3836c533dad23dd89fdd46f3af2d822"
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-linux-amd64.AppImage",
+      "sha256": "283fa5f885c4068d34155f4595b43f4666f991f8d6e4d18191530ecf59e5dd59"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "62c69c72f00b8a7a021f3a5a2122b35d9cf774adb2761483937cc57c1d5157f3",
-    "sha256SumsSha256": "2cf5fe888f599af2a320f8011d694b9f018e78a96b2b55bcd1b70a0587a0c4ed",
-    "payloadBundleSha256": "7e73b96ed7c121b5f60e0a0e69f69eea65755cc42be9aae1e265a1d5c856f759",
+    "candidateSha256": "b46a45eaaf60115cd71cd0f134948a8cb974e6178f23eff641cdf94dcca43ce6",
+    "sha256SumsSha256": "f270ccf43deb9c9018f298203cbb7cc0c675dc97e046e840f58257aa75d85520",
+    "payloadBundleSha256": "f409ecd46d52521d79065b01647dd03fbdb34b1498eafd28af84924de0082df9",
     "payloadCount": 19
   },
-  "sig": "ed25519:Po8adN8eqhB8fwHrxi811n0W9qghx0VOD3eAxtx1pgkIWzLcHAuu405L3ZVg/oQW9Z+HfAcpHf26Ch+AtI8JCA=="
+  "sig": "ed25519:C9Sbz4ToPNbFTaqvOCCYBJubT/F+9yLlIs9k7xOpiYI0Drauu56xtRm/nf5bXb/whz8MXCqSNCwLJr/HIQz5AA=="
 }
