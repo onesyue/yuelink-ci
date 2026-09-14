@@ -45,11 +45,27 @@ RELEASES = {
         "stable/windows/flutter_windows_3.47.3-stable.zip",
         "44822ab53afb543c6fb446c078ba4f495e3eeddaafb88d879bde606447ddce24",
     ),
+    ("3.47.4", "Linux"): (
+        "stable/linux/flutter_linux_3.47.4-stable.tar.xz",
+        "5b45f0ceda99b9bebdc873e7e69f6450aeb4c30f454b505e2e62fc9255a907d3",
+    ),
+    ("3.47.4", "Darwin"): (
+        "stable/macos/flutter_macos_3.47.4-stable.zip",
+        "72ced0f81a5ea48f30d221699fa45378cdd1fa15426512444f32e4e1bee9db8b",
+    ),
+    ("3.47.4", "Windows"): (
+        "stable/windows/flutter_windows_3.47.4-stable.zip",
+        "31173300481bd06e377fd55ee84214689648b1817563efd7b450b7b78bdf351a",
+    ),
 }
 ARCH_RELEASES = {
     ("3.47.3", "Darwin", "ARM64"): (
         "stable/macos/flutter_macos_arm64_3.47.3-stable.zip",
         "66144a7cd691059c8c73bfce24178fb9ea2c95d798db8d56d1e2411e760f6583",
+    ),
+    ("3.47.4", "Darwin", "ARM64"): (
+        "stable/macos/flutter_macos_arm64_3.47.4-stable.zip",
+        "c6af6fa1d64946167b8637ba4c5a7bb3b8574729a1ebe931decd4924dbab7061",
     ),
 }
 RECEIPT_NAME = ".yue-flutter-sdk.json"
