@@ -235,7 +235,7 @@ def source_flutter_issues(workflow: str) -> list[str]:
     issues: list[str] = []
     pin = (
         "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-        "77737f79d3011a27d82e23e56be5b8112d824f51"
+        "abd31d22ce4f1c2b3888ede491889f4eaf688e06"
     )
     starts = [match.start() for match in re.finditer(re.escape(pin), workflow)]
     if len(starts) != 3:
@@ -398,6 +398,56 @@ def contract_issues(
     return issues
 
 
+
+def installer_lane_drift_issues(root: Path) -> list[str]:
+    """The attestation lane and the release build lane must install the same
+    Flutter through the same installer commit.
+
+    2026-09-14: build.yml (synced from the private repo) moved to the
+    3.47.4-capable installer abd31d22 while source-attestation.yml kept
+    77737f79 with FLUTTER_VERSION already bumped to 3.47.4. Policy CI was
+    green, the attestation run died in 75 ms with
+    "unsupported release tuple ('3.47.4', 'Linux')". This runs on a shallow
+    checkout, so it compares the two lanes rather than reading history.
+    """
+    issues: list[str] = []
+    pin_re = re.compile(
+        r"onesyue/yuelink-ci/\.github/actions/setup-flutter@([0-9a-f]{40})"
+    )
+    version_re = re.compile(r"^  FLUTTER_VERSION: '([0-9.]+)'$", re.MULTILINE)
+    lanes: dict[str, tuple[set[str], set[str]]] = {}
+    for name in ("source-attestation.yml", "build.yml"):
+        text = (root / ".github/workflows" / name).read_text(encoding="utf-8")
+        pins = set(pin_re.findall(text))
+        versions = set(version_re.findall(text))
+        if len(pins) != 1:
+            issues.append(f"{name} must use exactly one installer commit, saw {sorted(pins)}")
+        if len(versions) != 1:
+            issues.append(f"{name} must declare exactly one FLUTTER_VERSION, saw {sorted(versions)}")
+        lanes[name] = (pins, versions)
+    attest, build = lanes["source-attestation.yml"], lanes["build.yml"]
+    if attest[0] != build[0]:
+        issues.append(
+            "source-attestation.yml and build.yml pin different installer commits: "
+            f"{sorted(attest[0])} vs {sorted(build[0])}"
+        )
+    if attest[1] != build[1]:
+        issues.append(
+            "source-attestation.yml and build.yml pin different FLUTTER_VERSION: "
+            f"{sorted(attest[1])} vs {sorted(build[1])}"
+        )
+    installer = (root / ".github/actions/setup-flutter/install_flutter_sdk.py").read_text(
+        encoding="utf-8"
+    )
+    for version in attest[1] | build[1]:
+        for system in ("Linux", "Darwin", "Windows"):
+            if f'("{version}", "{system}")' not in installer:
+                issues.append(
+                    f"checked-out installer has no ({version}, {system}) release tuple"
+                )
+    return issues
+
+
 class SourceAttestationContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -527,6 +577,44 @@ class SourceAttestationContractTests(unittest.TestCase):
         issues = contract_issues(self.workflow, mutated, self.readme)
         self.assertTrue(any("both existing and pushed" in issue for issue in issues))
 
+    def test_attestation_and_build_lanes_share_installer_and_flutter(self) -> None:
+        self.assertEqual(installer_lane_drift_issues(ROOT), [])
+
+    def test_installer_lane_drift_is_rejected(self) -> None:
+        import shutil
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp)
+            (fake / ".github/workflows").mkdir(parents=True)
+            (fake / ".github/actions/setup-flutter").mkdir(parents=True)
+            shutil.copy(WORKFLOW, fake / ".github/workflows/source-attestation.yml")
+            shutil.copy(
+                ROOT / ".github/workflows/build.yml",
+                fake / ".github/workflows/build.yml",
+            )
+            shutil.copy(
+                ROOT / ".github/actions/setup-flutter/install_flutter_sdk.py",
+                fake / ".github/actions/setup-flutter/install_flutter_sdk.py",
+            )
+            self.assertEqual(installer_lane_drift_issues(fake), [])
+            stale = self.workflow.replace(
+                "abd31d22ce4f1c2b3888ede491889f4eaf688e06",
+                "77737f79d3011a27d82e23e56be5b8112d824f51",
+            )
+            (fake / ".github/workflows/source-attestation.yml").write_text(
+                stale, encoding="utf-8"
+            )
+            issues = installer_lane_drift_issues(fake)
+            self.assertTrue(any("different installer commits" in i for i in issues))
+            (fake / ".github/workflows/source-attestation.yml").write_text(
+                self.workflow.replace("FLUTTER_VERSION: '3.47.4'", "FLUTTER_VERSION: '3.47.9'"),
+                encoding="utf-8",
+            )
+            issues = installer_lane_drift_issues(fake)
+            self.assertTrue(any("different FLUTTER_VERSION" in i for i in issues))
+            self.assertTrue(any("no (3.47.9, Linux)" in i for i in issues))
+
     def test_every_public_workflow_action_is_commit_pinned(self) -> None:
         self.assertEqual(actions_policy_issues(self.automation, self.readme), [])
 
@@ -535,7 +623,7 @@ class SourceAttestationContractTests(unittest.TestCase):
         # state is `cache: true`; a quiet flip back to `false` must go red.
         pin = (
             "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-            "77737f79d3011a27d82e23e56be5b8112d824f51"
+            "abd31d22ce4f1c2b3888ede491889f4eaf688e06"
         )
         starts = [
             match.start() for match in re.finditer(re.escape(pin), self.workflow)
