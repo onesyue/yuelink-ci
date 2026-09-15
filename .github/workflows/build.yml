@@ -451,6 +451,10 @@ jobs:
       - name: Setup Android NDK
         if: matrix.platform == 'android'
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          # The default also requests the retired SDK "tools" package.
+          # Command-line tools are set up by the action; NDK is pinned below.
+          packages: platform-tools
 
       - name: Install Android NDK r27
         if: matrix.platform == 'android'
