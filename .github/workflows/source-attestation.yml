@@ -102,7 +102,7 @@ jobs:
           java-version: '17'
 
       - name: Restore pub cache (lockfile-verified)
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.pub-cache
           key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
@@ -329,7 +329,7 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
       - name: Restore pub cache (lockfile-verified)
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.pub-cache
           key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
@@ -369,7 +369,7 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
       - name: Restore pub cache (lockfile-verified)
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~\AppData\Local\Pub\Cache
           key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
