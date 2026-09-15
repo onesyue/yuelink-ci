@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.56",
+  "channel": "stable",
+  "publishedAt": "2026-09-15T08:53:36Z",
+  "expiresAt": "2026-10-20T08:53:36Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "连接异常与关闭过程更加可靠。\n\n- 修复 QUIC 合并关闭包漏算加密认证开销的问题，避免最小 MTU 路径上的关闭包超长或触及包缓冲区上限。\n- 修复监听器处理握手异常后未关闭连接的问题，减少异常重试留下的文件描述符。\n- 修复 VLESS 解密实例创建后初始化失败时的清理崩溃，并补全 DNS-over-QUIC 初始化错误路径的连接释放。\n- 客户端继续使用官方稳定 Flutter 3.47.4；更新下载的签名与文件哈希校验保持启用。\n\n修复依据最新稳定 mihomo v1.19.31 与 QUIC 上游提交逐项核验。实际网速与延迟仍取决于设备和线路，本版不承诺固定提速比例。\n",
+  "notesEn": "More reliable connection failure handling and shutdown.\n\n- Account for authentication overhead in coalesced QUIC close packets, keeping them within the minimum path MTU and packet buffer limit.\n- Close accepted connections when a handshake handler panics, preventing leaked descriptors during repeated failures.\n- Keep ownership of VLESS decryption cleanup when initialization fails, and close DNS-over-QUIC sockets on setup errors.\n- Continue on the official stable Flutter 3.47.4 toolchain with signed updates and file checksum verification.\n\nThe repairs were reviewed against stable mihomo v1.19.31 and the upstream QUIC fix. Actual speed and latency depend on the device and route; this release does not claim a fixed throughput improvement.\n",
+  "sourceCommit": "e8e56e621a73185eabcfefa3bb50f4ff5a8f3306",
+  "sha256SumsSha256": "72918f07709599d0b0ff8651e687ac656a084187f363ad681621839d76745a3f",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.56/YueLink-1.3.56-android-arm64-v8a.apk",
+      "sha256": "05100d8c397b1ab7d0228ae8ec2d455df76d2591a27309079f1584c1bd8038c3"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.56/YueLink-1.3.56-android-armeabi-v7a.apk",
+      "sha256": "1ad6f7145aae96bd618eea3831c03eb8d1627d9b68942723b46b610a9ff82428"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.56/YueLink-1.3.56-android-x86_64.apk",
+      "sha256": "26adff8aaae5cc2c2a9ac995a30867e8a8f747fe964443fbc059110082d96c2b"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.56/YueLink-1.3.56-android-universal.apk",
+      "sha256": "7f20003983a23bd5b921f79b1176c24c9beed55418cad69f13157adc3cdf8988"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.56/YueLink-1.3.56-ios.ipa",
+      "sha256": "ff7c240718f742a2d49f64211e361083637d0857ce5a7a731aa5a2a823effce9"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.56/YueLink-1.3.56-macos-universal.dmg",
+      "sha256": "f413f74c95618a31f15b668dd409f1038c190d30a1910fb2e72ab43a972c24cd"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.56/YueLink-1.3.56-windows-amd64-setup.exe",
+      "sha256": "12d5ecd31eb75312af5d4961a5e098bfde071d19372330bf65d8848f98ec5518"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.56/YueLink-1.3.56-windows-amd64-portable.zip",
+      "sha256": "e48e4133e6f94185ca5fda4d6de3faee6a33db4a3a73e102285a8c494caadff4"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.56/YueLink-1.3.56-linux-amd64.AppImage",
+      "sha256": "6ad77a8143251a2369627a5985cdba76250a0e62c938ce136cea0cb46e5f9145"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "4d8ebcbc762baa5fc13e46008a43d1280ee0d51c250daa40f8872e89e3ca63fb",
+    "sha256SumsSha256": "72918f07709599d0b0ff8651e687ac656a084187f363ad681621839d76745a3f",
+    "payloadBundleSha256": "7022f08992e1e73a3f10620986ffe8681828d709c07239ed505b4fc868127ef0",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:CZe09GCwblcsOCndzLlh47Ocuw0EwQtFqRqnykTPE3FuxchnAVhaeJtB9cOYc03aFJAGdTFcskztNBoo8kBPBg=="
+}
