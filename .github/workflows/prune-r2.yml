@@ -130,10 +130,13 @@ jobs:
           }
           current_prefix="v$current_version"
 
+          # Leave enough total time for both retries after a full 30s timeout.
+          # A 30s retry budget used to expire with the first attempt, so the
+          # advertised retries never ran during a stalled Cloudflare request.
           curl --fail --silent --show-error \
             --proto '=https' --tlsv1.2 \
             --connect-timeout 10 --max-time 30 \
-            --retry 2 --retry-all-errors --retry-max-time 30 \
+            --retry 2 --retry-all-errors --retry-max-time 120 \
             --max-redirs 0 --max-filesize 262144 \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             --output "$lock_response" \

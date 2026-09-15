@@ -9,25 +9,34 @@ v1.3.45 / v1.3.46 都做过这一轮核验，但**是手工做的**：命令散�
 
 ## 判据
 
-1. 清单本身必须先验签（`verify-update-manifest.py`），本脚本**不重复实现验签**——
-   它只接受一个已经过验签的清单文件，签名逻辑只有一个实现。
+1. 直接调用 `verify-update-manifest.py` 的共享验签入口，再进行任何网络请求。
 2. `sha256SumsSha256` 是清单对 `SHA256SUMS` 的哈希锚：先核对它，再核对每件产物。
    跳过这一步而只核产物，等于信任一份没有来源的清单。
 3. 逐件**流式**下载重算，不落全量到内存。任一件不匹配即整体失败，不做"多数通过"。
 
 用法：
-    python3 scripts/verify-release-closure.py <已验签的 manifest.json>
+    python3 scripts/verify-release-closure.py <manifest.json>
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
+import importlib.util
+import re
 import sys
 import urllib.request
+from pathlib import Path
 from urllib.parse import urljoin
 
 CHUNK = 1 << 20
+MAX_SUMS_BYTES = 65536
+
+_spec = importlib.util.spec_from_file_location(
+    "verify_update_manifest", Path(__file__).with_name("verify-update-manifest.py")
+)
+assert _spec and _spec.loader
+manifest_verifier = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(manifest_verifier)
 
 
 # 🚨 必须显式带 UA：分发域名在 Cloudflare 后面，`Python-urllib/*` 会被 bot 拦截，
@@ -43,7 +52,10 @@ def _open(url: str):
 
 def _read_url(url: str) -> bytes:
     with _open(url) as resp:
-        return resp.read()
+        body = resp.read(MAX_SUMS_BYTES + 1)
+        if len(body) > MAX_SUMS_BYTES:
+            raise ValueError("SHA256SUMS exceeds 64 KiB")
+        return body
 
 
 def _sha256_of_url(url: str) -> tuple[str, int]:
@@ -59,12 +71,40 @@ def _sha256_of_url(url: str) -> tuple[str, int]:
     return digest.hexdigest(), total
 
 
-def main() -> int:
-    if len(sys.argv) != 2:
-        print(__doc__, file=sys.stderr)
-        return 99
-    with open(sys.argv[1], encoding="utf-8") as fh:
-        manifest = json.load(fh)
+def _parse_sums(body: bytes, manifest: dict) -> dict[str, str]:
+    version = manifest["version"]
+    prefix = f"YueLink-{version}-"
+    expected = {
+        prefix + suffix
+        for suffix in manifest_verifier.EXPECTED_PLATFORM_ARTIFACTS.values()
+    }
+    expected.update(
+        f"{prefix}{platform}-{suffix}"
+        for platform in ("android", "ios", "linux", "macos", "windows")
+        for suffix in ("INSTALL-NOTICE.txt", "RELEASE.json")
+    )
+    entries: dict[str, str] = {}
+    for line in body.decode("utf-8").splitlines():
+        if not line.strip():
+            continue
+        match = re.fullmatch(r"([0-9a-f]{64}) [ *]([A-Za-z0-9._-]+)", line)
+        if match is None:
+            raise ValueError("malformed SHA256SUMS entry")
+        digest, filename = match.groups()
+        if filename in entries:
+            raise ValueError(f"duplicate SHA256SUMS filename: {filename}")
+        entries[filename] = digest
+    if set(entries) != expected:
+        raise ValueError("SHA256SUMS must contain exactly the 19 release payloads")
+    for name, spec in manifest["platforms"].items():
+        filename = spec["url"].rsplit("/", 1)[1]
+        if entries.get(filename) != spec["sha256"]:
+            raise ValueError(f"{name}: SHA256SUMS filename/hash binding mismatch")
+    return entries
+
+
+def verify_release(manifest: dict) -> int:
+    """Check payloads after the caller has authenticated the manifest."""
     version = manifest["version"]
     platforms = manifest["platforms"]
 
@@ -84,30 +124,17 @@ def main() -> int:
     sums_body = _read_url(sums_url)
     got = hashlib.sha256(sums_body).hexdigest()
     if got != anchor:
-        failures.append(f"SHA256SUMS 哈希锚不符: 期望 {anchor} 实得 {got}（取错文件？）")
-    print(f"{'OK ' if got == anchor else 'BAD'}  SHA256SUMS  {len(sums_body)} bytes  {got}")
-
-    # 清单声明的每个哈希都必须在 SHA256SUMS 里出现：两份独立产物互为佐证，
-    # 只核其中一份等于信任一个没有第二来源的值。
-    declared = {
-        line.split()[0]
-        for line in sums_body.decode("utf-8", "replace").splitlines()
-        if line.strip()
-    }
-    for name, spec in sorted(platforms.items()):
-        if spec["sha256"] not in declared:
-            failures.append(f"{name}: 清单里的哈希没有出现在 SHA256SUMS 里")
+        raise ValueError(f"SHA256SUMS 哈希锚不符: 期望 {anchor} 实得 {got}")
+    # Hash membership alone misses exchanged filenames. Check the complete
+    # filename -> digest relation before downloading any payload bytes.
+    entries = _parse_sums(sums_body, manifest)
+    print(f"OK   SHA256SUMS  {len(sums_body)} bytes  {got}")
 
     # 逐件重算的对象是 **SHA256SUMS 的每一条**，不是只有 platforms 里那 9 个 URL。
     # 闭包还包含每个平台的 INSTALL-NOTICE.txt 与 RELEASE.json —— 只验安装包会漏掉
     # 一半条目，而「验了 9 件」和「验了 19 件」在结论里长得一样。
     base = any_url.rsplit("/", 1)[0] + "/"
-    entries = [
-        (line.split()[1], line.split()[0])
-        for line in sums_body.decode("utf-8", "replace").splitlines()
-        if line.strip()
-    ]
-    for filename, want in entries:
+    for filename, want in entries.items():
         got, size = _sha256_of_url(base + filename)
         grand_total += size
         ok = got == want
@@ -123,6 +150,18 @@ def main() -> int:
         return 1
     print("全部匹配")
     return 0
+
+
+def main() -> int:
+    if len(sys.argv) != 2:
+        print(__doc__, file=sys.stderr)
+        return 99
+    try:
+        manifest = manifest_verifier.verify(Path(sys.argv[1]).read_bytes())
+        return verify_release(manifest)
+    except (OSError, ValueError) as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
