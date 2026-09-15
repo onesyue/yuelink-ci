@@ -84,6 +84,9 @@ jobs:
           }
           printf 'source_sha=%s\nrelease_tag=v%s\n' "$SOURCE_SHA" "$version" >> "$GITHUB_OUTPUT"
 
+      - name: Verify signed native QUIC source export
+        run: python3 core/mihomo/third_party/verify_quic_source.py
+
       - name: Set up Flutter
         uses: onesyue/yuelink-ci/.github/actions/setup-flutter@abd31d22ce4f1c2b3888ede491889f4eaf688e06 # pinned installer v1
         with:
