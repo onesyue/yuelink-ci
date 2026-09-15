@@ -20,10 +20,12 @@ and a partial release cannot produce or promote an updater manifest.
 The public workflow publishes every successful current-tag platform
 independently with checksums, provenance, source-commit identity and truthful
 sideload notices. Only a complete five-platform / nine-artifact set can create
-an unsigned updater-manifest candidate. The updater signing seed remains in
-the private signing plane, which authenticates the current signed root, signs
-the candidate, enforces a monotonic version transition, publishes the signed
-archive/root, and verifies the live artifacts.
+an unsigned updater-manifest candidate. The updater signing seed is held in
+protected repository Secrets and exposed only to the protected promotion
+step, which authenticates the current signed root, signs the candidate,
+enforces a monotonic version transition, publishes the signed archive/root,
+and verifies the live artifacts. It is never stored in application source or
+published artifacts.
 
 Since 2026-09-03 that promotion runs **inside** the public build (`release`
 job, last step `Sign root manifest and promote (in-pipeline)` →
@@ -39,7 +41,7 @@ the exact signed root into that fixture in a reviewed follow-up and retain the
 previous root as a replay regression fixture. Never discover the floor from
 the CDN being authenticated. This ratchet does not remove retained installers
 for manual recovery; publishing a decreasing updater root is already forbidden
-by the private signer's monotonic transition contract.
+by the shared promoter's monotonic transition contract.
 
 From a clean, up-to-date `master` checkout:
 
@@ -88,7 +90,8 @@ delete or overwrite path. There is no implicitly cleanable namespace. Any
 future ephemeral area must have a separate explicit prefix, age and ownership
 contract outside both locked `v` and `security/` prefixes.
 
-Immediately before private promotion, `r2-lock-attestation.yml` reads that
+The normal in-pipeline promoter checks the live bucket lock directly. For
+manual fallback promotion, `r2-lock-attestation.yml` instead reads that
 same live rule with the existing configuration-read-only Cloudflare token and
 emits a 30-minute proof bound to the exact stable version, private source,
 candidate SHA-256, candidate builder/run and a fresh 32-byte random challenge.

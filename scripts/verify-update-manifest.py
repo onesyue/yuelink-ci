@@ -352,7 +352,7 @@ def _enforce_minimum(manifest: dict[str, Any], floor: dict[str, Any]) -> None:
 def verify(raw: bytes, *, minimum_raw: bytes | None = None) -> dict[str, Any]:
     """Verify signature/schema and reject roots older than the reviewed floor.
 
-    The private signing plane already forbids a decreasing root version.  This
+    The shared release promoter already forbids a decreasing root version. This
     repository-local, signed floor gives the independent public watchdog the
     same fail-closed property against replay of a still-unexpired old root.
     Updating the floor is an explicit reviewed release change; it is never

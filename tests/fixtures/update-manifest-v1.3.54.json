@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.54",
+  "channel": "stable",
+  "publishedAt": "2026-09-14T06:20:29Z",
+  "expiresAt": "2026-10-19T06:20:29Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "UDP 更稳，规则更准。\n\n- 修复 Hysteria2 连接关闭时 UDP 会话未随之释放的问题；已关闭的连接不再新建 UDP 会话。\n- 修复域名规则集通配符与更长规则重叠时的漏匹配（`*.example.com` 与 `dead.a.example.com` 并存时 `a.example.com` 曾被判为不匹配）。\n- Hysteria2 出站的初始 QUIC 包按最小路径收敛到 1200 字节，以适配 MTU 受限的线路；握手后仍会自动探测更大的包。\n- 升级 Flutter 3.47.4：本次仅含构建工具修复（iOS 设备支持符号、Windows 安全策略、SwiftPM 诊断），引擎与框架不变。\n- 安全存储在 Android 上改为读取已保存的密钥标记；跟进文件选择器、语言解析与数据库组件的小版本修复。\n\n以上两处内核修复来自上游尚未进入稳定版的提交，已逐条评估并附回归测试；未整体跟进上游预发布分支。网络收益取决于设备、线路与负载，本版不承诺固定公网提速比例。\n",
+  "notesEn": "Steadier UDP, more accurate rules.\n\n- Close every Hysteria2 UDP session when its connection closes, and stop creating UDP sessions on a closed connection.\n- Fix domain rule sets missing a match when a wildcard rule overlaps a longer rule (`a.example.com` was rejected with both `*.example.com` and `dead.a.example.com` present).\n- Hysteria2 outbound now starts with a 1200-byte QUIC initial packet (the RFC 9000 minimum path) to fit MTU-constrained routes; native PMTUD still grows the packet size after the handshake.\n- Update to Flutter 3.47.4, a build-tool-only hotfix (iOS device support symbols, Windows security policy handling, SwiftPM diagnostics); engine and framework are unchanged.\n- Secure storage on Android now reads the saved key-cipher marker; file picker, locale resolution and database components take minor upstream fixes.\n\nBoth core fixes are upstream commits not yet in a stable release, reviewed individually and covered by regression tests; the upstream pre-release branch was not adopted wholesale. Actual internet throughput depends on the device, route and workload.\n",
+  "sourceCommit": "37a6e24527d278793cac517f9fb353116916c67d",
+  "sha256SumsSha256": "f270ccf43deb9c9018f298203cbb7cc0c675dc97e046e840f58257aa75d85520",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-android-arm64-v8a.apk",
+      "sha256": "28bdc577f2712e2695805aeb127dfff26f6097db19dbef881c1ce24f552b9b5b"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-android-armeabi-v7a.apk",
+      "sha256": "6bff00aa92c4f617f4d15f8966a15099c0900dc94cc97b0ba8f32b7fc1b19d96"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-android-x86_64.apk",
+      "sha256": "274a8bc597a46035b6e876f192917af4063d5170e3d9f82dfb9ebcaa852bc6a0"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-android-universal.apk",
+      "sha256": "3b25a521e04aeeef166f79d3931a4c29a465d58527d2efc1eb04f4365894af51"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-ios.ipa",
+      "sha256": "4d2d69a6ac99bca70a639df07a885657a4eba9aa397341552ee82798f3ac0931"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-macos-universal.dmg",
+      "sha256": "4a998af1f1fc6bc917060832eb538c0128601e192687386fbeb4da1c42318b19"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-windows-amd64-setup.exe",
+      "sha256": "7ebbd7d62fd88fca211b78b25cf70072afac09099ba5ffa0bd6e8ca9d71e86f6"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-windows-amd64-portable.zip",
+      "sha256": "0d2d6dc38f0d6c40360336e130ad94f306704c96fbe52f06f0b423dd0b657dfe"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.54/YueLink-1.3.54-linux-amd64.AppImage",
+      "sha256": "283fa5f885c4068d34155f4595b43f4666f991f8d6e4d18191530ecf59e5dd59"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "b46a45eaaf60115cd71cd0f134948a8cb974e6178f23eff641cdf94dcca43ce6",
+    "sha256SumsSha256": "f270ccf43deb9c9018f298203cbb7cc0c675dc97e046e840f58257aa75d85520",
+    "payloadBundleSha256": "f409ecd46d52521d79065b01647dd03fbdb34b1498eafd28af84924de0082df9",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:C9Sbz4ToPNbFTaqvOCCYBJubT/F+9yLlIs9k7xOpiYI0Drauu56xtRm/nf5bXb/whz8MXCqSNCwLJr/HIQz5AA=="
+}
