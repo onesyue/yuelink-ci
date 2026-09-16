@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.58",
+  "channel": "stable",
+  "publishedAt": "2026-09-16T14:09:56Z",
+  "expiresAt": "2026-10-21T14:09:56Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "重要操作不再重复提交。\n\n- 佣金划转与提现、下单与支付、礼品卡兑换在网络不稳时仍会自动重试并切换备用线路，但服务端只会执行一次；若上一次仍在处理，会提示「处理中」，请稍后查看结果。\n- 修改密码、取消订单、工单、验证码、注册与找回密码在网络不稳时只提交一次，不再出现「密码已改好却提示旧密码错误」或重复工单；如遇网络失败，请确认结果后再手动重试。\n- macOS 虚拟网卡关闭可能在多线程下载时导致内核卡住的批量发送，保留批量接收。\n- 切换应用语言后，订阅会重新获取一次对应语言的节点名称。\n- 底部导航玻璃效果在增强对比度、减弱动态效果与 Android 上更清晰；深色模式边缘更利落；导航与连接按钮加入轻微弹性按压反馈，减弱动态效果时自动关闭。\n- 传输质量统计不再把直连、拦截等内置策略当作节点；节点页快速切换后，托盘「最近使用」列表保持更新。\n\n系统「降低透明度」设置暂无法由应用直接读取，本版以「增强对比度」作为降级依据。\n",
+  "notesEn": "Important actions are no longer submitted twice.\n\n- Commission transfers and withdrawals, orders and payments, and gift-card redemption still retry and switch to backup routes on an unstable network, but the server carries each one out only once. If an earlier attempt is still being processed, the app says so; check the result shortly.\n- Changing your password, cancelling an order, tickets, verification codes, registration and password reset are sent exactly once. You will no longer see \"old password incorrect\" after a change that actually succeeded, or duplicate tickets. If a request fails, check the result before retrying manually.\n- The macOS TUN device keeps batched receive but turns off batched send, which could freeze the network core during multi-threaded downloads.\n- After switching the app language, the subscription is fetched once more so node names follow the new language.\n- The bottom navigation glass is more legible with Increase Contrast, Reduce Motion and on Android; dark mode uses a crisp edge instead of a heavy shadow; the navigation and connect button gain a subtle spring press that turns off with Reduce Motion.\n- Transport quality statistics no longer count built-in policies such as DIRECT or REJECT as nodes, and quick node switches keep the tray's recent list up to date.\n\nThe system Reduce Transparency setting cannot yet be read by the app; this release uses Increase Contrast as the fallback signal.\n",
+  "sourceCommit": "5fb77e12c1619b306324858a1b027f6a21af9ee3",
+  "sha256SumsSha256": "4c4f5006f8fb38d6a7a7f69c635e80fff975711c67e80f4d2bc761cce03beca8",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.58/YueLink-1.3.58-android-arm64-v8a.apk",
+      "sha256": "6c74382a1ed346112a5822e949feacd87a2d0cca3e467bd85d74aff105632964"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.58/YueLink-1.3.58-android-armeabi-v7a.apk",
+      "sha256": "f56b036b6ecf8c789193c2b2877bd2c8d5841e3e09f5f5024f3babe2e638cd83"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.58/YueLink-1.3.58-android-x86_64.apk",
+      "sha256": "5f54cba6c1d29695981d29c236aedc1d280001ddf9b519eace2260c407a795ad"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.58/YueLink-1.3.58-android-universal.apk",
+      "sha256": "fffaf8bbde4828d939c7b78c2d4974669c1094fd280ba0b74a9382fac97aeadf"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.58/YueLink-1.3.58-ios.ipa",
+      "sha256": "64c5ca4021f8ecd9fc168d8e2adec07c66f63d3d841b40167b75077b4be9cd25"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.58/YueLink-1.3.58-macos-universal.dmg",
+      "sha256": "3f6c8d21889b7750767a2dee03d89cd3afb44eac3db9e27678bbfa71c7e13c09"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.58/YueLink-1.3.58-windows-amd64-setup.exe",
+      "sha256": "d9581655e742572393fda81ac58f1b3692f85b5b81f07ac417e52476e6e05775"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.58/YueLink-1.3.58-windows-amd64-portable.zip",
+      "sha256": "c3147cfa94ecfc6ae4aadd00d8ca77abfd7f2e355116a0b3130ec8faa167685d"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.58/YueLink-1.3.58-linux-amd64.AppImage",
+      "sha256": "b70054a3f576fafac72457296787d3cf2c361fff251582802e759ee23d754f2c"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "c429b5058e774adb2da0f7626c05d7a0c61d86bb984f4f956f1235e731aaaca3",
+    "sha256SumsSha256": "4c4f5006f8fb38d6a7a7f69c635e80fff975711c67e80f4d2bc761cce03beca8",
+    "payloadBundleSha256": "5da276dc84f13881020fa9896ba9249d4c4ba69befa16449b736ebcaf0c92c48",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:x0aSCe2O6vFQi6/GOhOpuj7n/+T4YdBteu2xv61rtkUR7VNmdkFhjV1TW1IRSBmiMrfWsk0dLNeqNnc2dn7OAw=="
+}
