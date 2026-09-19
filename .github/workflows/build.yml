@@ -61,17 +61,22 @@ env:
   # diagnostics); engine/framework unchanged. Keep every build/validation
   # lane on the same stable patch.
   FLUTTER_VERSION: '3.47.4'
-  # Go 1.26.8 (2026-09-01): 保留 1.26.6 的安全修复与 1.26.7 的
-  # h2c ReadHeaderTimeout 回归修复，并纳入 cgo、编译器、runtime、
-  # debug/elf 与 os 的上游修复。mihomo 本身只走客户端 h2c
-  # transport，但同一正式构建器还编译 service；所有产物与
-  # govulncheck 继续用同一补丁版。
-  # Same MINOR, gvisor
-  # linkname contract untouched — see CLAUDE.md for the 1.27 gate.
+  # Go 1.27.1 (2026-09-01): 跨 minor 从 1.26.8 升上来，与 yue-node/Xray-core
+  # fork 的发布工具链对齐。拿到 1.27 的小对象分配优化（<80B 分配路径约 -30%，
+  # 分配密集程序整体约 1%）；Green Tea GC 在 1.26 就已默认、不是本次新增。
+  #
+  # 跨 minor 此前是一道**人工门**（"升之前先核 metacubex/gvisor 的 linkname 假设"），
+  # 因为 gvisor fork 在 amd64 上按写死的偏移直接改 runtime.sched.nmspinning，
+  # 失配不报编译错误、只在运行期把调度器计数器写坏。2026-09-20 起该门由
+  # core/gvisor_runtime_abi_test.go 自动执行：它用当前工具链真实编译出的 DWARF
+  # 布局，对上 gvisor fork 里写死的 NMSPINNING_OFFSET 与 WaitReason 字面量。
+  # 升级时实测：nmspinning 偏移在 linux/windows/darwin ×amd64 下 1.26.8 与 1.27.1
+  # 均为 116、schedt 大小同为 6872；三个 WaitReason 常量两版一致；
+  # 对照 1.25.0=100 / 1.24.0=92 证明该判据确实会随版本变动。
   # Keep the release builder and govulncheck on this exact patch release;
-  # a floating 1.26 selector can silently rebuild the same tag against a
+  # a floating 1.27 selector can silently rebuild the same tag against a
   # different standard library.
-  GO_VERSION: '1.26.8'
+  GO_VERSION: '1.27.1'
   # Production builds consume the reviewed module graph exactly. `core/go.mod`
   # and go.sum are tidy against the pinned mihomo submodule; dependency drift
   # must fail the build instead of being resolved implicitly on a runner.
