@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.59",
+  "channel": "stable",
+  "publishedAt": "2026-09-16T22:46:31Z",
+  "expiresAt": "2026-10-21T22:46:31Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "玻璃界面尊重降低透明度。\n\n- 在 iOS / macOS 打开「降低透明度」，或在 Windows 关闭「透明效果」后，底部导航、顶栏与顶部提示改为清晰的实色背景；更改系统设置后立即生效，无需重启应用。\n- 顶部提示在「增强对比度」下同样改为实色，更易阅读。\n- 界面组件库迁移到 Flutter 新的独立 Material / Cupertino 组件包，为官方即将弃用旧库做好准备；外观与操作保持不变。\n",
+  "notesEn": "Glass now honours Reduce Transparency.\n\n- With Reduce Transparency on (iOS / macOS) or Transparency effects off (Windows), the bottom navigation, top bars and top notifications switch to a clear solid background. Changing the system setting takes effect immediately, without restarting the app.\n- Top notifications are also solid under Increase Contrast, so they are easier to read.\n- The interface moves to Flutter's new standalone Material and Cupertino packages ahead of the old libraries' deprecation; look and behaviour are unchanged.\n",
+  "sourceCommit": "0742317a1fceedc1346965689c92da2aeb76d6cf",
+  "sha256SumsSha256": "ddebd12f29121263873834055982af972885e1c520965c7ea5db2c290018b56a",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-android-arm64-v8a.apk",
+      "sha256": "a2ac20d4d8744f8117c67903c8c4ac6c7ff959469c62ea448932d0002191af0a"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-android-armeabi-v7a.apk",
+      "sha256": "0f4f40838ce1703da27b1231e829d13d673fbc8753946d9ffbc18149691cacac"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-android-x86_64.apk",
+      "sha256": "e08c5a8849c1feaf9c891d28adbe162e565c501ae57d02ecffc636a2ddebb4ad"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-android-universal.apk",
+      "sha256": "fea723b2fdf0cbc657448ec465c15ef7cba81e109125324f68747326b4510712"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-ios.ipa",
+      "sha256": "0cd60049c92cd8c36cfb001231211a3a9d4909ac4fa371fec9b5eddc782691ab"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-macos-universal.dmg",
+      "sha256": "a24a027bb8f723c7bd8a3263f62c76c915fe49afb239c8440f2aff103e8d56e8"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-windows-amd64-setup.exe",
+      "sha256": "d36e76263f94dd5d6ff5ce59cbb54503e084d283662047200757941e585510f5"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-windows-amd64-portable.zip",
+      "sha256": "47dcdee69d027d7a81e51aff59d7436abc8f2359aa8b27a64784ba6fb97c7f02"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-linux-amd64.AppImage",
+      "sha256": "d0a25d61b6bdc7bd87e31cd5a9fd64032fd9f2f158bf02cfa5a491368f00f827"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "6e61ef81da5ee454b839fc28fee6c70de614e4e2c9c2076fdd20297b291c5fde",
+    "sha256SumsSha256": "ddebd12f29121263873834055982af972885e1c520965c7ea5db2c290018b56a",
+    "payloadBundleSha256": "5c2e36bf81da8fcdcaeb863a7c3e7c7f0307329ced8fb60725ae93e3f78aa60e",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:oh0/BiT1PgCYt+oSiEOXFmvYSiHHIzhuEifQQM4/vHk5DfD7CttJp+QMkaPiUM8v9ilnCeae/+094Y68O05tDQ=="
+}

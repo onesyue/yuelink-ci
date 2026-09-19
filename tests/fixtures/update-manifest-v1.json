@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.59",
+  "version": "1.3.60",
   "channel": "stable",
-  "publishedAt": "2026-09-16T22:46:31Z",
-  "expiresAt": "2026-10-21T22:46:31Z",
+  "publishedAt": "2026-09-19T14:52:04Z",
+  "expiresAt": "2026-10-24T14:52:04Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "玻璃界面尊重降低透明度。\n\n- 在 iOS / macOS 打开「降低透明度」，或在 Windows 关闭「透明效果」后，底部导航、顶栏与顶部提示改为清晰的实色背景；更改系统设置后立即生效，无需重启应用。\n- 顶部提示在「增强对比度」下同样改为实色，更易阅读。\n- 界面组件库迁移到 Flutter 新的独立 Material / Cupertino 组件包，为官方即将弃用旧库做好准备；外观与操作保持不变。\n",
-  "notesEn": "Glass now honours Reduce Transparency.\n\n- With Reduce Transparency on (iOS / macOS) or Transparency effects off (Windows), the bottom navigation, top bars and top notifications switch to a clear solid background. Changing the system setting takes effect immediately, without restarting the app.\n- Top notifications are also solid under Increase Contrast, so they are easier to read.\n- The interface moves to Flutter's new standalone Material and Cupertino packages ahead of the old libraries' deprecation; look and behaviour are unchanged.\n",
-  "sourceCommit": "0742317a1fceedc1346965689c92da2aeb76d6cf",
-  "sha256SumsSha256": "ddebd12f29121263873834055982af972885e1c520965c7ea5db2c290018b56a",
+  "notes": "语言更简单，佣金钱包改名。\n\n- 语言只剩「简体中文」和「English」两个选项。原来选了「跟随系统」的，升级后会定在你当时看到的那门语言，不会突然变；想换随时去设置页选。\n- 「佣金」钱包改叫「现金钱包」，里面的字也跟着改成可用现金、可提现现金、现金提现。你赚到的还是佣金，只是这笔钱现在有了更好记的名字。\n",
+  "notesEn": "Simpler language choice, and the commission wallet is now the cash wallet.\n\n- Interface language is now just Chinese (Simplified) or English. If you were on \"Follow system\", the app keeps showing the language you were already seeing and simply remembers it — nothing changes on screen, and it no longer shifts when you change an OS setting. Pick a different one any time in Settings.\n- The Commission wallet is now the Cash wallet: available cash, cash available to withdraw, transfer cash to balance, withdraw cash. What you earn is still called commission — only the name of the money itself changed.\n",
+  "sourceCommit": "c90e71bdf22e0dda9aceb8c04520b9feb67efb6e",
+  "sha256SumsSha256": "3c422068167f9668e35f3f5cb7edd14d99918ba0a862acb3a696b0b76b022e4c",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-android-arm64-v8a.apk",
-      "sha256": "a2ac20d4d8744f8117c67903c8c4ac6c7ff959469c62ea448932d0002191af0a"
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-android-arm64-v8a.apk",
+      "sha256": "5fe06941381a8f2e6702f48e7e8ecd0f20063468eea7c4956b64b3b54849f128"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-android-armeabi-v7a.apk",
-      "sha256": "0f4f40838ce1703da27b1231e829d13d673fbc8753946d9ffbc18149691cacac"
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-android-armeabi-v7a.apk",
+      "sha256": "f4cbac52257ead5e6f4689513e930d1848037f06a3c703e8cd73f3355a18d0f3"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-android-x86_64.apk",
-      "sha256": "e08c5a8849c1feaf9c891d28adbe162e565c501ae57d02ecffc636a2ddebb4ad"
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-android-x86_64.apk",
+      "sha256": "d055f6f05285126a3a55e7e376cc10b5e9b63df6048995ccf843ae7d5cc6c294"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-android-universal.apk",
-      "sha256": "fea723b2fdf0cbc657448ec465c15ef7cba81e109125324f68747326b4510712"
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-android-universal.apk",
+      "sha256": "98c72947470878f602cca30f12ae9d92b4d95d8f61a07b9bef5676f3841256ad"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-ios.ipa",
-      "sha256": "0cd60049c92cd8c36cfb001231211a3a9d4909ac4fa371fec9b5eddc782691ab"
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-ios.ipa",
+      "sha256": "19024b331e12adae7fe6c397265890e7dc0df6bcdf43c695df9d246f2b7c8db5"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-macos-universal.dmg",
-      "sha256": "a24a027bb8f723c7bd8a3263f62c76c915fe49afb239c8440f2aff103e8d56e8"
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-macos-universal.dmg",
+      "sha256": "af19d001b054b465577aff6bae36324a9a1411ff51b7c7f91241acdff6193c96"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-windows-amd64-setup.exe",
-      "sha256": "d36e76263f94dd5d6ff5ce59cbb54503e084d283662047200757941e585510f5"
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-windows-amd64-setup.exe",
+      "sha256": "fdbe1df7067ca1b0f82cceefb785ac37a2c1bf62fe17e84ed04d637ca7a6f811"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-windows-amd64-portable.zip",
-      "sha256": "47dcdee69d027d7a81e51aff59d7436abc8f2359aa8b27a64784ba6fb97c7f02"
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-windows-amd64-portable.zip",
+      "sha256": "e01b1fa0760ca08edb17c2ef9e8b1ccb4e5195e1ef7e3ebe70ae4d0c291d01ca"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.59/YueLink-1.3.59-linux-amd64.AppImage",
-      "sha256": "d0a25d61b6bdc7bd87e31cd5a9fd64032fd9f2f158bf02cfa5a491368f00f827"
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-linux-amd64.AppImage",
+      "sha256": "13c648687713a29cc3e5206400181724d2154e2caaff6cee898c2a5ddce91c6d"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "6e61ef81da5ee454b839fc28fee6c70de614e4e2c9c2076fdd20297b291c5fde",
-    "sha256SumsSha256": "ddebd12f29121263873834055982af972885e1c520965c7ea5db2c290018b56a",
-    "payloadBundleSha256": "5c2e36bf81da8fcdcaeb863a7c3e7c7f0307329ced8fb60725ae93e3f78aa60e",
+    "candidateSha256": "5fc390d1cb76fb0fddde9ff7e98c124145d2f88ef3de72589461d1e9370f3ec8",
+    "sha256SumsSha256": "3c422068167f9668e35f3f5cb7edd14d99918ba0a862acb3a696b0b76b022e4c",
+    "payloadBundleSha256": "3267ca56462443d8b2167127ef216cb81dce9566081279bcf97e5479fe30004f",
     "payloadCount": 19
   },
-  "sig": "ed25519:oh0/BiT1PgCYt+oSiEOXFmvYSiHHIzhuEifQQM4/vHk5DfD7CttJp+QMkaPiUM8v9ilnCeae/+094Y68O05tDQ=="
+  "sig": "ed25519:Bg1yqAh186sIE33BfxsdCIQydTRR56jc/cykvKStEbRnMlMm7F13u3Ng/n0XoGfu0wt29fZWVGnm+imSCahDBQ=="
 }
