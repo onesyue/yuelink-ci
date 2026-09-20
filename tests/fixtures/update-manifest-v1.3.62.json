@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.62",
+  "channel": "stable",
+  "publishedAt": "2026-09-20T03:33:44Z",
+  "expiresAt": "2026-10-25T03:33:44Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "消息集中到一处，iOS 隧道更省电。\n\n- 公告和发给你的单独消息，现在合并在一个**消息中心**里：未读一目了然，读过的会记住，不会每次进来又标成未读。网页端和 App 看到的未读状态是一致的。\n- iOS 开启了**批量收包**。上一版这项加速只在 macOS 上启用，这一版经真机过流量验收后对 iOS 也打开——同样的流量下系统调用次数明显减少，用起来更省电、长连接更稳。发包方向仍保持关闭，它还没有同等强度的验收证据。\n- 其余是内部维护：iOS 隧道参数改为单一来源，两侧不一致会被自动检查挡下。日常使用没有可见变化。\n",
+  "notesEn": "Messages live in one place, and the iOS tunnel uses less battery.\n\n- Announcements and messages sent directly to you are now in a single **message center**: unread items are obvious, and what you have read stays read instead of turning red again on every visit. The unread state matches between the web panel and the app.\n- **Batch receive is now on for iOS.** The previous release enabled this acceleration on macOS only; after on-device acceptance under real traffic it is now on for iOS too — noticeably fewer system calls for the same traffic, which shows up as better battery life and steadier long-lived connections. The send direction stays off; it does not yet have acceptance evidence of the same strength.\n- Everything else is internal maintenance: the iOS tunnel parameters now have a single source of truth, and any mismatch between the two sides is caught automatically. No visible change in day-to-day use.\n",
+  "sourceCommit": "9bbf307bd7468f79de17065667aec52f1a813d89",
+  "sha256SumsSha256": "321baef347c83cefcae7ba54b2a0ee1ac99bd0ae60073fc96dccfc219e398ba3",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.62/YueLink-1.3.62-android-arm64-v8a.apk",
+      "sha256": "cbfbd1846ab013a8014eac8c2bc4bc13370bfcd8438fad114940bf37ad33a253"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.62/YueLink-1.3.62-android-armeabi-v7a.apk",
+      "sha256": "6a41cd9c0f5d31bba2d03ac081c2637aae739cd453209be929366b6a37f3bb1c"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.62/YueLink-1.3.62-android-x86_64.apk",
+      "sha256": "b412600389aa1a3f61ebf7510f40f6b4026f33493bd7565af78cdfe66c127bdb"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.62/YueLink-1.3.62-android-universal.apk",
+      "sha256": "f862e26abc4db3cf01acf664a1f17c653f4c2a4215eea54be8bde466a8033b3e"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.62/YueLink-1.3.62-ios.ipa",
+      "sha256": "dec649b15df129c0e4a2ce3c3f4afd68c85f6ae577907933f070ff64f6a23087"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.62/YueLink-1.3.62-macos-universal.dmg",
+      "sha256": "6691de4ab1b644f132156c3c2ccef23d083856b381d9d24bbeebcd6f00ee04f9"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.62/YueLink-1.3.62-windows-amd64-setup.exe",
+      "sha256": "cd336f7548ad69371ab62b3a1be6efbd9972a68ba989d0a56902c49d68dc1326"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.62/YueLink-1.3.62-windows-amd64-portable.zip",
+      "sha256": "e64c36df868327efb63eeb32cbc84c390e273fb4f76ec6bbefbfeb39d0a0ae8e"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.62/YueLink-1.3.62-linux-amd64.AppImage",
+      "sha256": "0683c63671bc7ebba1cf41e8efc3208500aba1b228eeab4ab169ad873a3f6077"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "ca8b0a76b5adc259a37f6d9e5851d936f82089b8c0534b089ae9c3e00edbba2f",
+    "sha256SumsSha256": "321baef347c83cefcae7ba54b2a0ee1ac99bd0ae60073fc96dccfc219e398ba3",
+    "payloadBundleSha256": "dcd3856e0ea18ce03d6c038deec7aa81f29a21322114b6ac816a9a51878909a1",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:JjfVPunj3lDnt14POM1b/49hRLhUkxE0tew6PYAYgSYl1RJlFlkjlm+/wlYiv0m5+sbw5Xt60RFowarNuj0SBA=="
+}
