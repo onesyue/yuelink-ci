@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.60",
+  "channel": "stable",
+  "publishedAt": "2026-09-19T14:52:04Z",
+  "expiresAt": "2026-10-24T14:52:04Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "语言更简单，佣金钱包改名。\n\n- 语言只剩「简体中文」和「English」两个选项。原来选了「跟随系统」的，升级后会定在你当时看到的那门语言，不会突然变；想换随时去设置页选。\n- 「佣金」钱包改叫「现金钱包」，里面的字也跟着改成可用现金、可提现现金、现金提现。你赚到的还是佣金，只是这笔钱现在有了更好记的名字。\n",
+  "notesEn": "Simpler language choice, and the commission wallet is now the cash wallet.\n\n- Interface language is now just Chinese (Simplified) or English. If you were on \"Follow system\", the app keeps showing the language you were already seeing and simply remembers it — nothing changes on screen, and it no longer shifts when you change an OS setting. Pick a different one any time in Settings.\n- The Commission wallet is now the Cash wallet: available cash, cash available to withdraw, transfer cash to balance, withdraw cash. What you earn is still called commission — only the name of the money itself changed.\n",
+  "sourceCommit": "c90e71bdf22e0dda9aceb8c04520b9feb67efb6e",
+  "sha256SumsSha256": "3c422068167f9668e35f3f5cb7edd14d99918ba0a862acb3a696b0b76b022e4c",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-android-arm64-v8a.apk",
+      "sha256": "5fe06941381a8f2e6702f48e7e8ecd0f20063468eea7c4956b64b3b54849f128"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-android-armeabi-v7a.apk",
+      "sha256": "f4cbac52257ead5e6f4689513e930d1848037f06a3c703e8cd73f3355a18d0f3"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-android-x86_64.apk",
+      "sha256": "d055f6f05285126a3a55e7e376cc10b5e9b63df6048995ccf843ae7d5cc6c294"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-android-universal.apk",
+      "sha256": "98c72947470878f602cca30f12ae9d92b4d95d8f61a07b9bef5676f3841256ad"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-ios.ipa",
+      "sha256": "19024b331e12adae7fe6c397265890e7dc0df6bcdf43c695df9d246f2b7c8db5"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-macos-universal.dmg",
+      "sha256": "af19d001b054b465577aff6bae36324a9a1411ff51b7c7f91241acdff6193c96"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-windows-amd64-setup.exe",
+      "sha256": "fdbe1df7067ca1b0f82cceefb785ac37a2c1bf62fe17e84ed04d637ca7a6f811"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-windows-amd64-portable.zip",
+      "sha256": "e01b1fa0760ca08edb17c2ef9e8b1ccb4e5195e1ef7e3ebe70ae4d0c291d01ca"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.60/YueLink-1.3.60-linux-amd64.AppImage",
+      "sha256": "13c648687713a29cc3e5206400181724d2154e2caaff6cee898c2a5ddce91c6d"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "5fc390d1cb76fb0fddde9ff7e98c124145d2f88ef3de72589461d1e9370f3ec8",
+    "sha256SumsSha256": "3c422068167f9668e35f3f5cb7edd14d99918ba0a862acb3a696b0b76b022e4c",
+    "payloadBundleSha256": "3267ca56462443d8b2167127ef216cb81dce9566081279bcf97e5479fe30004f",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:Bg1yqAh186sIE33BfxsdCIQydTRR56jc/cykvKStEbRnMlMm7F13u3Ng/n0XoGfu0wt29fZWVGnm+imSCahDBQ=="
+}
