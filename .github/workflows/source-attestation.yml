@@ -24,7 +24,11 @@ env:
   FLUTTER_VERSION: '3.47.4'
   # Match the exact patch used by the private release builder; an attestation
   # on an older standard library would not prove the shipped Go graph.
-  GO_VERSION: '1.26.8'
+  # 2026-09-20: 私有构建器跨 minor 升到 1.27.1（与 yue-node/Xray-core fork 对齐），
+  # 这里必须同步 —— 否则证明的是另一份标准库。此前这条一致性只由契约测试里一个
+  # **写死的字面量**"守"着，字面量跟着改就绿，与它要守的东西无关；现在由
+  # test_go_version_matches_release_builder() 断言两份工作流相等。
+  GO_VERSION: '1.27.1'
   GITLEAKS_VERSION: '8.30.1'
   GITLEAKS_LINUX_X64_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pathlib
 import re
 import unittest
 from pathlib import Path
@@ -54,7 +55,7 @@ WORKFLOW_MARKERS = (
     'test "$(gitleaks version)" = "$GITLEAKS_VERSION"',
     "gitleaks git --config .gitleaks.toml --redact --verbose .",
     "module: [core, service]",
-    "GO_VERSION: '1.26.8'",
+    "GO_VERSION: '1.27.1'",
     "MODULE: ${{ matrix.module }}",
     'bash scripts/ci/govulncheck_targets.sh "$MODULE"',
     "flutter test integration_test/ -d macos --reporter expanded",
@@ -764,3 +765,45 @@ class SourceAttestationContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_go_version_matches_release_builder():
+    """source-attestation 的 GO_VERSION 必须等于 build.yml 的。
+
+    🚨 这条取代的是上面那张必需字符串表里的 `GO_VERSION: '1.x.y'` 字面量。
+    那个写法守不住它要守的东西：两份工作流各自钉一个字面量，改一边、把测试里的
+    字面量跟着改，测试照样绿——而 attestation 证明的就变成了另一份标准库。
+    2026-09-20 实测踩到：私有构建器升到 1.27.1、`sync-build.sh` 只镜像 build.yml
+    不碰 source-attestation.yml，于是两边分叉而 35 条契约测试全绿。
+
+    attestation 的全部意义是「证明公开构建跑的就是私有源那套检查」，标准库版本
+    不同就证不了。所以判据必须是**相等**，不是**等于某个我写下的值**。
+    """
+    import re as _re
+
+    def go_version(path: str) -> str:
+        body = pathlib.Path(path).read_text(encoding="utf-8")
+        hits = _re.findall(r"(?m)^\s*GO_VERSION:\s*'([^']+)'\s*$", body)
+        assert len(hits) == 1, f"{path}: 期望恰好一处 GO_VERSION，实际 {len(hits)} 处"
+        return hits[0]
+
+    attest = go_version(".github/workflows/source-attestation.yml")
+    build = go_version(".github/workflows/build.yml")
+    assert attest == build, (
+        f"source-attestation 用 Go {attest}，而发布构建器用 Go {build}。"
+        "attestation 证明的是另一份标准库，等于没证。"
+        "sync-build.sh 只镜像 build.yml，这一份要手工跟。")
+
+
+def test_flutter_version_matches_release_builder():
+    """同理，Flutter 版本也必须两边一致。"""
+    import re as _re
+
+    def flutter_version(path: str) -> str:
+        body = pathlib.Path(path).read_text(encoding="utf-8")
+        hits = _re.findall(r"(?m)^\s*FLUTTER_VERSION:\s*'([^']+)'\s*$", body)
+        assert len(hits) == 1, f"{path}: 期望恰好一处 FLUTTER_VERSION，实际 {len(hits)} 处"
+        return hits[0]
+
+    assert (flutter_version(".github/workflows/source-attestation.yml")
+            == flutter_version(".github/workflows/build.yml"))
