@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.63",
+  "version": "1.3.65",
   "channel": "stable",
-  "publishedAt": "2026-09-20T08:50:04Z",
-  "expiresAt": "2026-10-25T08:50:04Z",
+  "publishedAt": "2026-09-21T00:32:17Z",
+  "expiresAt": "2026-10-26T00:32:17Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "一次没有可见变化的内部改版，为的是把商店那条链路上的几个隐患一次拆干净。\n\n- 套餐周期（月付 / 季付 / 年付……）这套名字，面板内部和对外发的一直是两套写法。\n  这一版让 App **两套都认得**，并且所有涉及周期的判断都先归一再比较。\n  直接比较字符串曾经是三个隐患的共同形状：认不出已经存在的待支付订单会**重复下一单**、\n  首单优惠的「不适用周期」判断失效会**给不该打折的周期打折**、套餐价格表索引不上会让\n  商店**一个价格都显示不出来**。这三处现在都不再依赖两套名字恰好一致。\n- 其余是内部维护：周期这套词汇挪到了它该在的层，日常使用没有可见变化。\n",
-  "notesEn": "An internal release with no visible change, clearing several hazards on the store path in one go.\n\n- The panel has always used two spellings for billing periods (monthly / quarterly / yearly …):\n  one internally and another on the wire. This release makes the app **understand both**, and\n  every period-related decision now normalizes before comparing.\n  Comparing the raw strings was the shared shape behind three hazards: failing to recognize an\n  existing pending order would **create a duplicate order**; a broken \"excluded period\" check on\n  the first-order promo would **discount a period that should not be discounted**; and failing to\n  index the plan price table would leave the store **showing no prices at all**. None of the three\n  now depends on the two spellings happening to agree.\n- The rest is internal maintenance: the period vocabulary moved to the layer it belongs in. No\n  visible change in day-to-day use.\n",
-  "sourceCommit": "154a0793663b6cf6a5e0f2f502df2467665fa273",
-  "sha256SumsSha256": "305bfde93575968eaeb9ef4e0d5d5b77bed55c0cbd23b76055e4ab2f7f31027d",
+  "notes": "内核跟上上游稳定版，DNS 决策收进一处。\n\n- **内核对齐 mihomo v1.19.31。** 带入的上游修复里与我们相关的是：hysteria2 连接关闭时逐个\n  释放 UDP 会话；DomainSet 通配符与更长规则重叠时不再漏匹配；握手失败后及时关闭套接字、\n  VLESS 初始化失败仍持有清理句柄、DoQ 错误路径释放 UDP 套接字。这三组此前由我们自己回补，\n  这次退役给上游。YueLink 自有的 17 个运行时补丁（同步关停、全部监听器释放、MMDB 零值守卫、\n  gVisor 缓冲放宽、recvmsg_x 降级闩等）一条不少地带过去，fork 现为 v1.19.31 之上 25 个提交、\n  0 落后。REALITY 客户端握手行为不变：utls 版本未动，上游新增的只是订阅链接里\n  `support-x25519mlkem768` 参数的解析。\n- **DNS 决策收进一个对象。** `respect-rules` / `prefer-h3` 的强制写入、fake-ip 范围与「这个\n  地址是不是 fake-ip」的判定、fake-ip 过滤名单的两份手抄、顶层 `ipv6` 的三处同款写法，此前散在\n  六个文件里；现在由 `DnsPolicy` 一处决定，其余只消费。这是**结构收敛而不是行为改动**：\n  拆前先对七组订阅模板 × 桌面 TUN / 移动 tunFd / IPv6 开关 / fake-ip 各分支渲染出 15 份黄金\n  样本，拆后逐字节相同；把任一决策值翻掉，黄金样本立刻变红。计划中的行为改动\n  （`respect-rules` 回退、删 `fallback` 块）仍门控在真机掉线网络验证之后，本版不含。\n- 内部：依赖前滚——file_picker 13、cached_network_image 4 与六个补丁版本；Flutter 3.47.4 /\n  Dart 约束不变。tray_manager 0.7 与 very_good_analysis 11 因抬高 Dart 下限且前者是整套 API\n  搬家，本轮不取。\n- 日常使用没有可见变化。\n",
+  "notesEn": "Core caught up with upstream stable; DNS decisions now live in one place.\n\n- **Core aligned with mihomo v1.19.31.** Of the upstream fixes it brings, the ones that touch us:\n  hysteria2 closes every UDP session when the QUIC connection closes; DomainSet no longer misses\n  a wildcard match shadowed by a longer overlapping rule; sockets are closed after a failed\n  handshake, VLESS keeps its cleanup handle when initialisation fails, and DoQ releases its UDP\n  socket on the error path. All three had been back-ported by us and are now retired to upstream.\n  YueLink's own 17 runtime patches (synchronous shutdown, release of every listener, MMDB\n  zero-value guards, the gVisor buffer widening, the recvmsg_x downgrade latch, …) carried over\n  intact; the fork is now 25 commits ahead of v1.19.31, 0 behind. The REALITY client handshake is\n  unchanged: utls did not move, and upstream's only addition is parsing the\n  `support-x25519mlkem768` share-link parameter.\n- **DNS decisions converged into one object.** The forced `respect-rules` / `prefer-h3` pair, the\n  fake-ip range and the \"is this address a fake-ip\" judgement, two hand-typed copies of the\n  fake-ip filter list, and three identical writers of the top-level `ipv6` flag were spread across\n  six files; `DnsPolicy` now decides once and every former site only consumes. This is a\n  **structural** change, not a behavioural one: 15 golden renders (seven subscription shapes ×\n  desktop TUN / mobile tunFd / IPv6 on-off / fake-ip branches) were captured before the move and\n  are byte-identical after it, and flipping any single policy value turns them red. The planned\n  behaviour changes (reverting `respect-rules`, dropping the `fallback` block) remain gated on\n  real-device drop-out testing and are not in this release.\n- Internal: dependency roll-forward — file_picker 13, cached_network_image 4 and six patch\n  bumps; Flutter 3.47.4 / Dart constraints unchanged. tray_manager 0.7 and very_good_analysis 11\n  were left out: both raise the Dart floor, and the former is a whole-API migration.\n- Nothing changes in day-to-day use.\n",
+  "sourceCommit": "8342f5a0d2bd58ecb8ff0f40099d6ba3fbb7b2a0",
+  "sha256SumsSha256": "5a50de6f426f57598af932159a027a7016c93fc3696b900068c6dce85f9eea4a",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.63/YueLink-1.3.63-android-arm64-v8a.apk",
-      "sha256": "742a2642ffdf28dc3875709ed908ed377321e8552a5ad14a7f8e425a3189bca8"
+      "url": "https://yuetong.app/v1.3.65/YueLink-1.3.65-android-arm64-v8a.apk",
+      "sha256": "774cdec5668b0df2caf2d962c02c29d7b98dfcbdd3d60ab6a055b93cae34587a"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.63/YueLink-1.3.63-android-armeabi-v7a.apk",
-      "sha256": "60a7e36f7b49249abee0476ddfc0bc7b882fe6083bfebb2edad1ae59c860e4f7"
+      "url": "https://yuetong.app/v1.3.65/YueLink-1.3.65-android-armeabi-v7a.apk",
+      "sha256": "4d407af8d748132d104738f126317e4c475b822254da9d3264c4b8d16aee3f09"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.63/YueLink-1.3.63-android-x86_64.apk",
-      "sha256": "27fbc1b824b8752ab67e33386ff12678993b69932698cce6eabc8855dadede52"
+      "url": "https://yuetong.app/v1.3.65/YueLink-1.3.65-android-x86_64.apk",
+      "sha256": "37f0285c6f77df91880fe6ab7b223e7e093ba53b1ab8c4a14b1ab111f283a486"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.63/YueLink-1.3.63-android-universal.apk",
-      "sha256": "08287b8e707ba85bcf9b07fc60e4fb3db9b6a3d9cedd617a14ba0bb76baa7613"
+      "url": "https://yuetong.app/v1.3.65/YueLink-1.3.65-android-universal.apk",
+      "sha256": "8fdfe353768c0c131413c7a6dd87352ac68d6a386d33759c5dc692a25c95f078"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.63/YueLink-1.3.63-ios.ipa",
-      "sha256": "236f0c38d48a7dfdf87479cb644f9098c6bf34246bad3ea938fb364df88003a4"
+      "url": "https://yuetong.app/v1.3.65/YueLink-1.3.65-ios.ipa",
+      "sha256": "6695ddb4ed50b32166294842264a2310a50bd2aa50582dc8e264bd68e5fe42b4"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.63/YueLink-1.3.63-macos-universal.dmg",
-      "sha256": "87ff2adabb609ffa89df5ac44550d6289042d9150954fec45ab331e413ed2412"
+      "url": "https://yuetong.app/v1.3.65/YueLink-1.3.65-macos-universal.dmg",
+      "sha256": "75943f1480dd5bcc691b5734a7154302289433a64fdc2389455397e2d8bce64f"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.63/YueLink-1.3.63-windows-amd64-setup.exe",
-      "sha256": "fa40960486335941bb1dcb0f176e78ce387fda0f17914f10274ff2d162ab2f93"
+      "url": "https://yuetong.app/v1.3.65/YueLink-1.3.65-windows-amd64-setup.exe",
+      "sha256": "b89c2cb4c7f04b798140a445cb290155f3632af12a93e34c616e75d314d424c0"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.63/YueLink-1.3.63-windows-amd64-portable.zip",
-      "sha256": "78e09d22a1a43fc13e89a1865878647f4797908ac8bb24e2df7bb48e1c0f1b85"
+      "url": "https://yuetong.app/v1.3.65/YueLink-1.3.65-windows-amd64-portable.zip",
+      "sha256": "9a0d59184007dd2472f41ea25f62a70d59452481124176bde166577ad5d658c2"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.63/YueLink-1.3.63-linux-amd64.AppImage",
-      "sha256": "5eb85b23fc4aa44198393c5709072b26c46772b512d039bddcd3f54e9145598b"
+      "url": "https://yuetong.app/v1.3.65/YueLink-1.3.65-linux-amd64.AppImage",
+      "sha256": "a52e6cd1415dd1d91a153114eecfc09d6ef90ad32d23bc4d06d38dc45c8000d0"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "ad22c683789f158ab13fa96552cf28296dc534a7b4bd034d9d38f2d599128f13",
-    "sha256SumsSha256": "305bfde93575968eaeb9ef4e0d5d5b77bed55c0cbd23b76055e4ab2f7f31027d",
-    "payloadBundleSha256": "ee41bde45fdd05de1da9a11a45701139f572a1e5db981beb72c98b6c6b657759",
+    "candidateSha256": "81e94640690a2ad6172c0e9acc192c5f513e316f2d459cf8e4ac04b59dfe2d17",
+    "sha256SumsSha256": "5a50de6f426f57598af932159a027a7016c93fc3696b900068c6dce85f9eea4a",
+    "payloadBundleSha256": "204dc2a6914d7699c6abc3b14fe0ef34c338792b2ce478b5065e3b93fd71a6c1",
     "payloadCount": 19
   },
-  "sig": "ed25519:jYio9X73du+53DGfse0Btu6W+ZaZBMbJVVFEU+Wjc6iH6hvNLfQxpQqbqHzUcQJEVAIpAhdD/00NGLrc9eLDCQ=="
+  "sig": "ed25519:KWnnacBcoi7mgH+++pzA3zvUm8dP3+n5wckhrdllCnUGFVVJJwEr4+Gbp782cR+J5wVzKp/eV/2f9p8YhFK2Dw=="
 }
