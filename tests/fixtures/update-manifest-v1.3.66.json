@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.66",
+  "channel": "stable",
+  "publishedAt": "2026-09-21T07:03:07Z",
+  "expiresAt": "2026-10-26T07:03:07Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "连接列表响应更及时。\n\n连接列表首帧与空闲后的更新无需再等待额外 500 毫秒。突发数据继续有界合并，窗口内只处理最新帧；离开页面释放等待任务和缓存，重新进入隔离旧事件。\n\n同时修复了流量总量不变时瞬时速度不能及时归零的问题。\n\n内核、代理协议和平台网络配置不变。这是界面更新延迟与资源生命周期优化，不代表公网吞吐量的固定增幅。Android、iOS、macOS、Windows、Linux 使用同一份客户端逻辑。\n",
+  "notesEn": "Faster connection-list updates.\n\nThe first connection snapshot and updates after an idle period now appear without an additional 500 ms wait. Bursts still coalesce into bounded 500 ms windows, retaining only the newest frame. Leaving the page releases pending updates and caches; reopening it cannot receive events from the previous subscription.\n\nInstantaneous speeds now return to zero correctly even when cumulative byte counters have not changed.\n\nThe proxy core, protocols and platform network configuration are unchanged. This improves UI update latency and resource ownership; it does not imply a fixed increase in Internet throughput. Android, iOS, macOS, Windows and Linux share this client logic.\n",
+  "sourceCommit": "cbe8a399dbbce505b117e1f36e46f55701329e32",
+  "sha256SumsSha256": "0405b61c01c91117893a71a60507bab9f500fbcdd649175603e0a1c761a9d764",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-android-arm64-v8a.apk",
+      "sha256": "2b4b58c6b55bf7efe70be673c7a73a1753788ea76cfc11d28fe6485c038c638a"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-android-armeabi-v7a.apk",
+      "sha256": "b88d01e52f246129dedff90c2bb127136f0f7187176b2a539174fbe53f3dc761"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-android-x86_64.apk",
+      "sha256": "043cff8b7f36e6c97ae4968ee318879fb2687e63124131d6650ce5890fab9df4"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-android-universal.apk",
+      "sha256": "7a7e06ca61eba4aa412f4eaf60541a8dfb0ea88cdde0adae8ad417a27ffac377"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-ios.ipa",
+      "sha256": "408a66afa9c5d579a5e42695f7f3cd0ae513e3b65882e0474faec25d4b43a9ba"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-macos-universal.dmg",
+      "sha256": "159c2cf4184cdfaa2b158ce647d5521fa554d8ff7a0e7ad16ea1b59e349169af"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-windows-amd64-setup.exe",
+      "sha256": "4c5119dcd49eb13b9078cd519d854970ee648c4fe743c61c4691d5908edfb303"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-windows-amd64-portable.zip",
+      "sha256": "fe216b94ae3bd5fa9e1c4652fc2e4ad36b16245a2596db841f114e7944d5e886"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-linux-amd64.AppImage",
+      "sha256": "602fdc2f7fbafccea6a1ca20633ddd9c89128fcae789d90f412fcb64dbd0b509"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "1708a3328bf0df2a27f45fa4d8236ac0a7a3612bc6bd090adf361f52111ed513",
+    "sha256SumsSha256": "0405b61c01c91117893a71a60507bab9f500fbcdd649175603e0a1c761a9d764",
+    "payloadBundleSha256": "236dfbffbb5f205d0c19cdd4fdfd6cf4ee8285392c6b316fc918099f552c6c29",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:HJEWeASmD+A9OCwviOfiLrsOJ/BFNwPmxYsStJojR2h65gR3EayoRAoM7o4ksyGst5iIpo3WNjaz2eFKCfTKBQ=="
+}

@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.66",
+  "version": "1.3.67",
   "channel": "stable",
-  "publishedAt": "2026-09-21T07:03:07Z",
-  "expiresAt": "2026-10-26T07:03:07Z",
+  "publishedAt": "2026-09-21T15:59:23Z",
+  "expiresAt": "2026-10-26T15:59:23Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "连接列表响应更及时。\n\n连接列表首帧与空闲后的更新无需再等待额外 500 毫秒。突发数据继续有界合并，窗口内只处理最新帧；离开页面释放等待任务和缓存，重新进入隔离旧事件。\n\n同时修复了流量总量不变时瞬时速度不能及时归零的问题。\n\n内核、代理协议和平台网络配置不变。这是界面更新延迟与资源生命周期优化，不代表公网吞吐量的固定增幅。Android、iOS、macOS、Windows、Linux 使用同一份客户端逻辑。\n",
-  "notesEn": "Faster connection-list updates.\n\nThe first connection snapshot and updates after an idle period now appear without an additional 500 ms wait. Bursts still coalesce into bounded 500 ms windows, retaining only the newest frame. Leaving the page releases pending updates and caches; reopening it cannot receive events from the previous subscription.\n\nInstantaneous speeds now return to zero correctly even when cumulative byte counters have not changed.\n\nThe proxy core, protocols and platform network configuration are unchanged. This improves UI update latency and resource ownership; it does not imply a fixed increase in Internet throughput. Android, iOS, macOS, Windows and Linux share this client logic.\n",
-  "sourceCommit": "cbe8a399dbbce505b117e1f36e46f55701329e32",
-  "sha256SumsSha256": "0405b61c01c91117893a71a60507bab9f500fbcdd649175603e0a1c761a9d764",
+  "notes": "换账号更干净，断开与自愈更可靠。\n\n**桌面 TUN 服务安全修复**：以 root 运行的服务此前会跟随用户目录中日志文件的链接，同用户的其他程序可借此读取系统文件或向系统位置写入内容。现已只接受普通文件；服务协议版本升为 3，已安装服务的机器会在设置里提示更新，更新后生效。\n\n**换账号**：消息中心离线缓存、待支付订单与迟到的登录过期响应都只属于发起它的账号，不会带进下一个账号。\n\n**连接自愈与断开**：修复启动即死的内核被无限静默重启、已停止的会话被自检写回「连接异常」、未确认的断开无法重试、Android VPN 被撤销后卡在「正在停止」、回前台判死误杀刚重连的内核，以及内核生命周期记录被回收后连接请求永久排队等问题。\n\n**其它**：主入口不可达时注册/找回密码可换入口（请求不会重复提交）；登录后订阅下载失败会提示并可重试；Android 开机「点按连接」通知不再立刻消失；iOS 节点凭据不再进入 iCloud/电脑备份。\n\n内核、代理协议与平台网络参数不变。\n",
+  "notesEn": "Cleaner account switches, more reliable disconnects and self-healing.\n\n**Desktop TUN service security fix**: the root service followed links planted at its log file inside the user's directory, letting another program running as the same user read system files or write to system locations through it. Only a plain file is accepted now. The service protocol version is now 3; machines with the service installed will show an update prompt in Settings, and the fix applies after updating.\n\n**Account switching**: the message-center offline cache, a pending payment and a late session-expired response now belong only to the account that produced them and never carry into the next account.\n\n**Self-healing and disconnect**: fixes a core that dies right after starting being silently restarted forever, a stopped session being marked \"connection impaired\" by a late health probe, an unconfirmed disconnect that could not be retried, Android getting stuck in \"stopping\" after the VPN was revoked, the resume check killing a core that had just reconnected, and connection requests queueing forever after a native lifecycle record was retired.\n\n**Also**: registration and password reset fail over to the next entry host when the primary cannot be reached (a request is never submitted twice); a failed subscription download after login is now reported with a retry; the Android boot \"tap to connect\" notification no longer disappears immediately; iOS node credentials are excluded from iCloud/computer backups.\n\nThe proxy core, protocols and platform network parameters are unchanged.\n",
+  "sourceCommit": "2f07f6998f338c000509b37c620ae66b2388b834",
+  "sha256SumsSha256": "db33831b1a87b18667f88a0dba3babccbd41685920d160a6162c9c490f8248f3",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-android-arm64-v8a.apk",
-      "sha256": "2b4b58c6b55bf7efe70be673c7a73a1753788ea76cfc11d28fe6485c038c638a"
+      "url": "https://yuetong.app/v1.3.67/YueLink-1.3.67-android-arm64-v8a.apk",
+      "sha256": "8ced6f93a9e505fe57806ae93a0e371be7a77b08583b428f4f9bde7d18501552"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-android-armeabi-v7a.apk",
-      "sha256": "b88d01e52f246129dedff90c2bb127136f0f7187176b2a539174fbe53f3dc761"
+      "url": "https://yuetong.app/v1.3.67/YueLink-1.3.67-android-armeabi-v7a.apk",
+      "sha256": "52bf776747237b76f31511c79784483760202adaa3c91b604de8009443d60a30"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-android-x86_64.apk",
-      "sha256": "043cff8b7f36e6c97ae4968ee318879fb2687e63124131d6650ce5890fab9df4"
+      "url": "https://yuetong.app/v1.3.67/YueLink-1.3.67-android-x86_64.apk",
+      "sha256": "c15d279be6a140f2ba1dda66807a764c8742191a4f9e923a68b98a15557721f4"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-android-universal.apk",
-      "sha256": "7a7e06ca61eba4aa412f4eaf60541a8dfb0ea88cdde0adae8ad417a27ffac377"
+      "url": "https://yuetong.app/v1.3.67/YueLink-1.3.67-android-universal.apk",
+      "sha256": "e3a5f3dfdddfc59638720070c76263ba95ced8c38bb4055cb20975c685ae0046"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-ios.ipa",
-      "sha256": "408a66afa9c5d579a5e42695f7f3cd0ae513e3b65882e0474faec25d4b43a9ba"
+      "url": "https://yuetong.app/v1.3.67/YueLink-1.3.67-ios.ipa",
+      "sha256": "916a34eca9e8a780e2604d7168fcd25ffa9e7656d59add8ea9c4ad4b0ce62f08"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-macos-universal.dmg",
-      "sha256": "159c2cf4184cdfaa2b158ce647d5521fa554d8ff7a0e7ad16ea1b59e349169af"
+      "url": "https://yuetong.app/v1.3.67/YueLink-1.3.67-macos-universal.dmg",
+      "sha256": "8975c9bf35f0f3e3551bf9b4992fcb7ba48f8ddcb2da30ff73bb371706ed9ce1"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-windows-amd64-setup.exe",
-      "sha256": "4c5119dcd49eb13b9078cd519d854970ee648c4fe743c61c4691d5908edfb303"
+      "url": "https://yuetong.app/v1.3.67/YueLink-1.3.67-windows-amd64-setup.exe",
+      "sha256": "4562b5fc35f49f36fe8c8772f343c3f9ada6c3b7696869f66ab6fe4e34771e4f"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-windows-amd64-portable.zip",
-      "sha256": "fe216b94ae3bd5fa9e1c4652fc2e4ad36b16245a2596db841f114e7944d5e886"
+      "url": "https://yuetong.app/v1.3.67/YueLink-1.3.67-windows-amd64-portable.zip",
+      "sha256": "e586b20ab129df0985f407f072e56e6ff03621568da4ed91756aed22bcb6457b"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.66/YueLink-1.3.66-linux-amd64.AppImage",
-      "sha256": "602fdc2f7fbafccea6a1ca20633ddd9c89128fcae789d90f412fcb64dbd0b509"
+      "url": "https://yuetong.app/v1.3.67/YueLink-1.3.67-linux-amd64.AppImage",
+      "sha256": "9505a966cc6cdd417c0c986457199904a4e30adce8fce9b5151d3cf1dcbbdfe2"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "1708a3328bf0df2a27f45fa4d8236ac0a7a3612bc6bd090adf361f52111ed513",
-    "sha256SumsSha256": "0405b61c01c91117893a71a60507bab9f500fbcdd649175603e0a1c761a9d764",
-    "payloadBundleSha256": "236dfbffbb5f205d0c19cdd4fdfd6cf4ee8285392c6b316fc918099f552c6c29",
+    "candidateSha256": "1f6878692cf1659aa3c7d342119576c4b1edb795f88e788303af55ca9d390414",
+    "sha256SumsSha256": "db33831b1a87b18667f88a0dba3babccbd41685920d160a6162c9c490f8248f3",
+    "payloadBundleSha256": "2fa98834b0861868e16fbcc75559d459c28fda13a1d2580fde0d64c2ef0274ba",
     "payloadCount": 19
   },
-  "sig": "ed25519:HJEWeASmD+A9OCwviOfiLrsOJ/BFNwPmxYsStJojR2h65gR3EayoRAoM7o4ksyGst5iIpo3WNjaz2eFKCfTKBQ=="
+  "sig": "ed25519:cC/Cs8U04w2MkAaa1FDdOEOtsaPVqZPYUXnFQD+FxeRMcRv0LMzm/zgX5mtPrxIR9ASL4FVsF49dT5VaZktcAg=="
 }
