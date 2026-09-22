@@ -49,13 +49,25 @@ RELEASES = {
         "stable/linux/flutter_linux_3.47.4-stable.tar.xz",
         "5b45f0ceda99b9bebdc873e7e69f6450aeb4c30f454b505e2e62fc9255a907d3",
     ),
+    ("3.47.5", "Linux"): (
+        "stable/linux/flutter_linux_3.47.5-stable.tar.xz",
+        "2132e990f236f8d22e7c6314b29a191a95b10d7cbcfec9b4e2e303d996652cbb",
+    ),
     ("3.47.4", "Darwin"): (
         "stable/macos/flutter_macos_3.47.4-stable.zip",
         "72ced0f81a5ea48f30d221699fa45378cdd1fa15426512444f32e4e1bee9db8b",
     ),
+    ("3.47.5", "Darwin"): (
+        "stable/macos/flutter_macos_3.47.5-stable.zip",
+        "a7893bb0feecd8bd066f4f7e850356f896a6fc3b862e6c506d21c76691a66b72",
+    ),
     ("3.47.4", "Windows"): (
         "stable/windows/flutter_windows_3.47.4-stable.zip",
         "31173300481bd06e377fd55ee84214689648b1817563efd7b450b7b78bdf351a",
+    ),
+    ("3.47.5", "Windows"): (
+        "stable/windows/flutter_windows_3.47.5-stable.zip",
+        "0ccd71931f49c2fbe394b1eeb6d79af3d624058a043ea0d03d34160581624fb8",
     ),
 }
 ARCH_RELEASES = {
@@ -66,6 +78,10 @@ ARCH_RELEASES = {
     ("3.47.4", "Darwin", "ARM64"): (
         "stable/macos/flutter_macos_arm64_3.47.4-stable.zip",
         "c6af6fa1d64946167b8637ba4c5a7bb3b8574729a1ebe931decd4924dbab7061",
+    ),
+    ("3.47.5", "Darwin", "ARM64"): (
+        "stable/macos/flutter_macos_arm64_3.47.5-stable.zip",
+        "d4dd908b5f8f65515831b6d68ae33307a813f2b68947dded7a1994ee5ea7cead",
     ),
 }
 RECEIPT_NAME = ".yue-flutter-sdk.json"
