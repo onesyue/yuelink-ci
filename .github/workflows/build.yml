@@ -820,6 +820,10 @@ jobs:
         if: matrix.platform == 'macos'
         run: git diff --exit-code macos/Podfile.lock
 
+      - name: Verify packaged macOS privacy declarations
+        if: matrix.platform == 'macos'
+        run: python3 scripts/ci/verify_macos_privacy.py --app build/macos/Build/Products/Release/YueLink.app
+
       - name: Resolve actual macOS signing and notarization mode
         if: matrix.platform == 'macos'
         env:
