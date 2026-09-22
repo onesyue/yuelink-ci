@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.68",
+  "channel": "stable",
+  "publishedAt": "2026-09-21T16:34:54Z",
+  "expiresAt": "2026-10-26T16:34:54Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "h2mux 多路复用恢复可用，桌面服务再修一处安全问题。\n\n**h2mux 修复**：v1.3.67 及更早的版本用 Go 1.27 构建，新版 HTTP/2 库拒绝上游 sing-mux 发出的缺少 Header 的请求，启用 h2mux 多路复用的节点每条连接都会失败。内核 fork 现在带一份只改这一行的 sing-mux 副本。日常使用的 Reality/Vision 与 HY2 线路不经过这条路径，不受影响。\n\n**桌面 TUN 服务安全修复**：修复用户目录文件属主时，服务改为按目录描述符逐级处理，不再在检查之后按路径重新查找，同用户的其他程序无法再借检查与修改之间的空档让服务改动系统文件的属主；被植入的硬链接文件会被拒绝。服务协议版本升为 4，已安装服务的机器会在设置里提示更新，更新后生效。\n\n代理协议与平台网络参数不变。\n",
+  "notesEn": "h2mux multiplexing works again, plus one more desktop service security fix.\n\n**h2mux fix**: v1.3.67 and earlier are built with Go 1.27, whose HTTP/2 library rejects the header-less request upstream sing-mux sends, so every connection through a node with h2mux multiplexing enabled failed. The core fork now carries a sing-mux copy that changes only that line. The everyday Reality/Vision and HY2 routes never use this path and were unaffected.\n\n**Desktop TUN service security fix**: when repairing file ownership in the user's directory, the service now works through directory descriptors instead of re-resolving paths after checking them, so another program running as the same user can no longer swap in a link between the check and the change to make the service re-own a system file; planted hard links are refused. The service protocol version is now 4; machines with the service installed will show an update prompt in Settings, and the fix applies after updating.\n\nProxy protocols and platform network parameters are unchanged.\n",
+  "sourceCommit": "be58411ecd2c26e79c5cbbed131df57ed805ec75",
+  "sha256SumsSha256": "6ccc12fe81dc2ffa5ee62de34760daea94f768e62919a476eb326f1b278bb4eb",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.68/YueLink-1.3.68-android-arm64-v8a.apk",
+      "sha256": "225d6c3b9a6fe4f0adc51076380bdadc78984f21293967e03f0b7ba9356b5e74"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.68/YueLink-1.3.68-android-armeabi-v7a.apk",
+      "sha256": "7cd59cb584d84f696da6ac5fa07e1a37a1dfb9e3001478e5ed0af2fc86bd2fef"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.68/YueLink-1.3.68-android-x86_64.apk",
+      "sha256": "45887f35b7e731e23c6000da57ebbc3cb0e2068345fc88ace7bffd326172f404"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.68/YueLink-1.3.68-android-universal.apk",
+      "sha256": "7589375a74d7e1219921925ac7c635fbcddb9ba13cbd4343d2ebbb8242d100d4"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.68/YueLink-1.3.68-ios.ipa",
+      "sha256": "792008d62d5429c90f47f70fa5843da922342fc05f053404e08536cd003b248c"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.68/YueLink-1.3.68-macos-universal.dmg",
+      "sha256": "678685c64b5f79e45d0ce9ffd5c141ff97e7600d86d8ce6cea9a7a997c0379c0"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.68/YueLink-1.3.68-windows-amd64-setup.exe",
+      "sha256": "7f28c8a0e73fd7d6bc5ded113c8f9ae47946d4b793367f9a7ca766e55c45d2eb"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.68/YueLink-1.3.68-windows-amd64-portable.zip",
+      "sha256": "434d5f8548474903d4da67994097210b1021c1ed44d123bb53fdd1519467e1ae"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.68/YueLink-1.3.68-linux-amd64.AppImage",
+      "sha256": "365ff106a2ffd5d4c73f3b2ce17022570ae08faf3819e088d6f15957fb73ba8e"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "6ab3805a311d30060f4f62fc8d004a8b723af12573623f85b4c2cc1ed6b89926",
+    "sha256SumsSha256": "6ccc12fe81dc2ffa5ee62de34760daea94f768e62919a476eb326f1b278bb4eb",
+    "payloadBundleSha256": "543834be77339ece870ff987f39bb205ff0456917f11e4098f921a819ba957e4",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:hyT77f/aTQQCnxCxA5JKDs7cMG04BOs4PLMZ/WNMfCZykB13zZHA6wujjemFdyPtpuzJ9vHI8k4EJvlI0YZIAg=="
+}
