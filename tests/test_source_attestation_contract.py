@@ -236,7 +236,7 @@ def source_flutter_issues(workflow: str) -> list[str]:
     issues: list[str] = []
     pin = (
         "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-        "abd31d22ce4f1c2b3888ede491889f4eaf688e06"
+        "5823380ae89c51ecf41a64da808ab64a2e3ee0d5"
     )
     starts = [match.start() for match in re.finditer(re.escape(pin), workflow)]
     if len(starts) != 3:
@@ -600,7 +600,7 @@ class SourceAttestationContractTests(unittest.TestCase):
             )
             self.assertEqual(installer_lane_drift_issues(fake), [])
             stale = self.workflow.replace(
-                "abd31d22ce4f1c2b3888ede491889f4eaf688e06",
+                "5823380ae89c51ecf41a64da808ab64a2e3ee0d5",
                 "77737f79d3011a27d82e23e56be5b8112d824f51",
             )
             (fake / ".github/workflows/source-attestation.yml").write_text(
@@ -609,7 +609,7 @@ class SourceAttestationContractTests(unittest.TestCase):
             issues = installer_lane_drift_issues(fake)
             self.assertTrue(any("different installer commits" in i for i in issues))
             (fake / ".github/workflows/source-attestation.yml").write_text(
-                self.workflow.replace("FLUTTER_VERSION: '3.47.4'", "FLUTTER_VERSION: '3.47.9'"),
+                self.workflow.replace("FLUTTER_VERSION: '3.47.5'", "FLUTTER_VERSION: '3.47.9'"),
                 encoding="utf-8",
             )
             issues = installer_lane_drift_issues(fake)
@@ -624,7 +624,7 @@ class SourceAttestationContractTests(unittest.TestCase):
         # state is `cache: true`; a quiet flip back to `false` must go red.
         pin = (
             "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-            "abd31d22ce4f1c2b3888ede491889f4eaf688e06"
+            "5823380ae89c51ecf41a64da808ab64a2e3ee0d5"
         )
         starts = [
             match.start() for match in re.finditer(re.escape(pin), self.workflow)

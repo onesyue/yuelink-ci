@@ -56,11 +56,9 @@ permissions:
   contents: read
 
 env:
-  # Flutter 3.47.4 (2026-09-11): flutter_tools-only hotfix over 3.47.3 (iOS
-  # device-support symbols, Windows security-policy handling, SwiftPM
-  # diagnostics); engine/framework unchanged. Keep every build/validation
-  # lane on the same stable patch.
-  FLUTTER_VERSION: '3.47.4'
+  # Flutter 3.47.5 / Dart 3.13.4 (2026-09-18): stable iOS 27 debugger,
+  # widget-preview and DDS fixes. Exact archives are pinned in setup-flutter.
+  FLUTTER_VERSION: '3.47.5'
   # Go 1.27.1 (2026-09-01): 跨 minor 从 1.26.8 升上来，与 yue-node/Xray-core
   # fork 的发布工具链对齐。拿到 1.27 的小对象分配优化（<80B 分配路径约 -30%，
   # 分配密集程序整体约 1%）；Green Tea GC 在 1.26 就已默认、不是本次新增。
@@ -267,7 +265,7 @@ jobs:
           python3 scripts/ci/verify_gradle_wrapper_supply_chain.py
           python3 scripts/ci/test_gradle_wrapper_supply_chain.py
 
-      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@abd31d22ce4f1c2b3888ede491889f4eaf688e06 # pinned installer v1
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@5823380ae89c51ecf41a64da808ab64a2e3ee0d5 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           # 2026-08-31 reviewed decision — verified-artifact caches are ON in
@@ -427,7 +425,7 @@ jobs:
           cache: true
           cache-dependency-path: '**/go.sum'
 
-      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@abd31d22ce4f1c2b3888ede491889f4eaf688e06 # pinned installer v1
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@5823380ae89c51ecf41a64da808ab64a2e3ee0d5 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
@@ -1468,7 +1466,7 @@ jobs:
 
       - name: Set up Flutter for release-candidate verification
         if: needs.preflight.outputs.tag_kind == 'stable'
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@abd31d22ce4f1c2b3888ede491889f4eaf688e06 # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@5823380ae89c51ecf41a64da808ab64a2e3ee0d5 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           # Cache ON — reviewed 2026-08-31 decision, see the preflight
