@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.70",
+  "channel": "stable",
+  "publishedAt": "2026-09-22T02:37:35Z",
+  "expiresAt": "2026-10-27T02:37:35Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "磁贴连接更可靠。\n\n- 修复 iOS 多文件选择时同名文件相互覆盖、导致订阅导入没有结果的问题。\n- 修复 Android 快捷设置磁贴在冷启动时没有连接、或者连接后又断开的问题。连接意图等待启动恢复完成后执行；重复通知和平台回复超时不会再次切换连接。\n- iOS 主应用和 VPN 扩展补全隐私清单，并检查最终安装包是否真正包含对应声明。\n- 连接质量观察补齐系统区域设置来源，帮助区分不同用户群组；不新增位置采集或后台测速，仍遵守已有参与设置。\n- 更新至 Flutter 3.47.5 / Dart 3.13.4 与 AGP 9.4.1 / Gradle 9.7.1 / Kotlin 2.4.20，带入最新稳定补丁与 Android 打包修复。\n- 修复 iOS 连接、断开重叠时旧超时移除新监听的问题，并补齐 macOS 随包隐私声明校验。\n- 支持同一幂等键的短时等待重试，支付、提现等处理中请求可自动取得原操作结果。\n- Android 撤销 VPN 后重新连接会等待原生停止完成，重复撤销共享同一收尾；桌面 TUN 模式清理系统代理后会确认结果。\n- 修复 XHTTP 上行请求失败后仍等待下行、连接长时间挂起的问题，并及时释放遗留请求。\n",
+  "notesEn": "More reliable tile connections.\n\n- Update the iOS file picker to fix concurrent copies of identically named files silently returning no import results.\n- Fix Android Quick Settings taps that failed to connect after cold launch or connected then immediately disconnected. Explicit intent runs after startup recovery; duplicate wakeups and delayed native replies no longer repeat the toggle.\n- Bundle privacy manifests for the iOS app and VPN extension, and validate both in the final package.\n- Include the system-locale source in connection-quality cohorts. No new location collection or background speed testing; existing participation settings still apply.\n- Update to Flutter 3.47.5 / Dart 3.13.4 and AGP 9.4.1 / Gradle 9.7.1 / Kotlin 2.4.20 with current stable patches and the Android packaging repair.\n- Isolate iOS VPN observers per operation so stale timeouts cannot remove a newer connection or stop observer; verify the macOS privacy resource in the shipped app.\n- Retry temporary in-flight replies using the same idempotency key so pending financial operations can resolve to the original result.\n- Wait for Android VPN revocation teardown before reconnecting, coalesce duplicate revokes, and confirm desktop TUN system-proxy cleanup.\n- Fail XHTTP stream-up promptly when an upload or response body fails, and release the outstanding download request.\n",
+  "sourceCommit": "e69e3ec772c6f9524b1ade48a4651aa9c17deb49",
+  "sha256SumsSha256": "b7da9fd9abc43c8d77725c250e60227c880d4a424094428c606814315048a8c2",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.70/YueLink-1.3.70-android-arm64-v8a.apk",
+      "sha256": "00c4a4ff527c4bcaaefe98ec3890a15f969b2952a2bf69f85980546fdba76a08"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.70/YueLink-1.3.70-android-armeabi-v7a.apk",
+      "sha256": "f587d3cee6efba756b05b7b8b8444544e67695ecf07c3342f2c2efee47ac556b"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.70/YueLink-1.3.70-android-x86_64.apk",
+      "sha256": "8aaa882097e633433db9d723e8671f30f039726a4c01e3d34fd228ef00c42c73"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.70/YueLink-1.3.70-android-universal.apk",
+      "sha256": "a3d16925f948ad616b6b4538b53a7dd319d6c3dc51f43a3e5ad08e86c4d21380"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.70/YueLink-1.3.70-ios.ipa",
+      "sha256": "71f87e09647b0ae3fdcc2914817d5371e5c86afbab5e505b2c3e6425370e4db0"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.70/YueLink-1.3.70-macos-universal.dmg",
+      "sha256": "b1f51896c52309df36c86124df07738976ce894fd2a0f030be12511dc1ea6a31"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.70/YueLink-1.3.70-windows-amd64-setup.exe",
+      "sha256": "92264e3298ed96424806518a1b7a3abebff1bec5f36f951cd9ef47e6d1bcddef"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.70/YueLink-1.3.70-windows-amd64-portable.zip",
+      "sha256": "265f27532b5fe0005e448b2c340a48dbc1479e9749ea6e73e29d1c5f73658ce5"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.70/YueLink-1.3.70-linux-amd64.AppImage",
+      "sha256": "b383790fc34a42ae0054cdd0e2302b1bee42d27151f65371f8bbe1100c83ca26"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "66b799a5025b05c72969f748e1d054c5ebe95eb77be9ff6f14cdf4c4673adfa8",
+    "sha256SumsSha256": "b7da9fd9abc43c8d77725c250e60227c880d4a424094428c606814315048a8c2",
+    "payloadBundleSha256": "3cebab5d370bca50a8407157dbc3436d0dfce4b60bea721a23e80773d6ccc591",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:JhpQc08GOKfrMTP1qGQ3C7Q56Nmko+HDB9insNNhzJnKpAKs4CmUMCgLmsVSGA+UndrlH8dV9zmiz7CMnktlDw=="
+}
