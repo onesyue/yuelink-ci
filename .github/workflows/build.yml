@@ -459,13 +459,13 @@ jobs:
           # Command-line tools are set up by the action; NDK is pinned below.
           packages: platform-tools
 
-      - name: Install Android NDK r27
+      - name: Install Android NDK r28c
         if: matrix.platform == 'android'
         shell: bash
         run: |
-          sdkmanager "ndk;27.2.12479018"
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          sdkmanager "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
 
       - name: Install Linux build dependencies
         if: matrix.platform == 'linux'
@@ -476,15 +476,47 @@ jobs:
             libglib2.0-dev libpango1.0-dev libcairo2-dev \
             libsecret-1-dev libstdc++-12-dev \
             libkeybinder-3.0-dev libayatana-appindicator3-dev \
-            libasound2-dev libmpv-dev \
+            libasound2-dev \
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libcurl4-openssl-dev libc-ares-dev \
-            pkg-config cmake clang
+            pkg-config cmake clang build-essential python3-venv nasm \
+            zlib1g-dev libfontconfig1-dev libegl1-mesa-dev \
+            libgl1-mesa-dev libx11-dev libxrandr-dev libxss-dev libxext-dev \
+            libxinerama-dev libxpresent-dev libxv-dev libpulse-dev libva-dev \
+            libvdpau-dev libdrm-dev libgbm-dev libwayland-dev wayland-protocols \
+            libxkbcommon-dev xvfb xauth mesa-utils file
           {
             echo "CMAKE_PREFIX_PATH=/usr"
             echo "CMAKE_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu"
             echo "CMAKE_INCLUDE_PATH=/usr/include"
           } >> "$GITHUB_ENV"
+
+      - name: Build source-locked Linux native media
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/media-tools"
+          "$RUNNER_TEMP/media-tools/bin/pip" install 'meson==1.9.1' 'cmake==3.31.10' 'ninja==1.13.0'
+          export PATH="$RUNNER_TEMP/media-tools/bin:$PATH"
+          python3 scripts/linux_media/build.py --work "$RUNNER_TEMP/linux-media" --jobs 4
+          media_prefix="$RUNNER_TEMP/linux-media/prefix"
+          {
+            echo "YUELINK_MEDIA_PREFIX=$media_prefix"
+            echo "PKG_CONFIG_PATH=$media_prefix/lib/pkgconfig"
+            echo "LD_LIBRARY_PATH=$media_prefix/lib"
+            echo "CMAKE_PREFIX_PATH=$media_prefix:/usr"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify Apple media slices and signatures
+        if: matrix.platform == 'ios' || matrix.platform == 'macos'
+        run: python3 scripts/apple_media/verify.py --mach-o
+
+      - name: Verify Android native media inventory and JNI ownership
+        if: matrix.platform == 'android'
+        run: |
+          python3 scripts/native/android/verify.py
+          python3 scripts/native_tests/android_media/test_jni_helper.py --ndk "$ANDROID_NDK_HOME"
 
       # ── Geodata: declared as Flutter assets, .gitignored — fetch at CI ────
       # (v1.2.90) The 23 MB GeoIP/GeoSite.dat bundle + its CI download/assert
@@ -1164,6 +1196,24 @@ jobs:
           }
           Write-Host "Windows signing mode verified: $env:WINDOWS_SIGNING_MODE"
 
+      - name: Verify and exercise packaged Windows media
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -- dist/YueLink-*-windows-amd64-portable.zip
+          [ "$#" -eq 1 ] && [ -f "$1" ]
+          python3 scripts/native_tests/windows_media/verify.py --archive "$1" --output "$RUNNER_TEMP/windows-media-inventory.json"
+          cmake -S scripts/native_tests/media -B "$RUNNER_TEMP/windows-media-probe" -A x64 \
+            -DMPV_ROOT="$GITHUB_WORKSPACE/build/windows/x64/libmpv" \
+            -DANGLE_ROOT="$GITHUB_WORKSPACE/build/windows/x64/ANGLE"
+          cmake --build "$RUNNER_TEMP/windows-media-probe" --config Release --parallel 2
+          "$RUNNER_TEMP/windows-media-probe/Release/shared-texture-probe.exe"
+          python3 scripts/native_tests/media/playback.py \
+            --probe "$RUNNER_TEMP/windows-media-probe/Release/player-probe.exe" \
+            --fixtures scripts/native_tests/media/fixtures \
+            --work "$RUNNER_TEMP/windows-media-playback" --legacy-subtitles
+
       # ─────────────────────────────────────────────────────────────────────
       # LINUX — AppImage only (drops .deb / .rpm — was sprawling for no win)
       # ─────────────────────────────────────────────────────────────────────
@@ -1244,15 +1294,14 @@ jobs:
           ln -sf "usr/share/applications/yuelink.desktop" "$APPDIR/yuelink.desktop"
 
           # ── Bundle libmpv2 + transitive deps (issue #3) ──────────────
-          # Ubuntu 20.04 LTS ships libmpv1 (mpv 0.32) only — running a
-          # YueLink AppImage built against libmpv2 fails at launch with
-          # "error while loading shared libraries: libmpv.so.2".
+          # Keep libmpv and its reviewed media closure inside the AppImage;
+          # the host does not need to install a matching media stack.
           # Use linuxdeploy to copy libmpv.so.2 + its non-system
           # transitive deps (ffmpeg, libass, libplacebo, …) into
           # $APPDIR/usr/bin/lib so AppRun's LD_LIBRARY_PATH picks them
           # up before the system loader. Adds ~50 MB to the AppImage
-          # but the alternative (require Ubuntu 22.04+) is a worse
-          # user-side experience.
+          # and retains the runner's glibc baseline; bundling media does not
+          # make an Ubuntu 24.04 binary compatible with older glibc hosts.
           curl -fSL -o /tmp/linuxdeploy.AppImage \
             "https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage"
           echo "c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d  /tmp/linuxdeploy.AppImage" \
@@ -1260,15 +1309,12 @@ jobs:
           chmod +x /tmp/linuxdeploy.AppImage
           # GitHub runners disable FUSE; --appimage-extract-and-run is
           # the documented workaround for AppImage tools in CI.
-          LIBMPV_PATH=$(ldconfig -p | awk '/libmpv.so.2/ {print $NF; exit}')
-          if [ -z "$LIBMPV_PATH" ]; then
-            echo "ERROR: libmpv.so.2 not found on the runner — install libmpv-dev or libmpv2"
-            exit 1
-          fi
+          LIBMPV_PATH="$YUELINK_MEDIA_PREFIX/lib/libmpv.so.2"
+          test -f "$LIBMPV_PATH" || { echo "Missing reviewed native mpv prefix" >&2; exit 1; }
           echo "Bundling libmpv from: $LIBMPV_PATH"
-          # NO_STRIP=1 keeps debug symbols out of the AppImage but skips
-          # the strip pass (faster, smaller diff). DEPLOY_GTK_VERSION
-          # avoids the GTK plugin warnings since we're only after libs.
+          # Preserve the reviewed native bytes. linuxdeploy resolves the
+          # remaining system dependencies; the exact rebuilt media libraries
+          # are restored below after its rpath processing.
           NO_STRIP=1 APPIMAGE_EXTRACT_AND_RUN=1 \
             /tmp/linuxdeploy.AppImage \
               --appdir "$APPDIR" \
@@ -1282,9 +1328,33 @@ jobs:
             cp -rL "$APPDIR/usr/lib/." "$APPDIR/usr/bin/lib/"
           fi
 
+          python3 scripts/linux_media/package.py --prefix "$YUELINK_MEDIA_PREFIX" --appdir "$APPDIR" --output "$RUNNER_TEMP/linux-media-packaged.json"
+          cmake -S scripts/native_tests/media -B "$RUNNER_TEMP/linux-media-probe" -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$RUNNER_TEMP/linux-media-probe" --parallel 2
+          # No physical GPU on this runner. Exercise the GL API with Mesa's
+          # deterministic software rasterizer and the packaged DSO closure.
+          GALLIUM_DRIVER=softpipe xvfb-run -a env LD_LIBRARY_PATH="$APPDIR/usr/bin/lib" \
+            python3 scripts/native_tests/media/playback.py \
+              --probe "$RUNNER_TEMP/linux-media-probe/player-probe" \
+              --fixtures scripts/native_tests/media/fixtures \
+              --work "$RUNNER_TEMP/linux-packaged-playback" --legacy-subtitles
+
           APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 \
             appimagetool "$APPDIR" "$OUTPUT"
           ls -lh "$OUTPUT"
+
+      - name: Verify packaged Android media and 16 KB alignment
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          set -euo pipefail
+          found=0
+          for artifact in dist/*.apk; do
+            [ -f "$artifact" ] || continue
+            python3 scripts/native/android/verify.py --apk "$artifact" --output "$RUNNER_TEMP/android-media-$(basename "$artifact").json"
+            found=$((found + 1))
+          done
+          [ "$found" -gt 0 ]
 
       - name: Verify packaged iOS native delegation
         if: matrix.platform == 'ios'
@@ -1313,6 +1383,23 @@ jobs:
           }
           python3 scripts/performance/core_package_probe.py \
             --artifact "$1" --require-leases --output "$RUNNER_TEMP/yuelink-packaged-core-runtime.json"
+
+      - name: Record native media validation evidence
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PYPROOF'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          patterns = ('windows-media-inventory.json', 'windows-media-playback/proof.json',
+                      'linux-media-packaged.json', 'linux-packaged-playback/proof.json',
+                      'android-media-*.json')
+          for pattern in patterns:
+              for path in sorted(root.glob(pattern)):
+                  print('NATIVE_MEDIA_EVIDENCE ' + str(path.relative_to(root)))
+                  print(json.dumps(json.loads(path.read_text()), indent=2))
+          PYPROOF
 
       # ── 2026-06-01 解耦发布: 平台产物直接传 R2, release job 从 R2 取, 不再依赖
       #    GHA artifact。根因: GitHub Actions 存储配额"计量"每 6-12h 才重算, 即使删光
@@ -1440,7 +1527,8 @@ jobs:
     needs: [source_binding, build, preflight]
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # Native LGPL source attachments are published on this exact signed tag.
+      contents: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1995,6 +2083,28 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      - name: Publish and read back corresponding native sources
+        if: env.SKIP_MANIFEST != '1' && needs.preflight.outputs.tag_kind == 'stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/YueLink-native-sources-${GITHUB_REF_NAME}.tar.gz"
+          receipt="$RUNNER_TEMP/yuelink-native-source-publication.json"
+          python3 scripts/native/source_offer.py \
+            --download-cache "$RUNNER_TEMP/native-source-cache" --output "$archive"
+          python3 scripts/native/publish_source_offer.py \
+            --tag "$GITHUB_REF_NAME" --source "$ATTESTED_SOURCE_COMMIT" \
+            --archive "$archive" --receipt "$receipt"
+          echo "NATIVE_MEDIA_SOURCE_RECEIPT=$receipt" >> "$GITHUB_ENV"
+          {
+            echo '### Corresponding native sources verified'
+            echo '```json'
+            cat "$receipt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Verify immutable candidate and all release artifacts
         if: env.SKIP_MANIFEST != '1'
         run: |
@@ -2044,6 +2154,15 @@ jobs:
             echo "::error::UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64 secret is not configured; root manifest was NOT promoted (fallback: scripts/ci/release-promote-local.sh on bastion)"
             exit 1
           fi
+          python3 - "$NATIVE_MEDIA_SOURCE_RECEIPT" "$TAG" "$ATTESTED_SOURCE_COMMIT" <<'PYRECEIPT'
+          import json, sys
+          from pathlib import Path
+          receipt = json.loads(Path(sys.argv[1]).read_text())
+          if not (receipt['tag'] == sys.argv[2] and receipt['source_commit'] == sys.argv[3]
+                  and receipt['repository'] == 'onesyue/yuelink-ci'
+                  and receipt['downloaded_archive_and_sidecar_verified'] is True):
+              raise SystemExit('Native corresponding sources have not been published and verified')
+          PYRECEIPT
           bash scripts/ci/promote_in_pipeline.sh "$APP_VERSION"
 
   # ───────────────────────────────────────────────────────────────────────────
