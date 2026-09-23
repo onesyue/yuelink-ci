@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.71",
+  "channel": "stable",
+  "publishedAt": "2026-09-22T22:30:05Z",
+  "expiresAt": "2026-10-27T22:30:05Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "播放内核全面更新。\n\n- 更新所有平台的视频、音频、字幕与安全连接组件。\n- Windows 更新图形运行库，保留共享纹理与硬件解码支持，并补齐旧编码中文字幕处理。\n- Android 修复播放文件句柄传递问题，验证新版 16 KB 内存页设备兼容性。\n- Linux 安装包固定媒体依赖，Apple 更新全部原生播放框架。\n- 随包提供第三方许可证、精确源码版本和重建配方；完整原生源码附件与本版本一同提供。\n- 更新界面组件与 Apple 文件选择器，保持语言按钮的无障碍标签。\n",
+  "notesEn": "Updated playback on every platform.\n\n- Updates native video, audio, subtitle and secure connection components across all platforms.\n- Updates the Windows graphics runtime while retaining shared textures and hardware decoding, with legacy Chinese subtitle encoding support.\n- Fixes Android playback file descriptor handoff and verifies compatibility with 16 KB page devices.\n- Bundles reviewed Linux media dependencies and refreshes every Apple native playback framework.\n- Includes third-party notices, pinned source versions and rebuild recipes. Complete native sources accompany this release.\n- Updates design widgets and the Apple file picker while preserving the language selector’s accessibility label.\n",
+  "sourceCommit": "f96e3b61777808098c8d5ac40a1fbc408e1b62b5",
+  "sha256SumsSha256": "87ada1f22d14d518aa5b6c4862fc7e6173ca5a4cce1ac8545ae43e1babaab366",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.71/YueLink-1.3.71-android-arm64-v8a.apk",
+      "sha256": "49bf47f92c8b08c3fafb2d2a9426ae92d75b711537f49fe14e9298c35bed4bf0"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.71/YueLink-1.3.71-android-armeabi-v7a.apk",
+      "sha256": "13a22a9031506491f0f2923622ff3d5b9822a038aef59c1b2fa671d641553a02"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.71/YueLink-1.3.71-android-x86_64.apk",
+      "sha256": "309c1f8db4136fd3530fb98c0be129ef8013857b9ce2c979e1b371341fcf692b"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.71/YueLink-1.3.71-android-universal.apk",
+      "sha256": "65e814ec784c2a236bc9d1e03b28660889ea9c74ac8f2dedac57d915efd8faaa"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.71/YueLink-1.3.71-ios.ipa",
+      "sha256": "28c01204ef82b6aef0f71dc84cc80ed634181d47241b40cba3b6d6b79e3f516f"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.71/YueLink-1.3.71-macos-universal.dmg",
+      "sha256": "e07fada46ca0441899253fca1ffefe08c976321d1af9cc5814cb806760fd9b11"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.71/YueLink-1.3.71-windows-amd64-setup.exe",
+      "sha256": "6def17ca7f05ef6106307de0cb676ec8648f565c1a0c9c10fa6cbcefa360b441"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.71/YueLink-1.3.71-windows-amd64-portable.zip",
+      "sha256": "77d4ba5e2c0debf047271dc1098e1842e76c97053afed01686878d700f420f6b"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.71/YueLink-1.3.71-linux-amd64.AppImage",
+      "sha256": "754bb952f0ad5ac43aef7f7ecf7ae52e4b56ce43402fd59e400b075393ee9e43"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "e357f5abe1f1f02e431727cae0e003e2fe4d5f0cf1b0d31c117113e3012bb996",
+    "sha256SumsSha256": "87ada1f22d14d518aa5b6c4862fc7e6173ca5a4cce1ac8545ae43e1babaab366",
+    "payloadBundleSha256": "da4dbc7d40d725c8b53583251a77b205d1248d7eb94185e27fe0bfa46b7b080b",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:yI59NtOT29jiYFXw+S5IjJGtSz0AlZqYdkZ6WqZQR5rVCK6P9uoh6NY7q2ny6pcZUbcE31rn7YmgWMpgGq0qBA=="
+}
