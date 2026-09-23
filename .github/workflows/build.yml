@@ -233,6 +233,13 @@ jobs:
     name: Release preflight
     runs-on: ubuntu-latest
     needs: source_binding
+    # 2026-09-23 (L9): signing / R2 credentials live in the `yuelink-build`
+    # environment, whose deployment policy admits only `v*` tags and the
+    # `master` dispatch branch. Any other ref — a pushed side branch, a
+    # hand-added workflow run — can no longer read them. Environment secrets
+    # shadow same-named repository secrets, so this line is inert until the
+    # owner copies them in, and the cut-over is deleting the repo-level copy.
+    environment: yuelink-build
     permissions:
       contents: read
     outputs:
@@ -368,6 +375,8 @@ jobs:
     name: Build (${{ matrix.platform }})
     needs: [source_binding, prepare, preflight]
     runs-on: ${{ matrix.os }}
+    # Same credential boundary as preflight (see the note there).
+    environment: yuelink-build
     env:
       PLATFORM: ${{ matrix.platform }}
     permissions:
@@ -1526,6 +1535,13 @@ jobs:
       needs.source_binding.result == 'success'
     needs: [source_binding, build, preflight]
     runs-on: ubuntu-latest
+    # 2026-09-23 (L9): the updater signing seed and the R2 credentials that can
+    # move the bucket-root update.json live only in `yuelink-release`: `v*`
+    # tags only, one required reviewer. This is the single human click per
+    # release — builds and per-platform R2 uploads stay unattended; assembling the candidate and moving the root
+    # wait for approval. Inert until the owner moves the secrets (see
+    # docs/2026-09-23-ci-credential-migration.md in the workspace root).
+    environment: yuelink-release
     permissions:
       # Native LGPL source attachments are published on this exact signed tag.
       contents: write

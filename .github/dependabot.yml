@@ -12,6 +12,9 @@ updates:
       day: monday
       time: "09:00"
       timezone: Asia/Shanghai
+    # 供应链冷却：Actions 以可重指的 tag 分发，冷却更长（安全更新不受此限）。
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     commit-message:
       prefix: ci
