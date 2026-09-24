@@ -1078,6 +1078,22 @@ jobs:
           ./scripts/check_windows_wintun_bundle.ps1 -Verify `
             -BundleDir build/windows/x64/runner/Release
 
+      # R4.2 named-pipe helper channel: the only real-Windows evidence for it.
+      # Runs the Windows-only Go transport tests (DACL, first-instance,
+      # loopback stays closed, legacy config still served) and the Dart
+      # kernel32 client against the real listener. Red here fails the build
+      # before release/promotion — a broken pipe would strand every Windows
+      # TUN user after the in-app helper update.
+      - name: Windows helper named-pipe runtime tests
+        if: matrix.platform == 'windows'
+        shell: bash
+        working-directory: service
+        env:
+          YUELINK_DART_PIPE_INTEROP: '1'
+        run: |
+          go test -count=1 -timeout 15m -v \
+            -run 'NamedPipe|LegacyConfig|DartPipeClientInterop|UpgradePath|SelectWindowsTransport' .
+
       - name: Bundle libclash + service binaries (Windows)
         if: matrix.platform == 'windows'
         shell: pwsh
