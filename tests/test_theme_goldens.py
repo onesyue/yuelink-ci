@@ -25,6 +25,8 @@ REQUIRED = (
 
 def issues(text):
     out = [marker for marker in REQUIRED if marker not in text]
+    if text.count('runs-on: ubuntu-24.04') != 2:
+        out.append('both jobs must use the pinned Linux runner')
     if text.count('persist-credentials: false') != 1:
         out.append('checkout inventory')
     capture, provenance = text.split('  provenance:', 1)
