@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.75",
+  "channel": "stable",
+  "publishedAt": "2026-09-24T05:16:38Z",
+  "expiresAt": "2026-10-29T05:16:38Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "iOS 启动适配新生命周期。\n\n- iOS 采用 UIScene 管理界面生命周期，VPN 和辅助功能通道在引擎就绪后初始化。\n- Apple 构建固定经过核验的 Xcode 版本。\n",
+  "notesEn": "iOS adopts the new scene lifecycle.\n\n- iOS uses UIScene to manage its interface lifecycle, initializing VPN and accessibility channels when the Flutter engine is ready.\n- Apple builds use a verified, pinned Xcode version.\n",
+  "sourceCommit": "a5ae96d42d553b19d991ee26287ad27fb9c04d87",
+  "sha256SumsSha256": "18d115579959f96bddef93e1faf2e3f2faf1cca8ba0542456091c11e58cb93e0",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-android-arm64-v8a.apk",
+      "sha256": "f95399782b372a266d386b1510728bfc4103bcd171cd6779090e6b09e6012a04"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-android-armeabi-v7a.apk",
+      "sha256": "6ecdba6cebc119a158a763f354173f5cb4eaedb18f523142a96ea104e2bfbc21"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-android-x86_64.apk",
+      "sha256": "a353f2a122b52ca92c26a7df2549739c21003f6f129c2cf8e1018c433a88f78e"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-android-universal.apk",
+      "sha256": "602889942ec95de97655a648715daf04264d1aa5e5ed72ea70c2a0c369842f9c"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-ios.ipa",
+      "sha256": "f716442d89cbed9427e70b74762aaebc3de7bac045364752088bd6142ae23a7b"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-macos-universal.dmg",
+      "sha256": "0a8b4e77be9790e8ff977988fdc412a81c6939907ec671e086730c7ba15503ed"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-windows-amd64-setup.exe",
+      "sha256": "000c8684584cffa16b0ab235725a79f6eae0942a92f946255ca5621383c70e24"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-windows-amd64-portable.zip",
+      "sha256": "358ca2bc54f394e3934a76b39a48cad8f1ae387a4409ee47ff7eb55849b123f6"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-linux-amd64.AppImage",
+      "sha256": "79b9f6a0faaaeb539193a2cf0a650bc23fcb653003d246a24709c75a5e3f7395"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "25537e76aa1178f1fa478609757b800da03f32f293d8db03d24597fa9eed227e",
+    "sha256SumsSha256": "18d115579959f96bddef93e1faf2e3f2faf1cca8ba0542456091c11e58cb93e0",
+    "payloadBundleSha256": "b6d270c806b9feb538a60f7e82f88566e74b7ead4a80bf704391676d61f3391f",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:NBiGSyGCnuz+UZiCaZ3JoOwHcbwNYBh6AFOuHdPKOA5r/Ze1HFe2uoBxv2k2xWl+8dEylg/y95XArz/K3QirCQ=="
+}

@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.75",
+  "version": "1.3.77",
   "channel": "stable",
-  "publishedAt": "2026-09-24T05:16:38Z",
-  "expiresAt": "2026-10-29T05:16:38Z",
+  "publishedAt": "2026-09-24T12:16:36Z",
+  "expiresAt": "2026-10-29T12:16:36Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "iOS 启动适配新生命周期。\n\n- iOS 采用 UIScene 管理界面生命周期，VPN 和辅助功能通道在引擎就绪后初始化。\n- Apple 构建固定经过核验的 Xcode 版本。\n",
-  "notesEn": "iOS adopts the new scene lifecycle.\n\n- iOS uses UIScene to manage its interface lifecycle, initializing VPN and accessibility channels when the Flutter engine is ready.\n- Apple builds use a verified, pinned Xcode version.\n",
-  "sourceCommit": "a5ae96d42d553b19d991ee26287ad27fb9c04d87",
-  "sha256SumsSha256": "18d115579959f96bddef93e1faf2e3f2faf1cca8ba0542456091c11e58cb93e0",
+  "notes": "四套主题，平台体验全面补齐。\n\n- 新增浅色、深色与两套高对比度主题，改善小字号、焦点指示和窄屏布局；连接按钮三种状态统一为一段物理动效，系统\"减弱动态效果\"时立即停止。\n- 宽屏下\"我的\"、设置、工单与消息页可切换双栏，大字号或窄屏自动回到单栏。\n- 桌面端：Windows 标题区与侧栏可使用系统 Mica 材质、macOS 使用系统毛玻璃，高对比度、降低透明度或系统不支持时回到实色；macOS 菜单栏、快捷操作与\"仅在菜单栏显示\"。\n- 悦视频：Windows/Linux 新增可恢复原窗口的悬浮迷你播放器；iOS/macOS 预置隔空播放与画中画入口（需面板开放对应接口后出现，未开放时继续使用现有播放器）。\n- 账号：登录支持动态验证码或一次性恢复码；可选的到期与 80% / 95% 流量本地提醒。\n- Android：可选兼容渲染与坏启动自动回退、通知栏断开与切换节点、TV 遥控焦点与横幅；Linux Wayland 下通过系统门户处理全局快捷键。\n- 诊断修复动作白名单化且单次执行；节点列表支持大规模订阅流畅滚动。\n- 包含未发布的 v1.3.76 全部内容；发布流水线的原生源码包在上游临时拒绝下载时可从已发布源码包按锁定校验值取回。\n",
+  "notesEn": "Four themes and broad platform polish.\n\n- New light, dark and two high-contrast themes with better small text, focus indicators and narrow layouts; the connect button uses one physical transition across its three states and stops immediately under reduced motion.\n- Mine, settings, tickets and messages use two columns on wide screens and fall back to one column on narrow screens or with large text.\n- Desktop: Windows Mica and macOS vibrancy for window chrome, with an opaque fallback for high contrast, reduced transparency or unsupported systems; macOS menus, quick actions and a menu-bar-only mode.\n- Video: a reversible floating mini player on Windows/Linux; an AirPlay / Picture-in-Picture entry on iOS/macOS that appears once the panel enables its endpoint (otherwise the existing player is used).\n- Account: sign in with an authenticator code or a one-use recovery code; optional local expiry and 80% / 95% usage reminders.\n- Android: optional compatibility rendering with automatic fallback after failed starts, disconnect and switch-node notification actions, TV remote focus and banner; Wayland global shortcuts through the system portal on Linux.\n- Diagnostic repair actions are allow-listed and single-flight; the node list scrolls smoothly with very large subscriptions.\n- Includes everything from the unreleased v1.3.76; the release pipeline now recovers native source archives from earlier published source offers, verified against the locked checksums, when an upstream host temporarily refuses the download.\n",
+  "sourceCommit": "bac77d7445af714f9c565119073a75bab66a38ba",
+  "sha256SumsSha256": "661d4d7fc284f3ca3a8ea724eb9dea3996e16f1927b6df3b1601eb5dcaab0263",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-android-arm64-v8a.apk",
-      "sha256": "f95399782b372a266d386b1510728bfc4103bcd171cd6779090e6b09e6012a04"
+      "url": "https://yuetong.app/v1.3.77/YueLink-1.3.77-android-arm64-v8a.apk",
+      "sha256": "72d0a498cc5c0f78ca99ef7b05212df9a3fa2d34798edc5f1f3b5976b693dfd3"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-android-armeabi-v7a.apk",
-      "sha256": "6ecdba6cebc119a158a763f354173f5cb4eaedb18f523142a96ea104e2bfbc21"
+      "url": "https://yuetong.app/v1.3.77/YueLink-1.3.77-android-armeabi-v7a.apk",
+      "sha256": "8dd38f2ce1f15f95019f3ee484658434ddc394280ecbfec6cff8e8c14e42b6f2"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-android-x86_64.apk",
-      "sha256": "a353f2a122b52ca92c26a7df2549739c21003f6f129c2cf8e1018c433a88f78e"
+      "url": "https://yuetong.app/v1.3.77/YueLink-1.3.77-android-x86_64.apk",
+      "sha256": "a1f5313eb0d4607a3b61df9774382cdba530fc918aaf766d9c7982e131da8072"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-android-universal.apk",
-      "sha256": "602889942ec95de97655a648715daf04264d1aa5e5ed72ea70c2a0c369842f9c"
+      "url": "https://yuetong.app/v1.3.77/YueLink-1.3.77-android-universal.apk",
+      "sha256": "cdbc141035cd6a384d8383bfa3d000b551072b274865a718b1c9be093f83297f"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-ios.ipa",
-      "sha256": "f716442d89cbed9427e70b74762aaebc3de7bac045364752088bd6142ae23a7b"
+      "url": "https://yuetong.app/v1.3.77/YueLink-1.3.77-ios.ipa",
+      "sha256": "27a5a2876fc0f54e6567b642a732346322789ec2c5024a750b0bb43ac61bfcaf"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-macos-universal.dmg",
-      "sha256": "0a8b4e77be9790e8ff977988fdc412a81c6939907ec671e086730c7ba15503ed"
+      "url": "https://yuetong.app/v1.3.77/YueLink-1.3.77-macos-universal.dmg",
+      "sha256": "c77b31eb6b21ebe4e7a22cc0c36f72d4be6d2527f30e836560c5d150ca0f8b3c"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-windows-amd64-setup.exe",
-      "sha256": "000c8684584cffa16b0ab235725a79f6eae0942a92f946255ca5621383c70e24"
+      "url": "https://yuetong.app/v1.3.77/YueLink-1.3.77-windows-amd64-setup.exe",
+      "sha256": "f8d9b7172241e4e242d77219f327266eda215eaeecf9114127b9588f6a9f8b67"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-windows-amd64-portable.zip",
-      "sha256": "358ca2bc54f394e3934a76b39a48cad8f1ae387a4409ee47ff7eb55849b123f6"
+      "url": "https://yuetong.app/v1.3.77/YueLink-1.3.77-windows-amd64-portable.zip",
+      "sha256": "54e596e09388b8d9073ca587ff7e6e2f3ed3d2408259a5563fd8e85fd7433a85"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.75/YueLink-1.3.75-linux-amd64.AppImage",
-      "sha256": "79b9f6a0faaaeb539193a2cf0a650bc23fcb653003d246a24709c75a5e3f7395"
+      "url": "https://yuetong.app/v1.3.77/YueLink-1.3.77-linux-amd64.AppImage",
+      "sha256": "7576128d9e2004c0fda93ff0658f1da0b517990eeb3fb1d6bb8a0bdb04cef896"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "25537e76aa1178f1fa478609757b800da03f32f293d8db03d24597fa9eed227e",
-    "sha256SumsSha256": "18d115579959f96bddef93e1faf2e3f2faf1cca8ba0542456091c11e58cb93e0",
-    "payloadBundleSha256": "b6d270c806b9feb538a60f7e82f88566e74b7ead4a80bf704391676d61f3391f",
+    "candidateSha256": "bebec043ebf1ecb09907ac6f120ae2704f426ba59908f5fb73308871760bf140",
+    "sha256SumsSha256": "661d4d7fc284f3ca3a8ea724eb9dea3996e16f1927b6df3b1601eb5dcaab0263",
+    "payloadBundleSha256": "be2fef56258eb9761f35a213b7d0b3b61d467e993b931d492830ec42902097da",
     "payloadCount": 19
   },
-  "sig": "ed25519:NBiGSyGCnuz+UZiCaZ3JoOwHcbwNYBh6AFOuHdPKOA5r/Ze1HFe2uoBxv2k2xWl+8dEylg/y95XArz/K3QirCQ=="
+  "sig": "ed25519:DlHB6ZkONQxqAA/swSj4SmGTkC4oBeFyBdtiWq9nmUwkGrnvyBgNJ37d8NLdswzwNbsRDiLHgyhfCiG4FxUoBg=="
 }
