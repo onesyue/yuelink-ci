@@ -22,6 +22,7 @@ EXPECTED_ACTION_YAML = {
     ".github/workflows/prune-r2.yml",
     ".github/workflows/r2-lock-attestation.yml",
     ".github/workflows/source-attestation.yml",
+    ".github/workflows/theme-goldens.yml",
 }
 EXPECTED_EXTERNAL_ACTION_REPOS = {
     "android-actions/setup-android",
@@ -173,7 +174,7 @@ def actions_policy_issues(automation: dict[str, str], readme: str) -> list[str]:
     issues: list[str] = []
     if set(automation) != EXPECTED_ACTION_YAML:
         issues.append(
-            "public automation inventory must remain eight workflows plus one composite action"
+            "public automation inventory must remain nine workflows plus one composite action"
         )
 
     repositories: set[str] = set()

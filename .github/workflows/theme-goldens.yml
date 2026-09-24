@@ -1,0 +1,118 @@
+name: Theme golden evidence
+run-name: Theme golden evidence ${{ inputs.source_sha }}
+
+# Developer visual evidence only. This job never builds release installers or
+# touches R2/update.json; release source-attestation remains a separate gate.
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact reviewed source candidate SHA on product/w2-link or master
+        required: true
+        type: string
+      source_branch:
+        description: Source ancestry boundary
+        required: true
+        type: choice
+        options: [product/w2-link, master]
+        default: product/w2-link
+
+permissions:
+  contents: read
+
+concurrency:
+  group: theme-goldens-${{ inputs.source_sha }}
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    name: Linux four-theme component matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Validate immutable source identity
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SOURCE_BRANCH" = product/w2-link || "$SOURCE_BRANCH" = master ]]
+      - name: Checkout reviewed private candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ inputs.source_sha }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+      - name: Check exact SHA and allowed ancestry
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git show-ref --verify "refs/remotes/origin/$SOURCE_BRANCH"
+          git merge-base --is-ancestor "$SOURCE_SHA" "refs/remotes/origin/$SOURCE_BRANCH"
+      - name: Set up verified Flutter
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@5823380ae89c51ecf41a64da808ab64a2e3ee0d5 # pinned installer v1
+        with:
+          flutter-version: '3.47.5'
+          cache: true
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Generate canonical Linux pixels and immediately compare
+        run: |
+          set -euo pipefail
+          flutter test --no-pub --update-goldens --dart-define=YUELINK_THEME_GOLDENS=true test/widgets/semantic_theme_matrix_test.dart
+          flutter test --no-pub --machine --dart-define=YUELINK_THEME_GOLDENS=true test/widgets/semantic_theme_matrix_test.dart > theme-tests.jsonl
+      - name: Bind PNG hashes and test count to source
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          directory = pathlib.Path('test/widgets/goldens')
+          images = sorted(directory.glob('semantic_*.png'))
+          expected = {f'semantic_{m}_{w}_{s}.png' for m in ('light', 'dark', 'high_contrast_light', 'high_contrast_dark') for w in (320, 840, 1280) for s in (1, 2)}
+          assert {p.name for p in images} == expected, 'golden matrix incomplete'
+          events = [json.loads(line) for line in pathlib.Path('theme-tests.jsonl').read_text().splitlines() if line.startswith('{')]
+          assert events[-1].get('success') is True
+          passed = [e for e in events if e.get('type') == 'testDone' and e.get('result') == 'success' and not e.get('hidden') and not e.get('skipped')]
+          assert len(passed) >= 29, f'test floor: {len(passed)}'
+          proof = {'schemaVersion': 1, 'sourceRepository': 'onesyue/yuelink', 'sourceSha': os.environ['SOURCE_SHA'], 'workflowSha': os.environ['WORKFLOW_SHA'], 'runId': os.environ['RUN_ID'], 'runAttempt': os.environ['RUN_ATTEMPT'], 'flutterVersion': '3.47.5', 'platform': 'ubuntu-24.04', 'passed': len(passed), 'sha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in images}}
+          pathlib.Path('theme-goldens.json').write_text(json.dumps(proof, sort_keys=True, indent=2) + '\n')
+          PY
+      - name: Upload image evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: theme-goldens-${{ inputs.source_sha }}
+          path: |
+            test/widgets/goldens/semantic_*.png
+            theme-goldens.json
+            theme-tests.jsonl
+          if-no-files-found: error
+          retention-days: 30
+  provenance:
+    name: Sign visual evidence receipt
+    needs: capture
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download this run's test evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: theme-goldens-${{ inputs.source_sha }}
+          path: evidence
+      - name: Sign receipt provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: evidence/theme-goldens.json
