@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.72",
+  "version": "1.3.74",
   "channel": "stable",
-  "publishedAt": "2026-09-23T07:52:11Z",
-  "expiresAt": "2026-10-28T07:52:11Z",
+  "publishedAt": "2026-09-24T02:09:23Z",
+  "expiresAt": "2026-10-29T02:09:23Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "一个开关管好诊断数据。\n\n- 诊断数据改为一个统一开关：关闭后立即清除本机记录并请求服务端删除，此前明确关闭过的保持关闭。\n- 新增隐私说明，设置中可查看最近发送的诊断数据；条款更新时提示一次。\n- 订阅地址改存系统安全存储，macOS 使用钥匙串密钥保护本地数据。\n- 在线设备数在账号卡片、会员页与设备管理中统一显示。\n- 新增网络可达性测量，帮助改善线路可用性：只在前台运行，受诊断开关控制，省电模式下不做主动探测。\n- 内核更新至 mihomo v1.19.31 + 悦通补丁。\n",
-  "notesEn": "One switch for diagnostics.\n\n- Diagnostics now use a single switch. Turning it off clears local records at once and asks the server to delete them; an earlier explicit opt-out stays off.\n- Adds a privacy notice and a settings page showing recently sent diagnostics; a one-time notice appears when the terms change.\n- Subscription URLs move into the system secure store, and macOS protects local data with a Keychain key.\n- The online device count reads the same way on the account card, member hub and device management.\n- Adds network reachability measurement to improve route availability: foreground only, governed by the diagnostics switch, with no active probing in battery saver.\n- Core updated to mihomo v1.19.31 with YueLink patches.\n",
-  "sourceCommit": "46ee4888d8b0320ce1feef4195b891af6b082ff3",
-  "sha256SumsSha256": "45500a89e7895d6e954f40a1b68d565753bd69951a454a66ccc63756efb674be",
+  "notes": "Windows 服务模式更安全。\n\n- Windows 服务模式改用只对本机当前用户开放的专用通道，不再保存访问令牌；旧版安装在设置中更新服务后自动迁移，迁移前照常可用。\n- Android 在已授权 VPN 时使用更合适的前台服务类型，系统不允许时自动回退。\n- 预置新的更新签名公钥，为今后更换签名密钥做准备，更新校验方式不变。\n",
+  "notesEn": "Safer Windows service mode.\n\n- Windows service mode now uses a private channel open only to the current local user and no longer stores an access token; existing installs migrate when the service is updated in Settings and keep working until then.\n- Android uses a better-suited foreground service type while VPN permission is granted, falling back automatically when the system refuses it.\n- Ships an additional update-signing public key to prepare for a future key rotation; update verification is unchanged.\n",
+  "sourceCommit": "c8d6b85e8d35a528b577391d2026079aedd1907d",
+  "sha256SumsSha256": "b1e30e6b293134952041629da2c058b5ccb695ad6047c4cb0191cfff222cb08f",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-android-arm64-v8a.apk",
-      "sha256": "1c2626e0f331034b69db39171b340eaa2739c25544744039db4979157d5e0efd"
+      "url": "https://yuetong.app/v1.3.74/YueLink-1.3.74-android-arm64-v8a.apk",
+      "sha256": "4d9ab631e83b40331bbfb8dd91db3a2840e3a215ca4cc12c9a62bca94b4bbe1c"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-android-armeabi-v7a.apk",
-      "sha256": "a954b3e4a19b6104a15e17a8f63856239b4e5c7ffbc6aac58e6770c4ec561fcc"
+      "url": "https://yuetong.app/v1.3.74/YueLink-1.3.74-android-armeabi-v7a.apk",
+      "sha256": "33b85b2ac9a78fb526d63ee1309c361aa10bdeb6dc2af278871f4fc3d9256ccb"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-android-x86_64.apk",
-      "sha256": "72b2ef579b32a0b8ac285343858491d94c013d4bec35233bb13ff3abfac75e6f"
+      "url": "https://yuetong.app/v1.3.74/YueLink-1.3.74-android-x86_64.apk",
+      "sha256": "ad62b8cfba6e827e7e0fc44b0197215dfc83f882c3003df5708dd1c4be52d26b"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-android-universal.apk",
-      "sha256": "fbd6ef06c552d5d3150998fd0de2bc7566e4297ebc4a6f34a144876a42e1b69a"
+      "url": "https://yuetong.app/v1.3.74/YueLink-1.3.74-android-universal.apk",
+      "sha256": "cfdcf24a1f0b12aaa45072fb91cc0cbb6966be105281c02570492bc88be53010"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-ios.ipa",
-      "sha256": "7441cbc6ac02144f30e1b5797bf014f77d1574dc4ca98f621c65ccaa210dd2db"
+      "url": "https://yuetong.app/v1.3.74/YueLink-1.3.74-ios.ipa",
+      "sha256": "4ec3961d4d42138ee6b5fdfce631c19a3b03725f88f61d2d1a20edfc2f6a7a42"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-macos-universal.dmg",
-      "sha256": "cdc6717e52ba2ed6d2f4fa9efbea107772bbe8a3e2b4136302eb7d31700e206b"
+      "url": "https://yuetong.app/v1.3.74/YueLink-1.3.74-macos-universal.dmg",
+      "sha256": "03e6980b539f4070a06b7f5c725aa06c640d49b871ea0c88b5f3b02d74e35f13"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-windows-amd64-setup.exe",
-      "sha256": "e48026bd96a4238961c7e1165b348d173df63d61506494b52fbebd85625a2276"
+      "url": "https://yuetong.app/v1.3.74/YueLink-1.3.74-windows-amd64-setup.exe",
+      "sha256": "e35990f24adba472dfaece8e22b573a3e1d472b9755b2167b72acd7ba0b7c034"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-windows-amd64-portable.zip",
-      "sha256": "132921406fba6d413c8d8c2af317293fa7cb4a80a5b4896967a32faf4de20e8f"
+      "url": "https://yuetong.app/v1.3.74/YueLink-1.3.74-windows-amd64-portable.zip",
+      "sha256": "8d3999caf6aecc525ae1097953ab0e1e627df2660aed98b10c17f01c3658e4d5"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-linux-amd64.AppImage",
-      "sha256": "ec1009eb2f24df52ed772aca0c61ca59e678ae9b48d3f096fdba94b6086010f2"
+      "url": "https://yuetong.app/v1.3.74/YueLink-1.3.74-linux-amd64.AppImage",
+      "sha256": "d236b17a48e3e46a6fc1a377e951f78b69574a2f761effbabde805e594ef2f6c"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "68bca12a8fe164961ec7cfa797ad9ada64b0a2f06ed89600ad7a646742798b3c",
-    "sha256SumsSha256": "45500a89e7895d6e954f40a1b68d565753bd69951a454a66ccc63756efb674be",
-    "payloadBundleSha256": "50bb85c0ead662f2715ad72f3cc6e1d9039b67d77678542322e05ad6c014c6a1",
+    "candidateSha256": "0a986023bbc755e715b17f0c14aa766648ddaba7e264aec65abc50b47cbbd4de",
+    "sha256SumsSha256": "b1e30e6b293134952041629da2c058b5ccb695ad6047c4cb0191cfff222cb08f",
+    "payloadBundleSha256": "51a8a9da53705c73a2acfb8f422b36d5ebba06e2ec19f04aaf136f0b4713c17f",
     "payloadCount": 19
   },
-  "sig": "ed25519:6nrrjwuOegLiDRUR3C8IdQMYBJZ6OVH3DhDaXHTRIwWvM/51g1K4iNP0spvfeOjrgQ9Vi0aSYXwsXd3zc+MpAw=="
+  "sig": "ed25519:85ANp7qTfmO9mIylPco7QDmYfeTacX+zH1gyI/0LzroHjTIYgdLcr66E7iKsdQBElttLLSR65iNM+KISjYRDBQ=="
 }

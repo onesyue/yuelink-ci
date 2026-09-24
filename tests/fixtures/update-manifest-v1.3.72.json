@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.72",
+  "channel": "stable",
+  "publishedAt": "2026-09-23T07:52:11Z",
+  "expiresAt": "2026-10-28T07:52:11Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "一个开关管好诊断数据。\n\n- 诊断数据改为一个统一开关：关闭后立即清除本机记录并请求服务端删除，此前明确关闭过的保持关闭。\n- 新增隐私说明，设置中可查看最近发送的诊断数据；条款更新时提示一次。\n- 订阅地址改存系统安全存储，macOS 使用钥匙串密钥保护本地数据。\n- 在线设备数在账号卡片、会员页与设备管理中统一显示。\n- 新增网络可达性测量，帮助改善线路可用性：只在前台运行，受诊断开关控制，省电模式下不做主动探测。\n- 内核更新至 mihomo v1.19.31 + 悦通补丁。\n",
+  "notesEn": "One switch for diagnostics.\n\n- Diagnostics now use a single switch. Turning it off clears local records at once and asks the server to delete them; an earlier explicit opt-out stays off.\n- Adds a privacy notice and a settings page showing recently sent diagnostics; a one-time notice appears when the terms change.\n- Subscription URLs move into the system secure store, and macOS protects local data with a Keychain key.\n- The online device count reads the same way on the account card, member hub and device management.\n- Adds network reachability measurement to improve route availability: foreground only, governed by the diagnostics switch, with no active probing in battery saver.\n- Core updated to mihomo v1.19.31 with YueLink patches.\n",
+  "sourceCommit": "46ee4888d8b0320ce1feef4195b891af6b082ff3",
+  "sha256SumsSha256": "45500a89e7895d6e954f40a1b68d565753bd69951a454a66ccc63756efb674be",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-android-arm64-v8a.apk",
+      "sha256": "1c2626e0f331034b69db39171b340eaa2739c25544744039db4979157d5e0efd"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-android-armeabi-v7a.apk",
+      "sha256": "a954b3e4a19b6104a15e17a8f63856239b4e5c7ffbc6aac58e6770c4ec561fcc"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-android-x86_64.apk",
+      "sha256": "72b2ef579b32a0b8ac285343858491d94c013d4bec35233bb13ff3abfac75e6f"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-android-universal.apk",
+      "sha256": "fbd6ef06c552d5d3150998fd0de2bc7566e4297ebc4a6f34a144876a42e1b69a"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-ios.ipa",
+      "sha256": "7441cbc6ac02144f30e1b5797bf014f77d1574dc4ca98f621c65ccaa210dd2db"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-macos-universal.dmg",
+      "sha256": "cdc6717e52ba2ed6d2f4fa9efbea107772bbe8a3e2b4136302eb7d31700e206b"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-windows-amd64-setup.exe",
+      "sha256": "e48026bd96a4238961c7e1165b348d173df63d61506494b52fbebd85625a2276"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-windows-amd64-portable.zip",
+      "sha256": "132921406fba6d413c8d8c2af317293fa7cb4a80a5b4896967a32faf4de20e8f"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.72/YueLink-1.3.72-linux-amd64.AppImage",
+      "sha256": "ec1009eb2f24df52ed772aca0c61ca59e678ae9b48d3f096fdba94b6086010f2"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "68bca12a8fe164961ec7cfa797ad9ada64b0a2f06ed89600ad7a646742798b3c",
+    "sha256SumsSha256": "45500a89e7895d6e954f40a1b68d565753bd69951a454a66ccc63756efb674be",
+    "payloadBundleSha256": "50bb85c0ead662f2715ad72f3cc6e1d9039b67d77678542322e05ad6c014c6a1",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:6nrrjwuOegLiDRUR3C8IdQMYBJZ6OVH3DhDaXHTRIwWvM/51g1K4iNP0spvfeOjrgQ9Vi0aSYXwsXd3zc+MpAw=="
+}
