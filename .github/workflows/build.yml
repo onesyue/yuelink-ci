@@ -220,7 +220,7 @@ jobs:
           ONLY: ${{ github.event.inputs.only }}
         run: |
           set -euo pipefail
-          ALL='[{"platform":"android","os":"ubuntu-latest"},{"platform":"ios","os":"macos-latest"},{"platform":"macos","os":"macos-latest"},{"platform":"windows","os":"windows-latest"},{"platform":"linux","os":"ubuntu-latest"}]'
+          ALL='[{"platform":"android","os":"ubuntu-latest"},{"platform":"ios","os":"macos-26"},{"platform":"macos","os":"macos-26"},{"platform":"windows","os":"windows-latest"},{"platform":"linux","os":"ubuntu-latest"}]'
           if [ -z "${ONLY:-}" ] || [ "$ONLY" = "all" ]; then
             sel="$ALL"
           else
@@ -421,6 +421,18 @@ jobs:
             exit 1
           }
           echo "BUILT_SOURCE_COMMIT=$BUILT_SOURCE_COMMIT"
+
+      - name: Select Xcode 26.6 for Apple builds
+        if: matrix.platform == 'ios' || matrix.platform == 'macos'
+        shell: bash
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+        run: |
+          set -euo pipefail
+          test -d "$DEVELOPER_DIR" || { echo "::error::pinned Xcode 26.6 is absent"; exit 1; }
+          version="$(xcodebuild -version | sed -n '1p')"
+          test "$version" = 'Xcode 26.6' || { echo "::error::unexpected Xcode: $version"; exit 1; }
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
 
       # ── Toolchains (Go for core, Flutter for app, Java for android) ───────
       # Caches ON per the reviewed 2026-08-31 decision documented at the
