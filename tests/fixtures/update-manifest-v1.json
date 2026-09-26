@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.81",
+  "version": "1.3.82",
   "channel": "stable",
-  "publishedAt": "2026-09-26T16:11:02Z",
-  "expiresAt": "2026-10-31T16:11:02Z",
+  "publishedAt": "2026-09-26T17:22:50Z",
+  "expiresAt": "2026-10-31T17:22:50Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "修复 macOS 窗口无法点击。\n\n- macOS：修复 v1.3.76 至 v1.3.80 中窗口内鼠标点击完全无效、无法操作应用的问题；悬停与滚动原本正常，现在点击也恢复正常。其他平台无变化。\n",
-  "notesEn": "Fixes unclickable macOS windows.\n\n- macOS: fixes mouse clicks having no effect anywhere in the window in v1.3.76 through v1.3.80, which made the app impossible to operate; hover and scrolling already worked, and clicks now work again. No changes on other platforms.\n",
-  "sourceCommit": "66beca47f052ddd037f7584ac8ad58da6ff3d430",
-  "sha256SumsSha256": "915a6660a70ae7ec4ec82315031ccc8bc46e6defd570db2c3e418180ab38c840",
+  "notes": "Windows 不再断连，账户信息更准。\n\n- Windows：修复 v1.3.80 起部分系统语言下开启 TUN 后约每 45 秒断开全部连接的问题；旧实例卡死时新启动不再无响应。\n- 签到：失败时显示真实原因；没有有效套餐时按钮置灰并说明原因。\n- 订单与余额：已完成订单可申请退款到余额；余额抵扣的订单不再显示为免费；下单、支付、签到、佣金划转后余额自动刷新。\n- 套餐：暂停中的套餐显示「已暂停，剩余 N 天」，不再被当成到期提醒续费。\n- 强制升级：确保升级提示真正显示；只有升级失败时才允许继续使用当前版本。\n- 连接稳定性：断开清理有时限，不再卡住后续操作；主动断开、登出或切换账号后不再弹出多余的恢复提示。\n- iOS：新配置启动失败并回退到上一份可用配置时会明确告知。\n- 更新：区分下载失败与安装失败；Android 缺少安装权限时引导授权。\n- Android：开机自启通知在 Android 12 及以上正常以高优先级弹出。\n- macOS：「仅菜单栏」开关总能保存。\n- 错误提示最长可显示 160 字，诊断信息更准确，便于排查问题。\n",
+  "notesEn": "Windows stays connected; account info is accurate.\n\n- Windows: fixes TUN mode dropping every connection roughly every 45 seconds on some system languages since v1.3.80; a hung earlier instance no longer swallows a new launch.\n- Check-in: failures show the real reason; without an active plan the button is disabled and says why.\n- Orders and balance: completed orders can be refunded to your balance; orders paid with balance no longer show as free; the balance refreshes after ordering, paying, checking in, and commission transfers.\n- Plans: a paused plan shows \"paused, N days left\" instead of being treated as expiring.\n- Force upgrade: the upgrade prompt is guaranteed to appear; continuing on the current version is offered only if the upgrade fails.\n- Connection stability: disconnect cleanup is time-bounded and no longer blocks later actions; disconnecting, signing out, or switching accounts no longer triggers extra recovery messages.\n- iOS: you are told when a new configuration failed to start and the last working one is in use.\n- Updates: download and install failures are reported separately; on Android, a missing install permission opens the permission page.\n- Android: the start-on-boot notification appears with high priority on Android 12 and later.\n- macOS: the menu-bar-only switch always saves.\n- Error messages can show up to 160 characters, and diagnostics are more precise for troubleshooting.\n",
+  "sourceCommit": "0a5a10bdf46a7bf769033409f64ca60a043f598a",
+  "sha256SumsSha256": "4cd63065f8c948b1d14a15faa39634dfd71bd2aa60c711f7d9457c36bf50dcb7",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-android-arm64-v8a.apk",
-      "sha256": "1858dc2bb5b81fbc171524cd0377ae029f3d51fd03e361395c78f335e5d355ca"
+      "url": "https://yuetong.app/v1.3.82/YueLink-1.3.82-android-arm64-v8a.apk",
+      "sha256": "c0055d5127f470a2405ad108990a8e0cd2685d04341a7c4b161081a6def7dbcb"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-android-armeabi-v7a.apk",
-      "sha256": "c2de6a058d21992d15aab4b1645ee1ba7b8990ea5fdde1804463ceebac04d3e4"
+      "url": "https://yuetong.app/v1.3.82/YueLink-1.3.82-android-armeabi-v7a.apk",
+      "sha256": "1752cd7b11de840e65f7151f500f82d15bcee698899432736e81f9a08288e7c7"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-android-x86_64.apk",
-      "sha256": "2bcfb237e8d5a2b570193c4de56a61f98571b0e33051ab3775e4990b354018c8"
+      "url": "https://yuetong.app/v1.3.82/YueLink-1.3.82-android-x86_64.apk",
+      "sha256": "d5a0d2d5da2a0aa20262f4b432a0a979218f1d824ca05b118ccf9fcdd458ffdc"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-android-universal.apk",
-      "sha256": "3544255191ed1670feb9391c3e4fff7d886ad213bc3c522dd85bbe9950065e63"
+      "url": "https://yuetong.app/v1.3.82/YueLink-1.3.82-android-universal.apk",
+      "sha256": "076441ac63981badd70473cf2613b41c3a4f39164e09ad141eabc41a0fe2c8b7"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-ios.ipa",
-      "sha256": "1758cc39754fe8737aa0b2b09555697cb45ae6f966fe3b586dd43e4f28dcde03"
+      "url": "https://yuetong.app/v1.3.82/YueLink-1.3.82-ios.ipa",
+      "sha256": "7f23d1c7c749c68fb4084efa3480181a2ca3d1fdfe847ef548a0b790037b1f67"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-macos-universal.dmg",
-      "sha256": "d48a7bcde279196268452ddfe6852ce9d241e37da04b44a53ece4ba157bf974f"
+      "url": "https://yuetong.app/v1.3.82/YueLink-1.3.82-macos-universal.dmg",
+      "sha256": "c9d9e6f272732785c6290bfc1c13337bb1a40fb5fd678de2d1a46fd562594889"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-windows-amd64-setup.exe",
-      "sha256": "1ae14f6f555c73fa45abb3317708505dfa46c5abfe91e3ce7dfad3bcca07f72d"
+      "url": "https://yuetong.app/v1.3.82/YueLink-1.3.82-windows-amd64-setup.exe",
+      "sha256": "e5f8ed6ccaf9ecbaca22f49e73a0198bb751a28fc38a1f13d13b3660f3e53475"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-windows-amd64-portable.zip",
-      "sha256": "b177e9c7e018a1e7a444c8124d62746d7a9d61b59d5a47b63b2ed5c53fd5fd66"
+      "url": "https://yuetong.app/v1.3.82/YueLink-1.3.82-windows-amd64-portable.zip",
+      "sha256": "c83c6bf90700041e3d290d6d0fd3f6550dfe64dd72582eb645db640d70605ad5"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-linux-amd64.AppImage",
-      "sha256": "d6ad42d9f1a234fcdd0e619ed56f8582db72da6ad8de880513e3257a65d35e42"
+      "url": "https://yuetong.app/v1.3.82/YueLink-1.3.82-linux-amd64.AppImage",
+      "sha256": "2ae3c7b0103a949b776470f9e50f40a832e3d1a4e9b0aee8b1b231014ec2b5fb"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "29d367bfa2da3e9ac75b981204ab8c825d596521c8508e6cefe6d636ad511df9",
-    "sha256SumsSha256": "915a6660a70ae7ec4ec82315031ccc8bc46e6defd570db2c3e418180ab38c840",
-    "payloadBundleSha256": "c1acce02b658091c9b2d7ac25e971534ef943de8f0f243bb614d8295789e2c1e",
+    "candidateSha256": "d9db43b2fdae021f8149a396737d5566ecc05dfc9ef7112d393c6e3fab7b0d5e",
+    "sha256SumsSha256": "4cd63065f8c948b1d14a15faa39634dfd71bd2aa60c711f7d9457c36bf50dcb7",
+    "payloadBundleSha256": "446bdf2977f9926cfe3942b460b86fad01d19dca10fae1a6c1580b8e0824938f",
     "payloadCount": 19
   },
-  "sig": "ed25519:rLw/5vkN+wUOFGNhPwmrG5Mrhtv+SMvNqqdUy2Ztt5vabk9XJuzPjyYB+V1VlFOa14Iuvn0JB5XlgnDdDpzyAQ=="
+  "sig": "ed25519:mVt+7Dtnn4pTS+9SVCIIWzIoeaBTRf+Xl7m7nve1/VARmWTgZ0fPLSR/uMbrEiFU3sfaTC33++NCPBNfH03SBA=="
 }

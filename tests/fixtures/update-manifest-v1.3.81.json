@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.81",
+  "channel": "stable",
+  "publishedAt": "2026-09-26T16:11:02Z",
+  "expiresAt": "2026-10-31T16:11:02Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "修复 macOS 窗口无法点击。\n\n- macOS：修复 v1.3.76 至 v1.3.80 中窗口内鼠标点击完全无效、无法操作应用的问题；悬停与滚动原本正常，现在点击也恢复正常。其他平台无变化。\n",
+  "notesEn": "Fixes unclickable macOS windows.\n\n- macOS: fixes mouse clicks having no effect anywhere in the window in v1.3.76 through v1.3.80, which made the app impossible to operate; hover and scrolling already worked, and clicks now work again. No changes on other platforms.\n",
+  "sourceCommit": "66beca47f052ddd037f7584ac8ad58da6ff3d430",
+  "sha256SumsSha256": "915a6660a70ae7ec4ec82315031ccc8bc46e6defd570db2c3e418180ab38c840",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-android-arm64-v8a.apk",
+      "sha256": "1858dc2bb5b81fbc171524cd0377ae029f3d51fd03e361395c78f335e5d355ca"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-android-armeabi-v7a.apk",
+      "sha256": "c2de6a058d21992d15aab4b1645ee1ba7b8990ea5fdde1804463ceebac04d3e4"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-android-x86_64.apk",
+      "sha256": "2bcfb237e8d5a2b570193c4de56a61f98571b0e33051ab3775e4990b354018c8"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-android-universal.apk",
+      "sha256": "3544255191ed1670feb9391c3e4fff7d886ad213bc3c522dd85bbe9950065e63"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-ios.ipa",
+      "sha256": "1758cc39754fe8737aa0b2b09555697cb45ae6f966fe3b586dd43e4f28dcde03"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-macos-universal.dmg",
+      "sha256": "d48a7bcde279196268452ddfe6852ce9d241e37da04b44a53ece4ba157bf974f"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-windows-amd64-setup.exe",
+      "sha256": "1ae14f6f555c73fa45abb3317708505dfa46c5abfe91e3ce7dfad3bcca07f72d"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-windows-amd64-portable.zip",
+      "sha256": "b177e9c7e018a1e7a444c8124d62746d7a9d61b59d5a47b63b2ed5c53fd5fd66"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.81/YueLink-1.3.81-linux-amd64.AppImage",
+      "sha256": "d6ad42d9f1a234fcdd0e619ed56f8582db72da6ad8de880513e3257a65d35e42"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "29d367bfa2da3e9ac75b981204ab8c825d596521c8508e6cefe6d636ad511df9",
+    "sha256SumsSha256": "915a6660a70ae7ec4ec82315031ccc8bc46e6defd570db2c3e418180ab38c840",
+    "payloadBundleSha256": "c1acce02b658091c9b2d7ac25e971534ef943de8f0f243bb614d8295789e2c1e",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:rLw/5vkN+wUOFGNhPwmrG5Mrhtv+SMvNqqdUy2Ztt5vabk9XJuzPjyYB+V1VlFOa14Iuvn0JB5XlgnDdDpzyAQ=="
+}
