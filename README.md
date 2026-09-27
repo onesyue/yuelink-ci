@@ -141,6 +141,12 @@ immutable pins with reviewed weekly pull requests. Local or dynamically
 resolved actions are intentionally absent; adding one requires revisiting the
 repository policy before it can merge.
 
+Policy CI runs the complete offline suite with Python's standard-library
+`unittest discover`. Every policy case must be a `unittest.TestCase` method:
+plain pytest functions are not discovered by that runner. The discovery
+contract rejects those silent omissions, including the runner, Xcode and
+Flutter installer checks; no third-party Python test dependency is required.
+
 The live repository policy was read back on **2026-08-21** as
 `allowed_actions=selected`, `sha_pinning_required=true`,
 `github_owned_allowed=true`, and `verified_allowed=false`. GitHub-owned actions
