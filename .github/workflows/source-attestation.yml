@@ -35,7 +35,7 @@ env:
 jobs:
   source_contract:
     name: Analyze, tests and release contracts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       source_sha: ${{ steps.identity.outputs.source_sha }}
       release_tag: ${{ steps.identity.outputs.release_tag }}
@@ -214,7 +214,7 @@ jobs:
   # nothing, while the serialization cost 7 wall-clock minutes per release.
   gitleaks:
     name: Gitleaks full history
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -265,7 +265,7 @@ jobs:
 
   govulncheck:
     name: govulncheck (${{ matrix.module }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     strategy:
@@ -421,7 +421,7 @@ jobs:
   attest:
     name: Bind green gates to source SHA
     needs: [source_contract, gitleaks, govulncheck, macos_integration, windows_durability]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       # actions/attest-build-provenance exchanges the job OIDC token for a
