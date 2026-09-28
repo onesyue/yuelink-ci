@@ -146,6 +146,10 @@ Policy CI runs the complete offline suite with Python's standard-library
 plain pytest functions are not discovered by that runner. The discovery
 contract rejects those silent omissions, including the runner, Xcode and
 Flutter installer checks; no third-party Python test dependency is required.
+It then runs the same pinned actionlint as yueto-ci (reviewed version and
+linux_amd64 SHA-256, which also ShellChecks every `run:` block) and
+`shellcheck --severity=warning` over the repository's own `*.sh`
+(`tests/test_policy_lint_contract.py`, 2026-09-28).
 
 The live repository policy was read back on **2026-08-21** as
 `allowed_actions=selected`, `sha_pinning_required=true`,

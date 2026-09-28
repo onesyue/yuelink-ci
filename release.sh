@@ -360,7 +360,7 @@ echo "✓ 已确认远端 exact verified signed tag ${TAG}；对应构建已触�
 echo "  看进度: gh run watch -R onesyue/yuelink-ci"
 if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
   echo "  构建绿 = 已上线：release job 最后一步「Sign root manifest and promote (in-pipeline)」
-  会签名并 CAS 切根（2026-09-03 起），看 run 摘要里的 "Root manifest promoted in-pipeline"。
+  会签名并 CAS 切根（2026-09-03 起），看 run 摘要里的「Root manifest promoted in-pipeline」。
   兜底（该步失败且需人工时，只在 bastion 起一次、绝不中途杀）:
   bash scripts/ci/release-promote-local.sh <X.Y.Z> <source40hex> <candidate64hex>
   上线验收后:把精确签名根更新到 tests/fixtures/update-manifest-v1.json
