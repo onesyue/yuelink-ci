@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.87",
+  "version": "1.3.88",
   "channel": "stable",
-  "publishedAt": "2026-09-28T10:40:15Z",
-  "expiresAt": "2026-11-02T10:40:15Z",
+  "publishedAt": "2026-09-28T15:46:28Z",
+  "expiresAt": "2026-11-02T15:46:28Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "支付确认清晰，更新更可靠。\n\n本次维护更新延续近期的连接、订阅和账号改进，并完善发布验证。\n\n- 支付通道调整余额抵扣与待付金额后，订单和钱包会及时刷新；请重新确认金额后继续付款，旧支付链接不会复用。\n- Windows TUN 服务安装失败时显示具体步骤、错误码和处理建议。\n- 同一订阅同时刷新不再互相覆盖，保留最新的名称、链接和更新间隔。\n- 改密码、两步验证等一次性操作避免重复提交；退出登录时清除本地消息缓存。\n",
-  "notesEn": "Clear payment confirmation and reliable updates.\n\nThis maintenance release carries forward recent connection, subscription, and account improvements and strengthens release validation.\n\n- Orders and wallet balances refresh when a payment channel adjusts the balance deduction and remaining payment. Review the updated amount before continuing; old payment links are discarded.\n- Windows TUN service installation reports the failed step, error code, and recovery advice.\n- Concurrent subscription refreshes preserve your latest name, address, and refresh interval changes.\n- Password and two-step verification operations avoid duplicate submissions, and signing out clears the local message cache.\n",
-  "sourceCommit": "630bdce8f0ca046c956b1ddc965811d272a70aa1",
-  "sha256SumsSha256": "f9cba39139a631ec8c40199102aeb214ff5f41cd6cc950dd753f44bc84c62335",
+  "notes": "返佣规则与欠额更清楚。\n\n- 邀请返利页说明佣金仅按在线实付部分计算，余额支付不计佣，退款后追回对应佣金。\n- 会员返利卡和入口正确显示账号专属返佣比例，明确档位按有效邀请消费金额计算。\n- 钱包、邀请页、会员卡和提现页将负佣金显示为「佣金欠额」，并说明后续佣金优先抵扣欠额；欠额说明支持窄屏和大字号换行。\n",
+  "notesEn": "Clearer commissions and outstanding debt.\n\n- The referral page explains that only online payments earn commission. Balance payments are excluded, and refunds reverse the associated commission.\n- Referral cards and shortcuts show your account's effective rebate rate, including personal rates, and explain that tiers depend on eligible referred spending.\n- The wallet, referral page, member card and withdrawal page show negative commission as outstanding debt. The repayment explanation wraps on narrow screens and with larger text.\n",
+  "sourceCommit": "116d118db52c46fda99957beac5523e09ea13f94",
+  "sha256SumsSha256": "911ec28b9cefba2101bb946d7c401c36218e6344707a0aa6579efcf18d97b7e5",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-android-arm64-v8a.apk",
-      "sha256": "72fea163f5241f3b9b391cb6cec22541d410a26e3592d15e40f6e028fac62bb3"
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-android-arm64-v8a.apk",
+      "sha256": "1df6024c7ae14cd72a3a7afa81214f9b5fe2f8ec95d81086ad749706558f5568"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-android-armeabi-v7a.apk",
-      "sha256": "49aab79cd17965eaa778f99586445b15ca7eaab7ab1cfc1f84ea412482a4b137"
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-android-armeabi-v7a.apk",
+      "sha256": "31ce4446e3f3f9bc99c876f0a115a5529f3a005246cce040698900663bcfe8ed"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-android-x86_64.apk",
-      "sha256": "390d0893ad81df4ebe3bf5b13520cef9082c10cf6307235e0beaa31f3733a2f8"
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-android-x86_64.apk",
+      "sha256": "923112dd3b67470739f8c753899a798386ab653ee46ea0d35e1d234c769a3152"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-android-universal.apk",
-      "sha256": "e2770372ee57d98b696b7200956847f7ae0a480035e38b69a8da99cd40abc8eb"
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-android-universal.apk",
+      "sha256": "bd31be2c5540ec0a2b3c3ddf85bfddef9ae90a98fe96ee50a682b7c85570fe8d"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-ios.ipa",
-      "sha256": "c5a149076a3b5b5308fe270d51b47b37f2830c5580f68392f00b534c8d97ca0f"
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-ios.ipa",
+      "sha256": "95f5390a4824cd5c52f0817a888b902ff781456eb956337971df52110b44170c"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-macos-universal.dmg",
-      "sha256": "3f48217a3251d7b5e88532f0ffa613a91932339bacbe85968616a3c98a6db657"
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-macos-universal.dmg",
+      "sha256": "53867751635ba254b4089b1cadb51ffb1477dd4e3f61572824470a198b465a01"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-windows-amd64-setup.exe",
-      "sha256": "ca77afea30075b553265f38a0ad3e0bd4725084afe400ee2fa841a844c021fd9"
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-windows-amd64-setup.exe",
+      "sha256": "d212077a1f1e985e9b772c161b47ea8c39a3ebbd25f9d1c247bba099c980f880"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-windows-amd64-portable.zip",
-      "sha256": "b9973a02abbc282aad486c1e085e01150d656a6d2ebb7a34eefb5b22fd9302f4"
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-windows-amd64-portable.zip",
+      "sha256": "a7d05704a2433fd28df343ea4aa583419b6624a0f312a97c7feb5debf845ab26"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-linux-amd64.AppImage",
-      "sha256": "8b2bb852f8626404bb553909badbb41364370e66c59b5f9d2e0fe3a5b2b0425b"
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-linux-amd64.AppImage",
+      "sha256": "4be4e0afa82e863a3cff592505dce65cb65b2fb372a221c48d70513535b7ae33"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "ccaf774fd2a00ee19d16f6a00ea5d7689f184f09885d7c445e44df78df3a4234",
-    "sha256SumsSha256": "f9cba39139a631ec8c40199102aeb214ff5f41cd6cc950dd753f44bc84c62335",
-    "payloadBundleSha256": "77555d08f715a0e8dfeb3787b978a01923b4f00ce34d5c69bc666d3863ee32ec",
+    "candidateSha256": "44b5c7b4960160b31bc4401e764e62b7f1618d6e4fcc4f6fa794ddded888c550",
+    "sha256SumsSha256": "911ec28b9cefba2101bb946d7c401c36218e6344707a0aa6579efcf18d97b7e5",
+    "payloadBundleSha256": "f3465bf880de5c100bdd78286913577f5bdd932ebe1394d053a16dfad192fac5",
     "payloadCount": 19
   },
-  "sig": "ed25519:4es2JWfcQtLqSSDpxQbb4f0JhxAZHdN37UkTbdXqcU+DulXLiXl86fZMtWGdumZoFJ8f3ZfxqctxXclYDUhuAw=="
+  "sig": "ed25519:SSN30SRB4PPYE/L+htaQJqwci+b5sUCG/U4/maT44ODe7crdABPg6QJTSj8drEfYHaERDo5aeX173IIe3bS+Cw=="
 }
