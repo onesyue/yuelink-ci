@@ -133,11 +133,11 @@ jobs:
                [ "$REPOSITORY" = onesyue/yuelink-ci ]; then
             ref_json="$(gh api "repos/$REPOSITORY/git/ref/tags/$REF_NAME")"
             tag_object_sha="$(jq -er '.object.sha' <<<"$ref_json")"
-            [ "$(jq -er '.object.type' <<<"$ref_json")" = tag ] &&
-              [[ "$tag_object_sha" =~ ^[0-9a-f]{40}$ ]] || {
+            if ! { [ "$(jq -er '.object.type' <<<"$ref_json")" = tag ] &&
+                   [[ "$tag_object_sha" =~ ^[0-9a-f]{40}$ ]]; }; then
               echo "::error::public release ref must be an annotated tag"
               exit 1
-            }
+            fi
             tag_json=''
             for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
               tag_json="$(gh api "repos/$REPOSITORY/git/tags/$tag_object_sha")"
@@ -159,11 +159,11 @@ jobs:
               exit 1
             }
             tag_message="$(jq -er '.message' <<<"$tag_json")"
-            [ "$(grep -Ec '^ATTESTED_SOURCE_COMMIT=[0-9a-f]{40}$' <<<"$tag_message")" -eq 1 ] &&
-              [ "$(grep -Ec '^SOURCE_ATTESTATION_RUN_ID=[1-9][0-9]*$' <<<"$tag_message")" -eq 1 ] || {
+            if ! { [ "$(grep -Ec '^ATTESTED_SOURCE_COMMIT=[0-9a-f]{40}$' <<<"$tag_message")" -eq 1 ] &&
+                   [ "$(grep -Ec '^SOURCE_ATTESTATION_RUN_ID=[1-9][0-9]*$' <<<"$tag_message")" -eq 1 ]; }; then
               echo "::error::public signed tag lacks one closed source binding"
               exit 1
-            }
+            fi
             source_commit="$(sed -nE 's/^ATTESTED_SOURCE_COMMIT=([0-9a-f]{40})$/\1/p' <<<"$tag_message")"
             attestation_run_id="$(sed -nE 's/^SOURCE_ATTESTATION_RUN_ID=([1-9][0-9]*)$/\1/p' <<<"$tag_message")"
             verify_public_attestation=1
@@ -187,11 +187,11 @@ jobs:
               exit 1
             }
             if [ "$verify_public_attestation" -eq 1 ]; then
-              [ -f "$SOURCE_ATTESTATION_VERIFIER" ] &&
-                [ ! -L "$SOURCE_ATTESTATION_VERIFIER" ] || {
+              if ! { [ -f "$SOURCE_ATTESTATION_VERIFIER" ] &&
+                     [ ! -L "$SOURCE_ATTESTATION_VERIFIER" ]; }; then
                 echo "::error::exact builder source-attestation verifier is missing or unsafe"
                 exit 1
-              }
+              fi
               bash "$SOURCE_ATTESTATION_VERIFIER" \
                 "$REF_NAME" "$source_commit" "$TRIGGER_COMMIT" "$attestation_run_id"
             fi
@@ -781,11 +781,11 @@ jobs:
           app_build="$(plutil -extract CFBundleVersion raw "$app/Info.plist")"
           extension_version="$(plutil -extract CFBundleShortVersionString raw "$extension/Info.plist")"
           extension_build="$(plutil -extract CFBundleVersion raw "$extension/Info.plist")"
-          [ "$app_version" = "$extension_version" ] &&
-          [ "$app_build" = "$extension_build" ] || {
+          if ! { [ "$app_version" = "$extension_version" ] &&
+                 [ "$app_build" = "$extension_build" ]; }; then
             echo "::error::iOS bundle version mismatch: app=$app_version+$app_build extension=$extension_version+$extension_build"
             exit 1
-          }
+          fi
           echo "iOS bundle versions match: $app_version+$app_build"
 
       - name: Sign iOS bundle for TrollStore
@@ -828,11 +828,11 @@ jobs:
             provider=$(/usr/libexec/PlistBuddy \
               -c 'Print :com.apple.developer.networking.networkextension:0' \
               "$entitlements")
-            [ "$group" = "group.com.yueto.yuelink" ] &&
-            [ "$provider" = "packet-tunnel-provider" ] || {
+            if ! { [ "$group" = "group.com.yueto.yuelink" ] &&
+                   [ "$provider" = "packet-tunnel-provider" ]; }; then
               echo "::error::iOS VPN entitlement contract mismatch"
               exit 1
-            }
+            fi
           done
           echo "iOS app + PacketTunnel signatures and VPN entitlements verified"
 
@@ -1414,7 +1414,10 @@ jobs:
         run: |
           set -euo pipefail
           set -- dist/YueLink-*-ios.ipa
-          [ "$#" -eq 1 ] && [ -f "$1" ] || { echo "Expected exactly one iOS IPA" >&2; exit 1; }
+          if ! { [ "$#" -eq 1 ] && [ -f "$1" ]; }; then
+            echo "Expected exactly one iOS IPA" >&2
+            exit 1
+          fi
           python3 scripts/ci/verify_ios_core_delegation.py --artifact "$1" --output "$RUNNER_TEMP/yuelink-ios-native-linkage.json"
 
       - name: Exercise native core from packaged desktop artifact
@@ -1430,9 +1433,10 @@ jobs:
             linux) set -- dist/YueLink-*-linux-amd64.AppImage ;;
             *) echo "::error::unexpected desktop core probe platform"; exit 1 ;;
           esac
-          [ "$#" -eq 1 ] && [ -f "$1" ] || {
-            echo "::error::expected one exact packaged desktop artifact"; exit 1;
-          }
+          if ! { [ "$#" -eq 1 ] && [ -f "$1" ]; }; then
+            echo "::error::expected one exact packaged desktop artifact"
+            exit 1
+          fi
           python3 scripts/performance/core_package_probe.py \
             --artifact "$1" --require-leases --output "$RUNNER_TEMP/yuelink-packaged-core-runtime.json"
 
@@ -1964,7 +1968,11 @@ jobs:
           NOTES_EN=$(head -n 100 release_notes.app.en.md | jq -Rs .)
 
           sha() {
-            [ -f "dist/$1.sha256" ] && cat "dist/$1.sha256" | tr -d '[:space:]' || echo ""
+            if [ -f "dist/$1.sha256" ]; then
+              tr -d '[:space:]' < "dist/$1.sha256" || echo ""
+            else
+              echo ""
+            fi
           }
           asset() {
             local key="$1"; local fname="$2"
@@ -2125,11 +2133,11 @@ jobs:
             echo "✓ 已发布不可变 $TAG/$MANIFEST_NAME + 安装包"
             candidate_sha256="$(sha256sum "$MANIFEST_NAME" | awk '{print $1}')"
             source_commit="$(git rev-parse HEAD)"
-            [ "$source_commit" = "$BUILT_SOURCE_COMMIT" ] &&
-              [ "$source_commit" = "$ATTESTED_SOURCE_COMMIT" ] || {
+            if ! { [ "$source_commit" = "$BUILT_SOURCE_COMMIT" ] &&
+                   [ "$source_commit" = "$ATTESTED_SOURCE_COMMIT" ]; }; then
               echo "::error::summary source mismatch: attested=$ATTESTED_SOURCE_COMMIT built=$BUILT_SOURCE_COMMIT actual=$source_commit"
               exit 1
-            }
+            fi
             {
               echo "## Candidate published; in-pipeline promotion follows"
               echo
