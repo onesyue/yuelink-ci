@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.83",
+  "channel": "stable",
+  "publishedAt": "2026-09-27T04:37:22Z",
+  "expiresAt": "2026-11-01T04:37:22Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "服务模式更安全，升级更省心。\n\n- 安全：服务模式下特权内核只在受保护目录运行，用户配置经过清洗和符号链接防护；Windows 服务目录权限收紧，内核启动前校验完整性。\n- 服务模式：App 升级后自动更新服务组件（会请求一次管理员授权）；组件缺失时引导重装并提示加入杀毒软件白名单。\n- 移动端：局域网代理只接受本机与 TUN 地址，DNS 只监听本机。\n- Android：自动避开被其他代理 App 占用的端口，被占用时明确提示。\n- 设置文件损坏时先备份再重置；遗留的 overwrite.yaml 自动备份后移除。\n- 桌面系统代理模式按开关写入 IPv6 设置。\n- 订单详情显示优惠券码。\n- 可达性测量只在登录后进行；遥测上传自动分段。\n- 修复通知、消息已读和诊断脱敏的若干问题。\n",
+  "notesEn": "Safer service mode, smoother upgrades.\n\n- Security: in service mode the privileged core runs only inside a protected service directory, and user configuration is sanitized and guarded against symbolic-link escapes before the core reads it. On Windows the service directory permissions are tightened and the core is integrity-checked before every start.\n- Service mode: after an app upgrade the installed service components update automatically (one administrator prompt). If components are missing, the app guides a reinstall and suggests adding the folder to your antivirus allow list.\n- Mobile: the LAN proxy only accepts loopback and TUN addresses, and DNS listens on loopback only.\n- Android: ports already taken by another proxy app are avoided automatically, with a clear message when that happens.\n- A corrupted settings file is backed up before being reset; a leftover overwrite.yaml is backed up and removed.\n- Desktop system-proxy mode writes the IPv6 setting according to the switch.\n- Order details show the coupon code.\n- Reachability measurement only runs while signed in; telemetry uploads are split automatically.\n- Fixes for notifications, message read state and diagnostic redaction.\n",
+  "sourceCommit": "430509537cb4c53663e42b72e85ef79eb80fd6db",
+  "sha256SumsSha256": "a651f3ce1f04c91823dfae250bc3a081330fb38add079e9e449d9c7d269bb515",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.83/YueLink-1.3.83-android-arm64-v8a.apk",
+      "sha256": "46812c2b2c8250e80cacb5390c16dabc3d82d76d2d83877ccddcd8f6862a2d77"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.83/YueLink-1.3.83-android-armeabi-v7a.apk",
+      "sha256": "eef392b8fc02f721558966a07df6fd02345133470e1048293e2839bb7d970e2a"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.83/YueLink-1.3.83-android-x86_64.apk",
+      "sha256": "a87c8ad63364a3e563bc743c2959bc5e76e8f2a585f5ecc94dd99b71b63aa29c"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.83/YueLink-1.3.83-android-universal.apk",
+      "sha256": "293a0d9ae4c03375033ea2a2bbc4565aaadaee7b5c6a53a282b844f59d964cf5"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.83/YueLink-1.3.83-ios.ipa",
+      "sha256": "ae663714d7fa09e0c2139f79b14dbd0e3f84285997692c077e1b86fa9bd86690"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.83/YueLink-1.3.83-macos-universal.dmg",
+      "sha256": "8f26b117cc3c7919078ae89421605a31b420c42bc761e232de61b52ce26a7a1b"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.83/YueLink-1.3.83-windows-amd64-setup.exe",
+      "sha256": "8bd5a3f84362bf840734442ceb768200428c94620162530fb914979910a3d26a"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.83/YueLink-1.3.83-windows-amd64-portable.zip",
+      "sha256": "0a47beef23ec36fcb730c78d95d5d520011bec1785952b168bc5c970c820db37"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.83/YueLink-1.3.83-linux-amd64.AppImage",
+      "sha256": "b5fb71304f243537edc8edd32ef5bcc099616012295727de687404cf2ff510f2"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "10f18511b05cf515e2c8b34033a6aecddf829d4e71a9b6046680bb8774e13124",
+    "sha256SumsSha256": "a651f3ce1f04c91823dfae250bc3a081330fb38add079e9e449d9c7d269bb515",
+    "payloadBundleSha256": "465cdb4ce0ea207155eaa5cb075b5dbe8d241fdb97a883eebf860f7471fb7ef1",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:O4yDWSyrMVSLFo5FEGoilYZem2VFAVJESDbKeYLc4JuWwH65EDdRfW01RJM24RsqVzvmHMuB4K0unY32S/3pDA=="
+}
