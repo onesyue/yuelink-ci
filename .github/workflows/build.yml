@@ -1106,6 +1106,21 @@ jobs:
           go test -count=1 -timeout 15m -v \
             -run 'NamedPipe|LegacyConfig|DartPipeClientInterop|UpgradePath|SelectWindowsTransport' .
 
+      # The real elevated install chain (v1.3.85): `service-install` builds
+      # C:\ProgramData\YueLink\Service with its protected ACL, registers and
+      # starts the SCM service, the owner reaches it on the named pipe, then
+      # `service-update` and `service-uninstall` run over the top. v1.3.83
+      # shipped an install path that no Windows machine had executed before
+      # users did; this step is that execution. Runners are elevated.
+      - name: Windows helper install chain (real SCM)
+        if: matrix.platform == 'windows'
+        shell: bash
+        working-directory: service
+        env:
+          YUELINK_SERVICE_INSTALL_E2E: '1'
+        run: |
+          go test -count=1 -timeout 10m -v -run 'ServiceInstallE2E' .
+
       - name: Bundle libclash + service binaries (Windows)
         if: matrix.platform == 'windows'
         shell: pwsh
