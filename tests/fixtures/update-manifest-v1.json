@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.86",
+  "version": "1.3.87",
   "channel": "stable",
-  "publishedAt": "2026-09-28T09:15:22Z",
-  "expiresAt": "2026-11-02T09:15:22Z",
+  "publishedAt": "2026-09-28T10:40:15Z",
+  "expiresAt": "2026-11-02T10:40:15Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "支付金额及时刷新，连接更稳。\n\n- 支付通道调整余额抵扣与待付金额后，订单和钱包会及时刷新；请重新确认金额后继续付款，旧支付链接不会复用。\n- Windows TUN 服务安装失败时显示具体步骤、错误码和处理建议，兼容智能应用控制和企业策略。\n- 同一订阅同时刷新不再互相覆盖，刚改的名称、链接、更新间隔不会被还原。\n- 改密码、两步验证等一次性操作只在确定未发出时才改走直连，避免重复提交。\n- 节点诊断指纹不再包含账号凭据，退出登录时清除本地消息缓存。\n",
-  "notesEn": "Current payment amounts and steadier connections.\n\n- Orders and wallet balances refresh when a payment channel adjusts the balance deduction and remaining payment. Review the updated amount before continuing; old payment links are discarded.\n- Windows TUN service installation reports the failed step, error code, and recovery advice, including installations subject to Smart App Control or enterprise policies.\n- Concurrent subscription refreshes preserve your latest name, address, and refresh interval changes.\n- Password and two-step verification operations use a direct connection only when the first request was never sent, avoiding duplicate submissions.\n- Diagnostic node fingerprints no longer include account credentials, and signing out clears the local message cache.\n",
-  "sourceCommit": "aca106a999de6d5b8a566985fc6b78a4a5d1b564",
-  "sha256SumsSha256": "d42d0be5a4d9770c570f16197945f330abce1d3099b794e9bf24dfc719088294",
+  "notes": "支付确认清晰，更新更可靠。\n\n本次维护更新延续近期的连接、订阅和账号改进，并完善发布验证。\n\n- 支付通道调整余额抵扣与待付金额后，订单和钱包会及时刷新；请重新确认金额后继续付款，旧支付链接不会复用。\n- Windows TUN 服务安装失败时显示具体步骤、错误码和处理建议。\n- 同一订阅同时刷新不再互相覆盖，保留最新的名称、链接和更新间隔。\n- 改密码、两步验证等一次性操作避免重复提交；退出登录时清除本地消息缓存。\n",
+  "notesEn": "Clear payment confirmation and reliable updates.\n\nThis maintenance release carries forward recent connection, subscription, and account improvements and strengthens release validation.\n\n- Orders and wallet balances refresh when a payment channel adjusts the balance deduction and remaining payment. Review the updated amount before continuing; old payment links are discarded.\n- Windows TUN service installation reports the failed step, error code, and recovery advice.\n- Concurrent subscription refreshes preserve your latest name, address, and refresh interval changes.\n- Password and two-step verification operations avoid duplicate submissions, and signing out clears the local message cache.\n",
+  "sourceCommit": "630bdce8f0ca046c956b1ddc965811d272a70aa1",
+  "sha256SumsSha256": "f9cba39139a631ec8c40199102aeb214ff5f41cd6cc950dd753f44bc84c62335",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.86/YueLink-1.3.86-android-arm64-v8a.apk",
-      "sha256": "6b578ba6f86f5b79c11ac1d3c6cb32d985d193601b723f1bc0a1fc6ac7448843"
+      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-android-arm64-v8a.apk",
+      "sha256": "72fea163f5241f3b9b391cb6cec22541d410a26e3592d15e40f6e028fac62bb3"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.86/YueLink-1.3.86-android-armeabi-v7a.apk",
-      "sha256": "b8b89054748af498be84a3edcca11dd5a3992f19459664917cd9249719a86d55"
+      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-android-armeabi-v7a.apk",
+      "sha256": "49aab79cd17965eaa778f99586445b15ca7eaab7ab1cfc1f84ea412482a4b137"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.86/YueLink-1.3.86-android-x86_64.apk",
-      "sha256": "9144c0764b9b7f3875432a105bda95273de219ba027a7e0ff17a937d4f56b0c1"
+      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-android-x86_64.apk",
+      "sha256": "390d0893ad81df4ebe3bf5b13520cef9082c10cf6307235e0beaa31f3733a2f8"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.86/YueLink-1.3.86-android-universal.apk",
-      "sha256": "4c775cdff03891e05805bd4e9d102c5b1d0391888ad306f3cc84aaa6341f3eb0"
+      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-android-universal.apk",
+      "sha256": "e2770372ee57d98b696b7200956847f7ae0a480035e38b69a8da99cd40abc8eb"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.86/YueLink-1.3.86-ios.ipa",
-      "sha256": "1c5d74355f159ddf04d80abba6c73a27aff1ac96498aced120cd208724f0e817"
+      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-ios.ipa",
+      "sha256": "c5a149076a3b5b5308fe270d51b47b37f2830c5580f68392f00b534c8d97ca0f"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.86/YueLink-1.3.86-macos-universal.dmg",
-      "sha256": "fd4ddd31d545541097f90d6b2bc5b87b47580c6ef53f106189c6671c34be6e39"
+      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-macos-universal.dmg",
+      "sha256": "3f48217a3251d7b5e88532f0ffa613a91932339bacbe85968616a3c98a6db657"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.86/YueLink-1.3.86-windows-amd64-setup.exe",
-      "sha256": "62eb14787d6e262fe3c45e05b116a18d4f39848680d0f3e90881a42c2d5de6a9"
+      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-windows-amd64-setup.exe",
+      "sha256": "ca77afea30075b553265f38a0ad3e0bd4725084afe400ee2fa841a844c021fd9"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.86/YueLink-1.3.86-windows-amd64-portable.zip",
-      "sha256": "d55376237452f3d4f7f36a9365da8f35ebc6466abf3d1c4a2b34ea04f4238d6e"
+      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-windows-amd64-portable.zip",
+      "sha256": "b9973a02abbc282aad486c1e085e01150d656a6d2ebb7a34eefb5b22fd9302f4"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.86/YueLink-1.3.86-linux-amd64.AppImage",
-      "sha256": "3fa891bebc3845d263479837f3b25e0a51e4fe42cedfe9f7067b84af9cd5daf0"
+      "url": "https://yuetong.app/v1.3.87/YueLink-1.3.87-linux-amd64.AppImage",
+      "sha256": "8b2bb852f8626404bb553909badbb41364370e66c59b5f9d2e0fe3a5b2b0425b"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "d6fee284df0e0ca4aba65c74c3666ac8fcfa21a520bd881f1d7002add34d073f",
-    "sha256SumsSha256": "d42d0be5a4d9770c570f16197945f330abce1d3099b794e9bf24dfc719088294",
-    "payloadBundleSha256": "fbf41efaf405e1843ef832299778f41a3907797830bbd097ba7723fedfbd6473",
+    "candidateSha256": "ccaf774fd2a00ee19d16f6a00ea5d7689f184f09885d7c445e44df78df3a4234",
+    "sha256SumsSha256": "f9cba39139a631ec8c40199102aeb214ff5f41cd6cc950dd753f44bc84c62335",
+    "payloadBundleSha256": "77555d08f715a0e8dfeb3787b978a01923b4f00ce34d5c69bc666d3863ee32ec",
     "payloadCount": 19
   },
-  "sig": "ed25519:NlRnmLak2VgDnRNR6t6ZUbJGWSlVBN90QPu4/hZy7jKu0hU/1tKT8fDN3tTgu7kbbX3uQiMQzgLlxvAs2FmBAg=="
+  "sig": "ed25519:4es2JWfcQtLqSSDpxQbb4f0JhxAZHdN37UkTbdXqcU+DulXLiXl86fZMtWGdumZoFJ8f3ZfxqctxXclYDUhuAw=="
 }
