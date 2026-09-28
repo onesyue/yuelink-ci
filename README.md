@@ -74,8 +74,11 @@ GitHub-verified before the script can create a signed annotated public tag.
 The remote tag namespace is handled idempotently: an existing name succeeds
 only when it is annotated, peels to the exact builder commit and has a
 GitHub `verified/valid` signature; an uncertain push is followed by a fresh
-remote read. New and existing tags are both polled for GitHub verification,
-and the script never deletes, overwrites or re-tags a failed immutable name.
+remote read. Tag-existence reads retry at most three times with one- and
+two-second pauses; an exhausted transport failure never counts as absence.
+Only the read is retried, not the tag mutation. New and existing tags are both
+polled for GitHub verification, and the script
+never deletes, overwrites or re-tags a failed immutable name.
 Before any push, a retained local annotated tag must also match the complete
 expected annotation bytes; matching only the builder commit is insufficient.
 Both repositories therefore authenticate the selected source and builder

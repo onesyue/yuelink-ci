@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.85",
+  "channel": "stable",
+  "publishedAt": "2026-09-28T08:19:42Z",
+  "expiresAt": "2026-11-02T08:19:42Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "修复 Windows TUN 服务安装，订阅更可靠。\n\n- Windows：修复部分电脑安装 TUN 服务失败、只提示「操作失败」的问题；失败时会显示具体步骤、错误码和处理建议。\n- 订阅：同一订阅同时刷新不再互相覆盖，刚做的修改不会被还原；刷新中途改了链接会自动作废这次刷新。\n- 订阅地址读取失败时保留为远程订阅并自动重试，不再退化成永不更新的本地配置。\n- 改密码、两步验证等一次性操作只在确定未发出时才改走直连，绝不重复提交。\n- 节点诊断指纹不再包含账号凭据。\n- 邀请码生成不再自动重试；到期提醒按账号去重；退出登录清除本地消息缓存。\n",
+  "notesEn": "Windows TUN service install fixed; more reliable subscriptions.\n\n- Windows: fixes TUN service installation failing with only \"Operation failed\" on some PCs (for example with Smart App Control or enterprise policy); a failure now names the step, the error code and what to do next.\n- Subscriptions: refreshing the same subscription twice at once no longer overwrites itself, so edits you just made are kept; a refresh is discarded if its link changed mid-way.\n- If the saved subscription address cannot be read, the subscription stays remote and retries instead of silently turning into a local config that never updates.\n- One-shot actions such as changing your password or two-step verification fall back to a direct connection only when the request provably never left the device, so nothing is submitted twice.\n- Node diagnostic fingerprints no longer include any account credential.\n- Invite-code generation is not retried automatically, expiry reminders are de-duplicated per account, and signing out clears the local message cache.\n",
+  "sourceCommit": "00460bb25c5aa6cd94be81c1a837e382ef85fe70",
+  "sha256SumsSha256": "e6988e54f644868796c64b6b966ed161623b7ef934684241c4e159a965bf89a2",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.85/YueLink-1.3.85-android-arm64-v8a.apk",
+      "sha256": "0da028c3c6b3cf590ac914eb524f4ca4bfdb06ba28d01a98ffb7c0ad9dd29803"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.85/YueLink-1.3.85-android-armeabi-v7a.apk",
+      "sha256": "c9921c14e76addc0cd2177213c1c14d9a720fcc5a3ccb480cbcdc8e3e515ca6d"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.85/YueLink-1.3.85-android-x86_64.apk",
+      "sha256": "860c59bce7354d83cd7f7860e433ad10473eaeace018ebf268a0ca25c6d064e3"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.85/YueLink-1.3.85-android-universal.apk",
+      "sha256": "9f1f517c43f01da759885282566e5c005a65137f43a2a3f016674db0bd19afb0"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.85/YueLink-1.3.85-ios.ipa",
+      "sha256": "51106841dae3e22607ff832d1314078a4e393bced4fb775b8cdb3fa5d655ddb3"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.85/YueLink-1.3.85-macos-universal.dmg",
+      "sha256": "a4cdb57875210dd093745b0037eea899a7d6d1b8010266e0eb43d3521c8014f6"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.85/YueLink-1.3.85-windows-amd64-setup.exe",
+      "sha256": "460c5e4a29fb599168e85e3a3c3f65f79f7e945b546e179a3632320dd87f6b1a"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.85/YueLink-1.3.85-windows-amd64-portable.zip",
+      "sha256": "04f88cf3a4a2a21e81d1590bc3b9673bf51e8ed9e5b824fae77a94cb33adea25"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.85/YueLink-1.3.85-linux-amd64.AppImage",
+      "sha256": "fdbef1b79403565a0467bd4f3499df47061247ae11b9163865000ced07330ddd"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "3fb18f7a86fb6b3b6368ba8e7ada0f08a91687ac1d990e3763e02bf1292567ba",
+    "sha256SumsSha256": "e6988e54f644868796c64b6b966ed161623b7ef934684241c4e159a965bf89a2",
+    "payloadBundleSha256": "5764de0c5f544b05b9f15ef86dcfbe0a1ae284fa68d543dfe46a9afc6722d342",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:ms0g9KxMFQADJ3HsrZR0spZL9Frg1O8A1TTt2btxpLC1Oo5SKkoicZqgdqluI4rBTsbubxZlFRmB7ONx6grfDA=="
+}

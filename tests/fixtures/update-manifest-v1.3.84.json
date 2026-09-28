@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.84",
+  "channel": "stable",
+  "publishedAt": "2026-09-28T05:19:44Z",
+  "expiresAt": "2026-11-02T05:19:44Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "全新界面，两步验证，连接更稳。\n\n- 全新界面：「我的」页重做，账户卡一眼看清剩余流量、到期与续费；全部页面统一卡片布局，宽屏两列、手机单列，亮暗主题对比度校正。\n- 两步验证：在「我的 → 两步验证」直接开启、查看或重新生成恢复码、解除，可一键在验证器中打开。\n- 连接更稳：内核 API 异常时不再反复重启掐断连接；桌面 TUN 自检指数退避；IPv6 地址轮换不再触发切网清理；退出不遗留服务模式内核；安卓磁贴不再卡在「连接中」；macOS 恢复后还原系统 DNS。\n- 登录：入口慢时不再重复发送登录请求；退出登录同时作废服务端会话；强制升级检查依次尝试所有入口。\n- 隐私：关闭诊断后立即停止一切上报；脱敏更彻底；本地可用配置仅本人可读。\n- 修复礼品卡改码、批量更新提示、点当前节点断连、工单/消息/返利/会员中心不刷新等问题；订阅下载设 32 MB 上限。\n",
+  "notesEn": "A redesigned app, two-step verification, and a steadier connection.\n\n- New look: the Me tab is rebuilt around an account card that shows remaining data, expiry and a renew button, with entries grouped into Account, Connection, Help & support and App. Every other screen — home, nodes, store, member hub, wallet, tickets, messages, settings and video — now shares one card layout and spacing, uses two columns on wide screens, and has corrected light and dark contrast.\n- Two-step verification: turn it on, view or regenerate recovery codes, or turn it off under Me → Two-step verification, and open the key straight in your authenticator app.\n- Steadier connection: no more repeated core restarts that dropped every connection when the core API stalled; the desktop TUN self-check backs off exponentially; IPv6 temporary-address rotation is no longer treated as a network change; quitting no longer leaves a service-mode core running; the Android quick tile no longer sticks on \"Connecting\"; macOS restores system DNS after recovering.\n- Sign-in: a slow entry point no longer causes duplicate sign-in requests; signing out also revokes the server session; forced-upgrade checks try every entry point.\n- Privacy: turning off diagnostics stops all reporting immediately; paths, passwords and subscription tokens are redacted more thoroughly; the saved working config is readable only by you.\n- Fixes for gift-card code changes, bulk update and import results, tapping the current node, and refreshing tickets, messages, rebates and the member hub; subscription downloads are capped at 32 MB.\n",
+  "sourceCommit": "b847a821e8480c1aa67525ec0154a75614b6752b",
+  "sha256SumsSha256": "ac22e1936cd6d692fddb1efae64ff282c490f5b2f19c2fa79a98ca72f3713562",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.84/YueLink-1.3.84-android-arm64-v8a.apk",
+      "sha256": "6bcb8400e8c7c1d0de3f1a433a866df9aa94739aee31097504d64069f048825b"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.84/YueLink-1.3.84-android-armeabi-v7a.apk",
+      "sha256": "68974c2f3bd65db6ca86fd0ffa36f56515814e42c79a6c277fa7bb32b76f441c"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.84/YueLink-1.3.84-android-x86_64.apk",
+      "sha256": "66166303ee63414e74a32592eb6b52e2f315e925a3ae2ec4cdbe599e31b37d96"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.84/YueLink-1.3.84-android-universal.apk",
+      "sha256": "abc85d73b2971fcfda31e93380ef072d10c825c3bd5012cc927bde977fac06f4"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.84/YueLink-1.3.84-ios.ipa",
+      "sha256": "517455e508ddeff83d5d4cf568e5f1b1496bd6f999e34545f87eee0db6859ad2"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.84/YueLink-1.3.84-macos-universal.dmg",
+      "sha256": "3839af5c78dcb091cdbb9030bacdf1a73d9fd42ccbc87b475acdb93e9c4525b2"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.84/YueLink-1.3.84-windows-amd64-setup.exe",
+      "sha256": "5729ee542f2692fb1d211560eb5c4b4ae780f4568a66999bbbd05af4dda350d4"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.84/YueLink-1.3.84-windows-amd64-portable.zip",
+      "sha256": "4826998f33792e4fd71e19a06fe2e24dc1b79ecbd1a2cddab371636669e53e31"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.84/YueLink-1.3.84-linux-amd64.AppImage",
+      "sha256": "954366df36470cdbb90b74f7bea06e2876b5a6b9e2b3119522c78428373a3726"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "6298b2053ac6576d793ae8723b25afb074a0089dffa656eb12bc7a76b4a1f903",
+    "sha256SumsSha256": "ac22e1936cd6d692fddb1efae64ff282c490f5b2f19c2fa79a98ca72f3713562",
+    "payloadBundleSha256": "264a04d08c59ba0c367b5f17980829d0d8813ce60ce99959b91cefc536567a80",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:UEomDvMp8Z1msdHsDJrpyfWIP4tKEqnTcrxnxPQyjmGV35b6H5a59qK7HKPKcRS9Lx7t+hz0RynYTssVTeGuCA=="
+}

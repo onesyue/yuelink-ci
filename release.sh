@@ -175,19 +175,25 @@ gh api \
 echo "✓ 工作区、远端私仓 tag workflow、公开镜像和 tag 状态均已验证"
 
 remote_public_tag_state() {
-  local status
-  set +e
-  git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1
-  status=$?
-  set -e
-  case "$status" in
-    0) echo exists ;;
-    2) echo absent ;;
-    *)
-      echo "::error::无法确定远端 public tag 状态（git ls-remote exit=${status}）；拒绝把网络错误当作不存在。" >&2
-      return 1
-      ;;
-  esac
+  local status attempt
+  # Only this read is replayed. A transient transport failure does not prove
+  # absence, and an uncertain push must still be resolved by remote readback.
+  for attempt in 1 2 3; do
+    set +e
+    git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1
+    status=$?
+    set -e
+    case "$status" in
+      0) echo exists; return 0 ;;
+      2) echo absent; return 0 ;;
+    esac
+    if [ "$attempt" -lt 3 ]; then
+      echo "::notice::远端 tag 读取失败（git ls-remote exit=${status}）；重试只读查询 ${attempt}/3。" >&2
+      sleep "$attempt"
+    fi
+  done
+  echo "::error::无法确定远端 public tag 状态（git ls-remote exit=${status}）；拒绝把网络错误当作不存在。" >&2
+  return 1
 }
 
 inspect_remote_public_tag() {
