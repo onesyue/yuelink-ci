@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.91",
+  "version": "1.3.92",
   "channel": "stable",
-  "publishedAt": "2026-09-29T03:18:25Z",
-  "expiresAt": "2026-11-03T03:18:25Z",
+  "publishedAt": "2026-09-29T07:50:17Z",
+  "expiresAt": "2026-11-03T07:50:17Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "代理更轻，切换更稳。\n\n- macOS、Windows、Linux GNOME 的代理关键操作改用原生系统 API，减少外部进程开销；macOS TUN DNS 恢复也采用原生接口。\n- 改进代理配置失败后的清理，避免部分设置残留；校验代理地址、端口及各协议的一致性。\n- 降低大订阅节点状态刷新时的临时内存和编码耗时。\n\n保留现有移动端 VPN、桌面 TUN 兼容策略及 Linux KDE 配置兼容路径。实际公网速度仍受线路、运营商、服务器和设备影响。\n\nmacOS：复用已安装的系统服务完成原生配置，避免每次切换都触发短期授权；服务不可用时保留兼容路径。最低系统要求与 Go 内核统一为 macOS 13。\n",
-  "notesEn": "Lighter proxy management and more reliable switching.\n\n- Key system proxy operations now use native APIs on macOS, Windows and Linux GNOME, reducing external process overhead. macOS TUN DNS recovery also uses native APIs.\n- Improved cleanup after partially applied proxy settings and stricter checks for proxy addresses, ports and protocols.\n- Reduced temporary allocations and encoding time when refreshing large node lists.\n\nExisting mobile VPN and desktop TUN compatibility policies remain in place, including the Linux KDE compatibility path. Internet speeds still depend on routes, carriers, servers and devices.\n\nmacOS: native writes reuse the installed privileged service to avoid repeated authorization prompts. A compatibility path remains available when the service is unavailable. The minimum system requirement now matches the Go core: macOS 13.\n",
-  "sourceCommit": "2e9bb0cfdbf40eb0b891b7f01fb435a865f8487f",
-  "sha256SumsSha256": "c7f0f85c1595965167566fb931dfd3d7ccca5dd00ade9ba7b2aa6c5b04679507",
+  "notes": "连接检测与修复反馈更准确。\n\n- 连接未就绪或测试期间发生变化时，明确显示“尚未验证”，避免直连结果掩盖代理问题。\n- 测试目标必须返回预期响应，网页拦截和重定向不再显示正常；测试等待有明确上限。\n- 重启和修复执行完会提示继续检测，不再把操作完成当作连接已经恢复。客服诊断入口保持一致。\n- 服务器暂时无法接收诊断时，对重要事件有限重试，并保持关闭诊断后的清理行为。\n\n手动测试只证明本次目标可达，其他应用、网站与系统接管情况仍需分别确认。\n",
+  "notesEn": "Clearer connection checks and repair results.\n\n- Connection checks now show “Not yet verified” when the proxy is unavailable or changes during the test, so a direct connection cannot hide a proxy problem.\n- The test requires the expected response from its target. Intercepted pages and redirects no longer count as success, and the test has a fixed time limit.\n- Restart and repair actions prompt you to check the connection afterward. Completing an action does not imply that connectivity has recovered; support diagnostics use the same distinction.\n- Important diagnostic events receive a limited number of retries when the server cannot accept them. Turning off diagnostics still clears pending events.\n\nA manual test verifies access to its target through the local proxy at that moment. Other apps, websites and system traffic routing need separate checks.\n",
+  "sourceCommit": "09be419b286f6e28861751c8d0d9496daf895168",
+  "sha256SumsSha256": "889b47fbde6ac0eba6b4a36a534aa78f1a0d38339d63d21b4c6022153c5765fd",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.91/YueLink-1.3.91-android-arm64-v8a.apk",
-      "sha256": "3e1588ac5c430ef8d636181c778cd68594d99e16f114141e906fb74b536a92ff"
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-android-arm64-v8a.apk",
+      "sha256": "b8a61b2f287e5a04282d7c03a5093b444a97507327752af0b9f89a29289737c6"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.91/YueLink-1.3.91-android-armeabi-v7a.apk",
-      "sha256": "f740954901b9bccd57102d08b79142cab1a84d9761eaff31de31f53a62b810a5"
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-android-armeabi-v7a.apk",
+      "sha256": "8acaac13c00d7d3c6f2d8c0b63b75f19a1576196b50711af65d703e93885554b"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.91/YueLink-1.3.91-android-x86_64.apk",
-      "sha256": "fce4d67a1e089de608b872dbdbfd1865f5eff86baa9575c1b93e61320b242261"
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-android-x86_64.apk",
+      "sha256": "37ec5fefbe0ea1553ac8fa4318b897f1be84aff741cd40a5e7ebf05f1419e396"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.91/YueLink-1.3.91-android-universal.apk",
-      "sha256": "0d0b364d33da6cc7df7db280727dadbbc373a9069f46dba55a72ffebbb68f134"
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-android-universal.apk",
+      "sha256": "e34db4c966bdef6ff8eb32d63eeb4958913e7a90011a5c8c98801b5a8a6e8474"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.91/YueLink-1.3.91-ios.ipa",
-      "sha256": "4a4fcc578ccd9b8247cd4b94493a1e9657b5e3e2532c9b1cfee3decd3021355a"
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-ios.ipa",
+      "sha256": "127ef137f8a681bd07a45c003cae094a7bfc50caca16cc81ef2d2f342d3cdfe7"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.91/YueLink-1.3.91-macos-universal.dmg",
-      "sha256": "2ba1e70a6986f62fc9390ea66a9f6edf68edfaa0b464d110196a22580657b439"
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-macos-universal.dmg",
+      "sha256": "8ff7e223651ec0df72319b554dcfdd7f86b86095cbf0272ad08886f6b612f7cc"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.91/YueLink-1.3.91-windows-amd64-setup.exe",
-      "sha256": "8d4f9eaf9a743205ff9be174980042783c6e523686e1e6e1150ecbeae26c4e67"
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-windows-amd64-setup.exe",
+      "sha256": "a2886f58272f7cfb295b5766cb4389100b7bbcc1047c658bcea103013c01eb05"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.91/YueLink-1.3.91-windows-amd64-portable.zip",
-      "sha256": "9dcfb6663916fdfb48264dd0074daf854076fc919845988c30a4879e57477cdb"
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-windows-amd64-portable.zip",
+      "sha256": "5f17c05f0410d6cda71d250dd7064a0e56977449a26fb88aa9e100177910da24"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.91/YueLink-1.3.91-linux-amd64.AppImage",
-      "sha256": "8ff64b0b9bbea70ef68dd6872518f415c0902507a38c00c39a2eae023f3247a7"
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-linux-amd64.AppImage",
+      "sha256": "e045465debb152b4338ea837f4d8b1b6cc296f1810a963c57e81ecec1f69fdbf"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "537e6f393c075c0bfeef7d882420aa9527fac742b911e4467f517e4ccbec14d7",
-    "sha256SumsSha256": "c7f0f85c1595965167566fb931dfd3d7ccca5dd00ade9ba7b2aa6c5b04679507",
-    "payloadBundleSha256": "2f47f79e9524003fbd50b42a3231af1ce918ba85f1ddab0beb7e7d952f9172bf",
+    "candidateSha256": "00f2056a5a59e8f7eb9bce75c1433023cf5d422e756b4efd9df4a8810e7bb822",
+    "sha256SumsSha256": "889b47fbde6ac0eba6b4a36a534aa78f1a0d38339d63d21b4c6022153c5765fd",
+    "payloadBundleSha256": "c17c174fecbc107bb7ba9e215f0564b348d2047c86b726928bb63703114078bb",
     "payloadCount": 19
   },
-  "sig": "ed25519:6kUi1TH2vLHB2WOybAx0ocPtzQ0M9pYRsjWlXMxz5KJ5VT88Zj3gzzPJoJcIeQCfw5wshFzJb/AIfOMHyidkDg=="
+  "sig": "ed25519:+Juw8nbRNOOES1vrDF7emO9Q12+6TJ0t0bdbWx1X7wNeG1XANc6aI6Z91k7PgpR664k7jbhKNRLvaKRQtRD6Bg=="
 }
