@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.88",
+  "channel": "stable",
+  "publishedAt": "2026-09-28T15:46:28Z",
+  "expiresAt": "2026-11-02T15:46:28Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "返佣规则与欠额更清楚。\n\n- 邀请返利页说明佣金仅按在线实付部分计算，余额支付不计佣，退款后追回对应佣金。\n- 会员返利卡和入口正确显示账号专属返佣比例，明确档位按有效邀请消费金额计算。\n- 钱包、邀请页、会员卡和提现页将负佣金显示为「佣金欠额」，并说明后续佣金优先抵扣欠额；欠额说明支持窄屏和大字号换行。\n",
+  "notesEn": "Clearer commissions and outstanding debt.\n\n- The referral page explains that only online payments earn commission. Balance payments are excluded, and refunds reverse the associated commission.\n- Referral cards and shortcuts show your account's effective rebate rate, including personal rates, and explain that tiers depend on eligible referred spending.\n- The wallet, referral page, member card and withdrawal page show negative commission as outstanding debt. The repayment explanation wraps on narrow screens and with larger text.\n",
+  "sourceCommit": "116d118db52c46fda99957beac5523e09ea13f94",
+  "sha256SumsSha256": "911ec28b9cefba2101bb946d7c401c36218e6344707a0aa6579efcf18d97b7e5",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-android-arm64-v8a.apk",
+      "sha256": "1df6024c7ae14cd72a3a7afa81214f9b5fe2f8ec95d81086ad749706558f5568"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-android-armeabi-v7a.apk",
+      "sha256": "31ce4446e3f3f9bc99c876f0a115a5529f3a005246cce040698900663bcfe8ed"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-android-x86_64.apk",
+      "sha256": "923112dd3b67470739f8c753899a798386ab653ee46ea0d35e1d234c769a3152"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-android-universal.apk",
+      "sha256": "bd31be2c5540ec0a2b3c3ddf85bfddef9ae90a98fe96ee50a682b7c85570fe8d"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-ios.ipa",
+      "sha256": "95f5390a4824cd5c52f0817a888b902ff781456eb956337971df52110b44170c"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-macos-universal.dmg",
+      "sha256": "53867751635ba254b4089b1cadb51ffb1477dd4e3f61572824470a198b465a01"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-windows-amd64-setup.exe",
+      "sha256": "d212077a1f1e985e9b772c161b47ea8c39a3ebbd25f9d1c247bba099c980f880"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-windows-amd64-portable.zip",
+      "sha256": "a7d05704a2433fd28df343ea4aa583419b6624a0f312a97c7feb5debf845ab26"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.88/YueLink-1.3.88-linux-amd64.AppImage",
+      "sha256": "4be4e0afa82e863a3cff592505dce65cb65b2fb372a221c48d70513535b7ae33"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "44b5c7b4960160b31bc4401e764e62b7f1618d6e4fcc4f6fa794ddded888c550",
+    "sha256SumsSha256": "911ec28b9cefba2101bb946d7c401c36218e6344707a0aa6579efcf18d97b7e5",
+    "payloadBundleSha256": "f3465bf880de5c100bdd78286913577f5bdd932ebe1394d053a16dfad192fac5",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:SSN30SRB4PPYE/L+htaQJqwci+b5sUCG/U4/maT44ODe7crdABPg6QJTSj8drEfYHaERDo5aeX173IIe3bS+Cw=="
+}
