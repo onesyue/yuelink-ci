@@ -124,6 +124,7 @@ residue, workflow policy, the full Flutter suite with a reviewed floor of 2044
 tests, the release security scanner, Wintun hashes, release metadata and
 manifest schema, full-history Gitleaks, core and service production-target
 govulncheck, a real Linux kernel TUN transfer in an isolated network namespace,
+Linux native GSettings with explicit desktop schemas and a missing-schema probe,
 macOS integration tests, native proxy IPC and root-only isolated preferences
 commit probes, service request/race tests, and the Windows durability probe. Before
 release tags, Windows also builds the native DLL, packages it as ZIP and runs

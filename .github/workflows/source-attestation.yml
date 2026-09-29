@@ -314,6 +314,13 @@ jobs:
         working-directory: service
         run: CGO_ENABLED=1 go test -mod=readonly -race ./...
 
+      - name: Verify native Linux proxy backend before release tags
+        if: matrix.module == 'service'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends g++ pkg-config libglib2.0-dev gsettings-desktop-schemas
+          bash scripts/ci/test_native_network_settings.sh
+
   macos_integration:
     name: Integration tests (macOS)
     runs-on: macos-26
