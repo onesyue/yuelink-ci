@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.92",
+  "channel": "stable",
+  "publishedAt": "2026-09-29T07:50:17Z",
+  "expiresAt": "2026-11-03T07:50:17Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "连接检测与修复反馈更准确。\n\n- 连接未就绪或测试期间发生变化时，明确显示“尚未验证”，避免直连结果掩盖代理问题。\n- 测试目标必须返回预期响应，网页拦截和重定向不再显示正常；测试等待有明确上限。\n- 重启和修复执行完会提示继续检测，不再把操作完成当作连接已经恢复。客服诊断入口保持一致。\n- 服务器暂时无法接收诊断时，对重要事件有限重试，并保持关闭诊断后的清理行为。\n\n手动测试只证明本次目标可达，其他应用、网站与系统接管情况仍需分别确认。\n",
+  "notesEn": "Clearer connection checks and repair results.\n\n- Connection checks now show “Not yet verified” when the proxy is unavailable or changes during the test, so a direct connection cannot hide a proxy problem.\n- The test requires the expected response from its target. Intercepted pages and redirects no longer count as success, and the test has a fixed time limit.\n- Restart and repair actions prompt you to check the connection afterward. Completing an action does not imply that connectivity has recovered; support diagnostics use the same distinction.\n- Important diagnostic events receive a limited number of retries when the server cannot accept them. Turning off diagnostics still clears pending events.\n\nA manual test verifies access to its target through the local proxy at that moment. Other apps, websites and system traffic routing need separate checks.\n",
+  "sourceCommit": "09be419b286f6e28861751c8d0d9496daf895168",
+  "sha256SumsSha256": "889b47fbde6ac0eba6b4a36a534aa78f1a0d38339d63d21b4c6022153c5765fd",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-android-arm64-v8a.apk",
+      "sha256": "b8a61b2f287e5a04282d7c03a5093b444a97507327752af0b9f89a29289737c6"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-android-armeabi-v7a.apk",
+      "sha256": "8acaac13c00d7d3c6f2d8c0b63b75f19a1576196b50711af65d703e93885554b"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-android-x86_64.apk",
+      "sha256": "37ec5fefbe0ea1553ac8fa4318b897f1be84aff741cd40a5e7ebf05f1419e396"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-android-universal.apk",
+      "sha256": "e34db4c966bdef6ff8eb32d63eeb4958913e7a90011a5c8c98801b5a8a6e8474"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-ios.ipa",
+      "sha256": "127ef137f8a681bd07a45c003cae094a7bfc50caca16cc81ef2d2f342d3cdfe7"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-macos-universal.dmg",
+      "sha256": "8ff7e223651ec0df72319b554dcfdd7f86b86095cbf0272ad08886f6b612f7cc"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-windows-amd64-setup.exe",
+      "sha256": "a2886f58272f7cfb295b5766cb4389100b7bbcc1047c658bcea103013c01eb05"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-windows-amd64-portable.zip",
+      "sha256": "5f17c05f0410d6cda71d250dd7064a0e56977449a26fb88aa9e100177910da24"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.92/YueLink-1.3.92-linux-amd64.AppImage",
+      "sha256": "e045465debb152b4338ea837f4d8b1b6cc296f1810a963c57e81ecec1f69fdbf"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "00f2056a5a59e8f7eb9bce75c1433023cf5d422e756b4efd9df4a8810e7bb822",
+    "sha256SumsSha256": "889b47fbde6ac0eba6b4a36a534aa78f1a0d38339d63d21b4c6022153c5765fd",
+    "payloadBundleSha256": "c17c174fecbc107bb7ba9e215f0564b348d2047c86b726928bb63703114078bb",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:+Juw8nbRNOOES1vrDF7emO9Q12+6TJ0t0bdbWx1X7wNeG1XANc6aI6Z91k7PgpR664k7jbhKNRLvaKRQtRD6Bg=="
+}
