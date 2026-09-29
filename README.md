@@ -123,7 +123,8 @@ release-signing contract, Flutter analysis, architecture imports, CocoaPods
 residue, workflow policy, the full Flutter suite with a reviewed floor of 2044
 tests, the release security scanner, Wintun hashes, release metadata and
 manifest schema, full-history Gitleaks, core and service production-target
-govulncheck, macOS integration tests, and the Windows durability probe. Before
+govulncheck, a real Linux kernel TUN transfer in an isolated network namespace,
+macOS integration tests, and the Windows durability probe. Before
 release tags, Windows also builds the native DLL, packages it as ZIP and runs
 three complete startup/traffic/shutdown cycles with required engine leases.
 Real listening and closed loopback sockets verify the refusal/rebind check;

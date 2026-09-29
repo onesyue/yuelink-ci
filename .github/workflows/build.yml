@@ -863,6 +863,7 @@ jobs:
       - name: Build macOS
         if: matrix.platform == 'macos'
         run: |
+          bash scripts/ci/test_native_network_settings.sh
           flutter build macos --release \
             --build-name="$APP_VERSION" \
             --build-number="$BUILD_NUM"
@@ -1076,6 +1077,7 @@ jobs:
         if: matrix.platform == 'windows'
         shell: bash
         run: |
+          flutter test test/services/native_proxy_settings_test.dart
           flutter config --enable-windows-desktop
           flutter build windows --release \
             --build-name="$APP_VERSION" \
@@ -1277,6 +1279,7 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           export PATH="/usr/bin:$PATH"
+          bash scripts/ci/test_native_network_settings.sh
           curl-config --features | grep -q AsynchDNS
           flutter config --enable-linux-desktop
           flutter build linux --release \

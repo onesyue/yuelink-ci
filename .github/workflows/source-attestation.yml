@@ -305,6 +305,10 @@ jobs:
           MODULE: ${{ matrix.module }}
         run: bash scripts/ci/govulncheck_targets.sh "$MODULE"
 
+      - name: Exercise real TUN in an isolated network namespace
+        if: matrix.module == 'core'
+        run: bash scripts/ci/test_native_tun.sh
+
   macos_integration:
     name: Integration tests (macOS)
     runs-on: macos-26
