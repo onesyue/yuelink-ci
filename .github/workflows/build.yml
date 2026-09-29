@@ -863,7 +863,8 @@ jobs:
       - name: Build macOS
         if: matrix.platform == 'macos'
         run: |
-          bash scripts/ci/test_native_network_settings.sh
+          YUELINK_REQUIRE_ROOT_PREFS=1 bash scripts/ci/test_native_network_settings.sh
+          (cd service && CGO_ENABLED=1 go test -mod=readonly -race ./...)
           flutter build macos --release \
             --build-name="$APP_VERSION" \
             --build-number="$BUILD_NUM"
