@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.95",
+  "version": "1.3.96",
   "channel": "stable",
-  "publishedAt": "2026-09-29T23:14:55Z",
-  "expiresAt": "2026-11-03T23:14:55Z",
+  "publishedAt": "2026-09-30T02:05:02Z",
+  "expiresAt": "2026-11-04T02:05:02Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "自动可关闭，手选会记住。\n\n- 自动选择改为明确开关，关闭时保留当前具体节点，再次开启恢复自动选线。\n- 点击自动组里已经选中的节点，也能切换为手动选择；无法固定具体节点时给出提示，不再把自动聚合组当作固定节点。\n- 按订阅记住各分组的明确选择，在启动、重连和订阅更新后恢复；订阅默认值调整不会覆盖这些选择。\n- 自动选择开关只影响主选择组；AI 等独立分组继续使用各自选择。需要稳定线路时，请在对应分组选择具体节点。\n\n手动选择保持节点名称，不承诺供应商出口 IP 永久不变；订阅移除节点后应重新选择可用节点。\n",
-  "notesEn": "Turn auto selection off and remember your node.\n\n- Automatic selection has an explicit switch. Turning it off keeps the current individual node; turning it on restores automatic selection.\n- Tapping the currently selected node inside an automatic group can also select it manually. If that node cannot be selected, the app explains why instead of treating an automatic pool as a fixed node.\n- Explicit selections are saved per subscription and restored after startup, reconnection and subscription updates. Template default changes no longer override them.\n- The switch controls the main selection group. Independent groups such as AI keep their own choices; select an individual node in the relevant group when you need a stable route.\n\nA manual choice keeps the node name, not a guarantee that its provider will never change its exit IP. Choose another available node if the subscription removes it.\n",
-  "sourceCommit": "bb03d437720197e6896afc1cc24ea9357f7b9e90",
-  "sha256SumsSha256": "c1ec7bd1906bf14f7dffd6c41d5dad596940cc1ad7c913d200fb398f4e8c1a9e",
+  "notes": "选线更简洁，减少意外断流。\n\n- 测速失败和后台出口探测超时不再打断已有连接，也不再清空 DNS 缓存。\n- 默认开启统一延迟；测速失败只重试一次，分组测速等待最长 40 秒。\n- 切换线路只清理该分组的旧连接，保留其他分组和已使用新线路的连接。\n\n- 移除线路页“自动选择已开启”模块和独立开关，直接在分组内选择具体节点或自动组。\n- 保留按订阅记住的手动选择；点击自动组当前节点仍可选择该具体节点，AI 等独立分组继续使用各自的选择。\n- 测速进度直接显示在按钮和节点上，移除重复的开始提示。\n- 断开连接或使用直连模式时，托盘不再显示无效的“连接最佳节点”入口。\n- 托盘“最近线路”仅在连接可切换时显示；重复点选当前线路不重切，切换失败不再提示成功。\n- Android 通知中的“切换线路”直接打开线路页，由你选择所需线路。\n",
+  "notesEn": "Simpler route selection, fewer unintended interruptions.\n\n- Failed latency tests and background egress probes no longer close existing connections or flush the DNS cache.\n- Unified delay is enabled by default. Failed group tests retry once, with a 40-second overall wait limit.\n- Switching a route retires old connections in that group while preserving other groups and connections already using the new route.\n\n- Removed the automatic-selection status panel and its separate switch. Choose an individual node or an automatic group directly from the group list.\n- Manual selections are still remembered per subscription. Tapping the current node inside an automatic group can still select that individual node; independent groups such as AI keep their own choices.\n- Speed-test progress remains visible on the button and nodes, with the redundant start notification removed.\n- The tray no longer offers “Connect best node” while disconnected or in direct mode.\n- Recent-node tray shortcuts appear only when the connection can switch routes. Selecting the current node does nothing, and failed switches no longer report success.\n- “Switch node” in the Android notification opens the route list so you can choose the node you want.\n",
+  "sourceCommit": "5a5ff071be86f4ebd932e689059d737e5625ad83",
+  "sha256SumsSha256": "4da5763025f63aa2e8fb2ec2ab8541daa14b8ae374b62c26ede5375496714261",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.95/YueLink-1.3.95-android-arm64-v8a.apk",
-      "sha256": "a431bcc3c9ae4dc94123e98b414349e2989fbc9c118abdb0f32d7cc685986a77"
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-android-arm64-v8a.apk",
+      "sha256": "be1fccf91af3b4467ecd47892d3a64944de67537aad711ede99278038b2054ef"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.95/YueLink-1.3.95-android-armeabi-v7a.apk",
-      "sha256": "899c8a3f782090b7425cf33b99fc8dac3858c016e0ae32b116c1e27cd5e87016"
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-android-armeabi-v7a.apk",
+      "sha256": "f18c170f5f46df2e606d58b227fe8667956b7bf79e68086254499bbd264f65e4"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.95/YueLink-1.3.95-android-x86_64.apk",
-      "sha256": "c25322a5933e2acd2e71f208e7a26d2eb4b3d94913e311ca5b13eda8e13dd700"
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-android-x86_64.apk",
+      "sha256": "bcb0a4136c4265b0a86269fabe45fea6bba4e6bda96a7552e96b73ec6909cf62"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.95/YueLink-1.3.95-android-universal.apk",
-      "sha256": "0173e13bb93302c69ec9b7aabf21b553b3db87637f5a89482ece41ab5bf269f5"
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-android-universal.apk",
+      "sha256": "17be0897b4083ae20e6397d0e959363993220e72e9ccb09e10f1fb75f57f79b3"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.95/YueLink-1.3.95-ios.ipa",
-      "sha256": "138de5685b52690d7cd621f0ae41be658fa1d36545eafcea244390ec7f126ea3"
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-ios.ipa",
+      "sha256": "484bb2a49605e40cbf0fa9138f47ad77b3d6abe42cfa22a59c8f1bab7aef1546"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.95/YueLink-1.3.95-macos-universal.dmg",
-      "sha256": "8f9a860e362f73a980062333006669308155c607515f69955b7eec64b6bd613e"
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-macos-universal.dmg",
+      "sha256": "2e494d640f77099f86a060fbbffb9fb635288815ef625f87620dc656d58a938a"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.95/YueLink-1.3.95-windows-amd64-setup.exe",
-      "sha256": "e5e4dac48f9358c2bf40fd2732d0b8eae905c960d4d4c769fc646652393f864f"
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-windows-amd64-setup.exe",
+      "sha256": "bf9a647073d55925b14c0db2b9f591f2ac1091b7522f99204537a941a6b644e9"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.95/YueLink-1.3.95-windows-amd64-portable.zip",
-      "sha256": "e77947edd7e6d7a9a00d3b5d3178ded1b1e6d8e7603e1b01ed027dea38b213eb"
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-windows-amd64-portable.zip",
+      "sha256": "297ea70b461dc8fa71f7aa74c73f98a3d2e599e04745755d48749f0a16a5b957"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.95/YueLink-1.3.95-linux-amd64.AppImage",
-      "sha256": "4d1771f6ed89c0301c7f2cb21b2e2e8cd0dd38f99d21e98bd8731114c8b14a1a"
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-linux-amd64.AppImage",
+      "sha256": "086c3313312f7eff7f29108af121263f14e070e66255d6684a3198f1451811e9"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "9a54934de0d483012d58eafaba2931ff599dd2a32902dd22870d51b062770469",
-    "sha256SumsSha256": "c1ec7bd1906bf14f7dffd6c41d5dad596940cc1ad7c913d200fb398f4e8c1a9e",
-    "payloadBundleSha256": "7d22b6f9161cbfac6138e6464125c3a7f9c1187aa6bbafe1b79c5880b644c401",
+    "candidateSha256": "0ba3abbbd1b7e5aba274bc7c76b8836a1601ebe09f4543f768b372a05876c866",
+    "sha256SumsSha256": "4da5763025f63aa2e8fb2ec2ab8541daa14b8ae374b62c26ede5375496714261",
+    "payloadBundleSha256": "447c05ddf13f54a5bf7c85402a8a672b608c8fb78eea2ba4b21627233ab1673a",
     "payloadCount": 19
   },
-  "sig": "ed25519:TQjulCkZHtiMaSn+ULPqiDFlHd0+4TgEOwaiNIB60n7H9N1lorfufNvSMu7QHlqQvvcYtZ9ISEnCVH+UsrsnDw=="
+  "sig": "ed25519:39NtO+lcqMmfDgIk7yn55lKV0QuwwP/cQDkvF2iMN8xrrV/B0YOpWU4a7KJPU1sspXdchBGZBMgLTV8SD0u+Aw=="
 }
