@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.97",
+  "version": "1.3.99",
   "channel": "stable",
-  "publishedAt": "2026-09-30T04:45:08Z",
-  "expiresAt": "2026-11-04T04:45:08Z",
+  "publishedAt": "2026-09-30T09:36:31Z",
+  "expiresAt": "2026-11-04T09:36:31Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "账户活动与月度回忆\n\n- 我的页面新增机构组团和月度回忆入口。\n- 组团支持验证机构邮箱、阅读规则、报名、退出和申诉；服务器统一计算资格与奖励，提现走官网原流程。\n- 回忆默认关闭，可分别选择生成和通知；仅展示可核实的数据，缺失数据明确标注。\n- 商店版保留月度回忆，不展示现金组团入口和对应消息。\n- 继续使用现有稳定内核，保留 1.3.96 的线路页面精简和连接稳定性修正。\n",
-  "notesEn": "Activities and monthly memories\n\n- Added institution team activities and monthly memories to your account page.\n- Verify an institution email, review the rules, join, leave or appeal. Eligibility and rewards come from the server; withdrawals use the website.\n- Memories are off by default, with separate generation and notification choices. Missing facts remain visibly unavailable.\n- Store editions retain memories and hide cash activity entries and messages.\n- Retains the stable core and the connection improvements released in 1.3.96.\n",
-  "sourceCommit": "37e972d937557818d2b780d573186e2798bf3674",
-  "sha256SumsSha256": "f8e8eb8247b44a79e51c43b47a779d1d4949d0d027cec60d73d4b0ef9af3a936",
+  "notes": "常用功能，一目了然\n\n- 群组活动、时光回忆与套餐、钱包、签到等并列，福利顶部不再展示大推广卡片。\n- 会员总览加载中、暂无套餐或暂时不可用时，仍可打开各项功能。\n- 验证邮箱后按同后缀自动归组，10 人、50 人达标自动发奖，升级仅补差额。\n- 回忆打开即看，随时切换月度与年度；报名、提现、回忆卡保存和分享均在原生页面完成。\n- 分享卡不含邮箱、账号和现金信息；缺失数据明确提示。商店版保留时光回忆，不展示现金活动。\n",
+  "notesEn": "Everyday features, together\n\n- Group rewards and Memories now sit alongside plans, wallet and check-in in the same compact feature grid. Removed the large promotional cards above the benefits page.\n- Feature shortcuts remain available while membership details load, when no plan is active or if the overview is temporarily unavailable.\n- Verify an email to join its domain group. Rewards arrive at 10 and 50 members; upgrades pay only the difference.\n- Open Memories to explore any available month or year. Join groups, request withdrawals and save or share memory cards in native pages.\n- Shared cards exclude email, account and cash details. Missing data remains clearly marked. Store editions retain Memories without cash activities.\n",
+  "sourceCommit": "74dfbc100e26230169159b23c9312f3b1fc3c5d5",
+  "sha256SumsSha256": "2d40d09c1e34ce3f3a395e6df12ec628207110e2601adf7d8dc58aa734f2da67",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.97/YueLink-1.3.97-android-arm64-v8a.apk",
-      "sha256": "47588b6693ee4525b1bd77aadd0dffb92e255ef4a8c52d8808e914443ed28dac"
+      "url": "https://yuetong.app/v1.3.99/YueLink-1.3.99-android-arm64-v8a.apk",
+      "sha256": "19ef549d1dc5b747cf49bfe53698ce34a98afe1fc2e3c4380a97bf7f37cc2fa8"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.97/YueLink-1.3.97-android-armeabi-v7a.apk",
-      "sha256": "7454e5c3774bd8e83d37f6a6bdd51e5e642a77b7c8baf03857bcc079b6b89d02"
+      "url": "https://yuetong.app/v1.3.99/YueLink-1.3.99-android-armeabi-v7a.apk",
+      "sha256": "2eb1cea2f6217b4c95042339d3772660b81458031a67162218ede6c51d85f891"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.97/YueLink-1.3.97-android-x86_64.apk",
-      "sha256": "a4f8ed288f5becb46dea5f433fd4f95f0ffe88bab2269a1e02298e04bfeffeaa"
+      "url": "https://yuetong.app/v1.3.99/YueLink-1.3.99-android-x86_64.apk",
+      "sha256": "e7f314c9296a39bcf5118bbf3e4487e9c5e10189051c9e0aa3d79562682636c3"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.97/YueLink-1.3.97-android-universal.apk",
-      "sha256": "3f7a30bc1743a10d6751ff11b2960f28851cb99881bcb70febc0677875fbbfa5"
+      "url": "https://yuetong.app/v1.3.99/YueLink-1.3.99-android-universal.apk",
+      "sha256": "f04c9563953b0b9c4560f2c4512b136bc5dc090d05905f6d05a7854b302b2f69"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.97/YueLink-1.3.97-ios.ipa",
-      "sha256": "3048a424699feba5cc130f2226702c0944777d1eba2d5329aa1fe4681e0a4097"
+      "url": "https://yuetong.app/v1.3.99/YueLink-1.3.99-ios.ipa",
+      "sha256": "8358ed0463fdc282855068953d075169915ab3db75507eb8055d8e5f21a4d6e1"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.97/YueLink-1.3.97-macos-universal.dmg",
-      "sha256": "59ede3c191a2e056ae0da8a71516b8d46115b3c3c98f1220a7e36ed38f172b10"
+      "url": "https://yuetong.app/v1.3.99/YueLink-1.3.99-macos-universal.dmg",
+      "sha256": "c0a491b4b2bf7ec5158bd5e41f085d7b6439be4e90cbe58f30c5796e3f79d6bd"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.97/YueLink-1.3.97-windows-amd64-setup.exe",
-      "sha256": "2a3efdc9cc19d82ebc5aa0421f9e0e0ee8eee167ddb0fea2515a73af8539e07b"
+      "url": "https://yuetong.app/v1.3.99/YueLink-1.3.99-windows-amd64-setup.exe",
+      "sha256": "49d0bad9b3f93511175bae2045ba7b5b8d3ba06c180898f78b04b022be77e4d4"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.97/YueLink-1.3.97-windows-amd64-portable.zip",
-      "sha256": "cbe4e6a9ae97173ce28d8746686d6ecf4873ceca5386fea92e038b11df05a795"
+      "url": "https://yuetong.app/v1.3.99/YueLink-1.3.99-windows-amd64-portable.zip",
+      "sha256": "c1f8879ca1111fe72204e2c340c735b89c18f7b5ad274c848dd85477774978b6"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.97/YueLink-1.3.97-linux-amd64.AppImage",
-      "sha256": "6e57015279f16f2d32afe1a29d5a5a58e7123c65ef61fdd0319d21ef5f38dc51"
+      "url": "https://yuetong.app/v1.3.99/YueLink-1.3.99-linux-amd64.AppImage",
+      "sha256": "6cf60033c39fb62617aa75d85c66099656f2556d929454cc2d6b3adcaa2de119"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "36660826f0dcf1578aae332ea6e9f3dbfae019d0e8be56d8fa33f32920feb76d",
-    "sha256SumsSha256": "f8e8eb8247b44a79e51c43b47a779d1d4949d0d027cec60d73d4b0ef9af3a936",
-    "payloadBundleSha256": "c1793e526c8ffa064e95cbdb6f392617b3f822f3c930a509104eb6e3622af412",
+    "candidateSha256": "bd28a85072c44cd44868fd0f6561288fe1916f51802ef5c4a8377c75c62d6317",
+    "sha256SumsSha256": "2d40d09c1e34ce3f3a395e6df12ec628207110e2601adf7d8dc58aa734f2da67",
+    "payloadBundleSha256": "da04eece52142aa246100a7063ba6877408e2746286417bf7049737ab1e0cc57",
     "payloadCount": 19
   },
-  "sig": "ed25519:DWmdATPhdiN/9kbstswCvviNPJ5tX5WRLTlQtirWOMmKO61HBqAIRRIINQiR0wgk+zIqCNCVqnRNbnaM/6ypCQ=="
+  "sig": "ed25519:VHjxqKPNV6LO1ldmGlDGjg/PJZ6A8pYRUGMzOVzkgMbLJZTyoMeZ3uGCtCSOxRkcf3LBstVy5KjOsu0FWfVBAw=="
 }
