@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.96",
+  "channel": "stable",
+  "publishedAt": "2026-09-30T02:05:02Z",
+  "expiresAt": "2026-11-04T02:05:02Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "选线更简洁，减少意外断流。\n\n- 测速失败和后台出口探测超时不再打断已有连接，也不再清空 DNS 缓存。\n- 默认开启统一延迟；测速失败只重试一次，分组测速等待最长 40 秒。\n- 切换线路只清理该分组的旧连接，保留其他分组和已使用新线路的连接。\n\n- 移除线路页“自动选择已开启”模块和独立开关，直接在分组内选择具体节点或自动组。\n- 保留按订阅记住的手动选择；点击自动组当前节点仍可选择该具体节点，AI 等独立分组继续使用各自的选择。\n- 测速进度直接显示在按钮和节点上，移除重复的开始提示。\n- 断开连接或使用直连模式时，托盘不再显示无效的“连接最佳节点”入口。\n- 托盘“最近线路”仅在连接可切换时显示；重复点选当前线路不重切，切换失败不再提示成功。\n- Android 通知中的“切换线路”直接打开线路页，由你选择所需线路。\n",
+  "notesEn": "Simpler route selection, fewer unintended interruptions.\n\n- Failed latency tests and background egress probes no longer close existing connections or flush the DNS cache.\n- Unified delay is enabled by default. Failed group tests retry once, with a 40-second overall wait limit.\n- Switching a route retires old connections in that group while preserving other groups and connections already using the new route.\n\n- Removed the automatic-selection status panel and its separate switch. Choose an individual node or an automatic group directly from the group list.\n- Manual selections are still remembered per subscription. Tapping the current node inside an automatic group can still select that individual node; independent groups such as AI keep their own choices.\n- Speed-test progress remains visible on the button and nodes, with the redundant start notification removed.\n- The tray no longer offers “Connect best node” while disconnected or in direct mode.\n- Recent-node tray shortcuts appear only when the connection can switch routes. Selecting the current node does nothing, and failed switches no longer report success.\n- “Switch node” in the Android notification opens the route list so you can choose the node you want.\n",
+  "sourceCommit": "5a5ff071be86f4ebd932e689059d737e5625ad83",
+  "sha256SumsSha256": "4da5763025f63aa2e8fb2ec2ab8541daa14b8ae374b62c26ede5375496714261",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-android-arm64-v8a.apk",
+      "sha256": "be1fccf91af3b4467ecd47892d3a64944de67537aad711ede99278038b2054ef"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-android-armeabi-v7a.apk",
+      "sha256": "f18c170f5f46df2e606d58b227fe8667956b7bf79e68086254499bbd264f65e4"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-android-x86_64.apk",
+      "sha256": "bcb0a4136c4265b0a86269fabe45fea6bba4e6bda96a7552e96b73ec6909cf62"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-android-universal.apk",
+      "sha256": "17be0897b4083ae20e6397d0e959363993220e72e9ccb09e10f1fb75f57f79b3"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-ios.ipa",
+      "sha256": "484bb2a49605e40cbf0fa9138f47ad77b3d6abe42cfa22a59c8f1bab7aef1546"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-macos-universal.dmg",
+      "sha256": "2e494d640f77099f86a060fbbffb9fb635288815ef625f87620dc656d58a938a"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-windows-amd64-setup.exe",
+      "sha256": "bf9a647073d55925b14c0db2b9f591f2ac1091b7522f99204537a941a6b644e9"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-windows-amd64-portable.zip",
+      "sha256": "297ea70b461dc8fa71f7aa74c73f98a3d2e599e04745755d48749f0a16a5b957"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.96/YueLink-1.3.96-linux-amd64.AppImage",
+      "sha256": "086c3313312f7eff7f29108af121263f14e070e66255d6684a3198f1451811e9"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "0ba3abbbd1b7e5aba274bc7c76b8836a1601ebe09f4543f768b372a05876c866",
+    "sha256SumsSha256": "4da5763025f63aa2e8fb2ec2ab8541daa14b8ae374b62c26ede5375496714261",
+    "payloadBundleSha256": "447c05ddf13f54a5bf7c85402a8a672b608c8fb78eea2ba4b21627233ab1673a",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:39NtO+lcqMmfDgIk7yn55lKV0QuwwP/cQDkvF2iMN8xrrV/B0YOpWU4a7KJPU1sspXdchBGZBMgLTV8SD0u+Aw=="
+}
