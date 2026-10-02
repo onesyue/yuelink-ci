@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.104",
+  "version": "1.3.106",
   "channel": "stable",
-  "publishedAt": "2026-10-02T01:11:53Z",
-  "expiresAt": "2026-11-06T01:11:53Z",
+  "publishedAt": "2026-10-02T10:01:01Z",
+  "expiresAt": "2026-11-06T10:01:01Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "连接与断开更可靠\n\n- 断开连接时正确处理正在结束的后台请求，避免已关闭的连接被误报为断开失败；其他清理故障仍会明确报告。\n- 无法确认网卡、路由或系统代理时显示待检测，不凭未知结果自动重连或判断连接正常。\n- TUN 模式准确提示第三方系统代理冲突，帮助识别被其他代理接管的连接。\n- 直连模式只检查所需连接路径；手动复测和诊断日志与当前模式保持一致。\n- iOS 连接状态和基础网络检测不再把登录门户、重定向或错误页面视为检测通过。\n",
-  "notesEn": "More reliable connection checks and disconnects\n\n- Disconnecting handles background requests that are already ending, so a closed connection does not appear as a disconnect failure. Other cleanup failures are still reported.\n- Checks show a pending status when the network adapter, route or system proxy cannot be confirmed. An unknown result does not trigger an automatic reconnect or certify the connection as healthy.\n- TUN mode reports conflicts with a system proxy enabled by another app, helping identify connections taken over by another proxy.\n- Direct mode checks only the required connection path. Manual retests and diagnostic logs follow the current mode.\n- iOS connection checks and basic network tests no longer report a sign-in portal, redirect or error page as a passed check.\n",
-  "sourceCommit": "7489b452db51f7f536c5d44bd89dbd5c6a24e11d",
-  "sha256SumsSha256": "54805949c6ab9b2491974211c3073c4709f6fc63d1890d58cc28a4b7b3c09bb1",
+  "notes": "断开连接更利落\n\n- AnyTLS 建连期间断开时及时取消在途请求，并关闭迟到建立的连接，避免断开后遗留会话影响后续使用。\n",
+  "notesEn": "Cleaner disconnects\n\n- Disconnecting while an AnyTLS connection is being established now cancels pending requests and closes connections that finish late, preventing sessions from lingering after disconnect.\n",
+  "sourceCommit": "109143e735bdf7a3bf15ec163ebd8d3c7eb76a30",
+  "sha256SumsSha256": "05b1554de85c3a845c4d8527637c27760c832f98dd7aee916db42a272387321e",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.104/YueLink-1.3.104-android-arm64-v8a.apk",
-      "sha256": "3daeafab0eb9621ee1d10feb5e25d49ad5cad09eb79d92f8b84277a37e8b2c00"
+      "url": "https://yuetong.app/v1.3.106/YueLink-1.3.106-android-arm64-v8a.apk",
+      "sha256": "ce255c89c5190ae864eaec5e517d8aca029aab02e6ad92ae4148c978520758b3"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.104/YueLink-1.3.104-android-armeabi-v7a.apk",
-      "sha256": "f985f4c3923735cb1382ccb69c23d7a77073db0ffde28f240d9841e97f719aa2"
+      "url": "https://yuetong.app/v1.3.106/YueLink-1.3.106-android-armeabi-v7a.apk",
+      "sha256": "d036e8786a8b0f80846d419264b9fdf4df89a638f232974b43508c5969e4763d"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.104/YueLink-1.3.104-android-x86_64.apk",
-      "sha256": "50fe3ddeed674cd41fc0f7cf08f0219e6f2f2cf880c662aad1230aa95e5063df"
+      "url": "https://yuetong.app/v1.3.106/YueLink-1.3.106-android-x86_64.apk",
+      "sha256": "af20efdf9786ffef528ba88d9c53f91fd1198134156627aebff61af0d3293a61"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.104/YueLink-1.3.104-android-universal.apk",
-      "sha256": "4d1bad8aaa93b3ba20dad1fb786d22dfe90cbc2bfb8e917ffe0b19ed97d8a14e"
+      "url": "https://yuetong.app/v1.3.106/YueLink-1.3.106-android-universal.apk",
+      "sha256": "352d6d2e24ac66e44a560a4666dd20a82bfdc8872629c5d19d8d47c35cc79809"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.104/YueLink-1.3.104-ios.ipa",
-      "sha256": "1e17f065a42559679a8fffe63706025efdf67539b4e398f9296564d23a0e91cd"
+      "url": "https://yuetong.app/v1.3.106/YueLink-1.3.106-ios.ipa",
+      "sha256": "ff5fb041dc7c0de2951fb6c581e57263d8104ef2fe3887667f4feff452c694bf"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.104/YueLink-1.3.104-macos-universal.dmg",
-      "sha256": "7b7f76cc77bfc6c7ce3a8105ba8bf6840c6be9acc8ef8c838ad5cf0f7924de18"
+      "url": "https://yuetong.app/v1.3.106/YueLink-1.3.106-macos-universal.dmg",
+      "sha256": "a81fe6310cb2073e186bc42ab1bca16b8e3d6e8d1b762378074986c7f6294b84"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.104/YueLink-1.3.104-windows-amd64-setup.exe",
-      "sha256": "f7885e4d4f180e5dfa056adecdde2ebd75dbdc25911a8b3091deb231c26dc5ab"
+      "url": "https://yuetong.app/v1.3.106/YueLink-1.3.106-windows-amd64-setup.exe",
+      "sha256": "719eb764461a2f03350c6d39fb7dbad452d90661633092281e01f36a52768fca"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.104/YueLink-1.3.104-windows-amd64-portable.zip",
-      "sha256": "8c687774b261fc0fffe91a93126e53b19c95b4e47adf0b195f196a866297690b"
+      "url": "https://yuetong.app/v1.3.106/YueLink-1.3.106-windows-amd64-portable.zip",
+      "sha256": "33a4372b1c1b2bb43435cb103e381dd96425400a3cc21f4be9b77eb864494bed"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.104/YueLink-1.3.104-linux-amd64.AppImage",
-      "sha256": "2dded06bea53159135b2bdff03127478342a45a053993f128407080efe1ad485"
+      "url": "https://yuetong.app/v1.3.106/YueLink-1.3.106-linux-amd64.AppImage",
+      "sha256": "dcaee78f602d3a846f8f8bd9e34c49a59956730920f3b1726dd818da137eca51"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "5a85b2b588b8339ee07c04d63bcfe5579ff4deb6e68bd424fc30bd7f3df142d3",
-    "sha256SumsSha256": "54805949c6ab9b2491974211c3073c4709f6fc63d1890d58cc28a4b7b3c09bb1",
-    "payloadBundleSha256": "70e753cb982b52b0e3e530e8c26ca377f464d70575ba45f1bea32d9c9e0a2125",
+    "candidateSha256": "1cef3c89d65e7a6665b0d01902f9d43fe3c51dee01866734ee91f35a41d60642",
+    "sha256SumsSha256": "05b1554de85c3a845c4d8527637c27760c832f98dd7aee916db42a272387321e",
+    "payloadBundleSha256": "2f7c69288a8dd43550d674bff571378f627ce35f1d4397e47142f0824651420e",
     "payloadCount": 19
   },
-  "sig": "ed25519:AXtGqzEOvGh/+rmMAMPZF3rrIT8VPBns7j/PpOB15oMez7BFNClm/ldpKIi+Kuz9zaQ1jD+ZUBtWXBe+OpSvBg=="
+  "sig": "ed25519:q7+MfOxV4pK2HNw5KOwMijcGphT0RmnVgYEMqfcBtTsEadxniedISAgsgEGnjfOioGvzW9B4iqzzoLSg+rNnDg=="
 }
