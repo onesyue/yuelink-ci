@@ -14,25 +14,61 @@ fixture = source / "scripts/native_tests/media/fixtures/fixture-hevc.mov"
 original = (source / "scripts/native_tests/media/player_probe.c").read_text()
 receipts = []
 
-variants = {
-    "baseline": original,
-    "fallback-first-error": original.replace(
-        'option(mpv, "hwdec", argv[3]);',
-        'option(mpv, "hwdec", argv[3]);\n'
-        '    option(mpv, "hwdec-software-fallback", "yes");',
-    ),
-    "gl-readback-reset": original.replace(
-        'glReadPixels(0, 0, 64, 64, GL_RGBA, GL_UNSIGNED_BYTE, pixels);',
-        'glBindBuffer(0x88EB /* GL_PIXEL_PACK_BUFFER */, 0);\n'
-        '                glPixelStorei(GL_PACK_ALIGNMENT, 1);\n'
-        '                glPixelStorei(0x0D02 /* GL_PACK_ROW_LENGTH */, 0);\n'
-        '                glPixelStorei(0x0D03 /* GL_PACK_SKIP_ROWS */, 0);\n'
-        '                glPixelStorei(0x0D04 /* GL_PACK_SKIP_PIXELS */, 0);\n'
-        '                glFinish();\n'
-        '                glReadPixels(0, 0, 64, 64, GL_RGBA, GL_UNSIGNED_BYTE, pixels);',
-    ),
+observer = r'''
+static double now(void);
+static void observe_decode(struct control *c) {
+    if (!flag_get(&c->loaded) || now() - c->decoded_sampled_at < 0.08) return;
+    c->decoded_sampled_at = now();
+    const char *shot[] = {"screenshot-raw", "video", NULL};
+    mpv_node result = {0};
+    if (mpv_command_ret(c->mpv, shot, &result) < 0) return;
+    int width = 0, height = 0, stride = 0;
+    mpv_byte_array *data = NULL;
+    if (result.format == MPV_FORMAT_NODE_MAP) {
+        mpv_node_list *map = result.u.list;
+        for (int n = 0; n < map->num; n++) {
+            mpv_node *value = &map->values[n];
+            if (!strcmp(map->keys[n], "w") && value->format == MPV_FORMAT_INT64) width = (int)value->u.int64;
+            if (!strcmp(map->keys[n], "h") && value->format == MPV_FORMAT_INT64) height = (int)value->u.int64;
+            if (!strcmp(map->keys[n], "stride") && value->format == MPV_FORMAT_INT64) stride = (int)value->u.int64;
+            if (!strcmp(map->keys[n], "data") && value->format == MPV_FORMAT_BYTE_ARRAY) data = value->u.ba;
+        }
+    }
+    if (data && width == 64 && height == 64 && stride >= width * 4 && data->size >= (size_t)stride * height) {
+        uint64_t hash = 1469598103934665603ULL;
+        unsigned char *bytes = data->data;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                for (int b = 0; b < 3; b++) {
+                    hash ^= bytes[y * stride + x * 4 + b];
+                    hash *= 1099511628211ULL;
+                }
+            }
+        }
+        c->decoded_frames++;
+        if (hash != c->decoded_hash) c->decoded_distinct++;
+        c->decoded_hash = hash;
+    }
+    mpv_free_node_contents(&result);
 }
-assert all(code != original for name, code in variants.items() if name != "baseline")
+'''
+observed = original.replace(
+    'char *hw, *decoder;',
+    'char *hw, *decoder;\n    uint64_t decoded_hash;\n'
+    '    int decoded_frames, decoded_distinct;\n    double decoded_sampled_at;',
+).replace(
+    '#ifdef _WIN32\nstatic DWORD WINAPI control_thread',
+    observer + '\n#ifdef _WIN32\nstatic DWORD WINAPI control_thread',
+).replace(
+    '        int eof = 0;', '        observe_decode(c);\n        int eof = 0;',
+).replace(
+    '    mpv_free(c.hw);',
+    '    printf("decoded_frames=%d decoded_distinct=%d\\n", c.decoded_frames, c.decoded_distinct);\n'
+    '    mpv_free(c.hw);',
+)
+assert observed.count('static void observe_decode(') == 1
+assert observed.count('observe_decode(c);') == 1
+variants = {"observe-decoded-video": observed}
 
 for name, code in variants.items():
     tree = work / name
@@ -47,7 +83,7 @@ for name, code in variants.items():
     subprocess.run(["cmake", "--build", str(build), "--config", "Release", "--parallel", "2"], check=True)
     probe = build / "Release/player-probe.exe"
     for renderer, hwdec in (("gl", "auto-safe"), ("sw", "auto-safe"), ("gl", "no")):
-        for iteration in range(10):
+        for iteration in range(50 if (renderer, hwdec) == ("gl", "auto-safe") else 10):
             result = subprocess.run(
                 [str(probe), str(fixture), renderer, hwdec, "-", "-"],
                 capture_output=True, text=True, timeout=30,
