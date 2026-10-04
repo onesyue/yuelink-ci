@@ -112,22 +112,26 @@ observed = observed.replace('            uint64_t hash = 1469598103934665603ULL;
     '            if (use_gl && frames < 64) observe_gl(&post[frames]);\n            uint64_t hash = 1469598103934665603ULL;')
 observed = observed.replace('    mpv_free(c.hw);',
     '    if (use_gl) for (int n = 0; n < frames && n < 64; n++) { print_gl("pre", n, &pre[n]); print_gl("post", n, &post[n]); }\n    mpv_free(c.hw);')
+observed = observed.replace('    flag_set(&c.stop, 1);', r'''
+    flag_set(&c.stop, 1);
+    if (use_gl && distinct < 10) {
+        unsigned char diagnostic[4] = {0};
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+        glClearColor(1,0,1,1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glReadPixels(0,0,1,1,GL_RGBA,GL_UNSIGNED_BYTE,diagnostic);
+        printf("after_failure_magenta=%u,%u,%u,%u error=%u\n", diagnostic[0],diagnostic[1],diagnostic[2],diagnostic[3],glGetError());
+        glBindFramebuffer(GL_FRAMEBUFFER,0);
+    }
+''')
 variants = {
-    "observe-gl-state-baseline": observed,
-    "observe-gl-state-defaults": observed.replace(
-        '            if (use_gl && frames < 64) observe_gl(&pre[frames]);',
-        '            if (use_gl) {\n'
-        '                glViewport(0,0,64,64); glDisable(GL_SCISSOR_TEST);\n'
-        '                glDisable(GL_DEPTH_TEST); glDisable(GL_STENCIL_TEST);\n'
-        '                glDisable(GL_CULL_FACE); glDisable(GL_BLEND);\n'
-        '                glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);\n'
-        '                glBindBuffer(0x88EC,0); glPixelStorei(0x0CF2,0);\n'
-        '                glPixelStorei(0x0CF3,0); glPixelStorei(0x0CF4,0);\n'
-        '                glPixelStorei(GL_UNPACK_ALIGNMENT,4);\n'
-        '            }\n'
-        '            if (use_gl && frames < 64) observe_gl(&pre[frames]);',
+    "observe-fbo-entry-baseline": observed,
+    "observe-fbo-entry-default": observed.replace(
+        '                glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);\n                GLenum error',
+        '                glBindFramebuffer(GL_FRAMEBUFFER, 0);\n                GLenum error',
     ),
 }
+assert variants["observe-fbo-entry-default"] != observed
 
 probes = {}
 for name, code in variants.items():
