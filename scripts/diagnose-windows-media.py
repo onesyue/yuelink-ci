@@ -181,8 +181,9 @@ uploaded = uploaded.replace('    flag_set(&c.stop, 1);',
 uploaded = uploaded.replace('    mpv_free(c.hw);',
     '    print_gpu_observations();\n    mpv_free(c.hw);')
 variants = {
-    "observe-default-fbo-baseline": observed,
-    "observe-default-fbo-upload-draw": uploaded,
+    "observe-lut-original": uploaded,
+    "observe-lut-poison-padding": uploaded.replace('static int lut_mode = 0;', 'static int lut_mode = 1;'),
+    "observe-lut-zero-padding": uploaded.replace('static int lut_mode = 0;', 'static int lut_mode = 2;'),
 }
 assert uploaded.count('static void APIENTRY track_upload(') == 1
 assert uploaded.count('measured_frame = frames;') == 1
@@ -209,6 +210,8 @@ for renderer, hwdec in (("gl", "auto-safe"), ("sw", "auto-safe"), ("gl", "no")):
         if (iteration + int(os.environ["DIAGNOSTIC_LANE"])) % 2:
             names.reverse()
         for name in names:
+            if name == "observe-lut-poison-padding" and iteration >= 5:
+                continue
             probe = probes[name]
             result = subprocess.run(
                 [str(probe), str(fixture), renderer, hwdec, "-", "-"],

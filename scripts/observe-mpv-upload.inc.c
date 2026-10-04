@@ -17,6 +17,10 @@ static float vertex_head[24];
 struct image_observation { GLint texture, level, internal_format, width, height; GLenum format, type; };
 static struct image_observation images[128];
 static unsigned int image_count;
+static int lut_mode = 0;
+static GLint lut_texture;
+static uint32_t lut_original[2048], lut_effective[2048];
+static int lut_seen;
 struct upload_observation {
     int frame;
     GLenum target, format, type;
@@ -51,6 +55,18 @@ static void APIENTRY track_image(GLenum target,GLint level,GLint internal_format
         glGetIntegerv(GL_TEXTURE_BINDING_2D,&o->texture);
         o->level=level; o->internal_format=internal_format; o->width=width; o->height=height;
         o->format=format; o->type=type;
+    }
+    if (target == GL_TEXTURE_2D && level == 0 && width == 2 && height == 256 &&
+        format == GL_RGBA && type == GL_FLOAT && pixels) {
+        glGetIntegerv(GL_TEXTURE_BINDING_2D,&lut_texture);
+        memcpy(lut_original,pixels,sizeof lut_original);
+        memcpy(lut_effective,pixels,sizeof lut_effective);
+        lut_seen = 1;
+        if (lut_mode) {
+            for (int row = 0; row < 256; row++) for (int pad = 6; pad < 8; pad++)
+                lut_effective[row*8+pad] = lut_mode == 1 ? 0x7fc00000U : 0;
+            pixels = lut_effective;
+        }
     }
     real_image(target,level,internal_format,width,height,border,format,type,pixels);
 }
@@ -155,6 +171,22 @@ static void APIENTRY track_draw(GLenum mode, GLint first, GLsizei count) {
 
 static void print_gpu_observations(void) {
     printf("upload_count=%u draw_count=%u\n", upload_count, draw_count);
+    if (lut_seen) {
+        for (int which = 0; which < 2; which++) {
+            const uint32_t *bits = which ? lut_effective : lut_original;
+            unsigned int used_nonfinite = 0, padding_nonfinite = 0;
+            uint64_t hash = 1469598103934665603ULL;
+            for (int n = 0; n < 2048; n++) {
+                if ((bits[n] & 0x7f800000U) == 0x7f800000U) {
+                    if (n%8 < 6) used_nonfinite++; else padding_nonfinite++;
+                }
+                for (int b = 0; b < 4; b++) { hash ^= (bits[n] >> (8*b)) & 255; hash *= 1099511628211ULL; }
+            }
+            printf("lut_cpu phase=%s mode=%d texture=%d used_nonfinite=%u padding_nonfinite=%u hash=%016llx bits=",which ? "effective" : "original",lut_mode,lut_texture,used_nonfinite,padding_nonfinite,(unsigned long long)hash);
+            for (int n = 0; n < 2048; n++) printf("%08x",bits[n]);
+            printf("\n");
+        }
+    }
     for (unsigned int n = 0; n < image_count; n++) {
         struct image_observation *o = &images[n];
         printf("image texture=%d level=%d internal_format=%d size=%d,%d format=%u type=%u\n",o->texture,o->level,o->internal_format,o->width,o->height,o->format,o->type);
@@ -207,6 +239,8 @@ static void observe_gpu_at_eof(void) {
         }
         printf("gpu_pass fbo=%d program=%d texture=%d size=%d,%d status=%u format=%d type=%d error=%u hash=%016llx first16=",o->fbo,o->program,texture,width,height,status,format,type,glGetError(),(unsigned long long)hash);
         for (int b = 0; b < 16; b++) printf("%02x",data[b]);
+        printf(" row0=");
+        for (int b = 0; b < width*channels*bytes; b++) printf("%02x",data[b]);
         printf("\n");
     }
     glBindFramebuffer(GL_FRAMEBUFFER,0);
@@ -232,6 +266,25 @@ static void observe_gpu_at_eof(void) {
     glBindBuffer(0x8F36,0);
     GLuint fbo;
     glGenFramebuffers(1,&fbo);
+    if (lut_seen) {
+        glBindFramebuffer(GL_FRAMEBUFFER,fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,lut_texture,0);
+        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        uint16_t data[2048] = {0};
+        if (status == GL_FRAMEBUFFER_COMPLETE) glReadPixels(0,0,2,256,GL_RGBA,0x140B,data);
+        unsigned int used_nonfinite = 0, padding_nonfinite = 0;
+        uint64_t hash = 1469598103934665603ULL;
+        for (int n = 0; n < 2048; n++) {
+            if ((data[n] & 0x7c00U) == 0x7c00U) {
+                if (n%8 < 6) used_nonfinite++; else padding_nonfinite++;
+            }
+            hash ^= data[n] & 255; hash *= 1099511628211ULL;
+            hash ^= data[n] >> 8; hash *= 1099511628211ULL;
+        }
+        printf("lut_gpu texture=%d status=%u error=%u used_nonfinite=%u padding_nonfinite=%u hash=%016llx bits=",lut_texture,status,glGetError(),used_nonfinite,padding_nonfinite,(unsigned long long)hash);
+        for (int n = 0; n < 2048; n++) printf("%04x",data[n]);
+        printf("\n");
+    }
     for (unsigned int n = 0; n < upload_count; n++) {
         struct upload_observation *o = &uploads[n];
         int latest = 1;
@@ -270,6 +323,8 @@ static void observe_gpu_at_eof(void) {
             uint64_t hash = 1469598103934665603ULL;
             for (GLsizei b = 0; b < actual; b++) { hash ^= (unsigned char)source[b]; hash *= 1099511628211ULL; }
             printf("shader program=%u type=%d bytes=%d hash=%016llx error=%u\n",program,type,actual,(unsigned long long)hash,glGetError());
+            if ((program == 4 || program == 7) && type == GL_FRAGMENT_SHADER)
+                printf("shader_source program=%u begin\n%.*s\nshader_source end\n",program,actual,source);
             free(source);
         }
         GLint uniforms = 0;
