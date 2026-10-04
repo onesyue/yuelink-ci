@@ -164,12 +164,16 @@ uploaded = uploaded.replace('    return (void*)eglGetProcAddress(name);', r'''
         real_draw = (draw_proc)proc;
         return (void*)track_draw;
     }
+    if (!strcmp(name,"glBufferData") && proc) {
+        real_buffer = (buffer_proc)proc;
+        return (void*)track_buffer;
+    }
     return proc;
 ''')
 uploaded = uploaded.replace('            if (mpv_render_context_render(render,',
     '            measured_frame = frames;\n            if (mpv_render_context_render(render,')
 uploaded = uploaded.replace('    flag_set(&c.stop, 1);',
-    '    measured_frame = -2;\n    flag_set(&c.stop, 1);')
+    '    measured_frame = -2;\n    if (use_gl) observe_gpu_at_eof();\n    flag_set(&c.stop, 1);')
 uploaded = uploaded.replace('    mpv_free(c.hw);',
     '    print_gpu_observations();\n    mpv_free(c.hw);')
 variants = {
