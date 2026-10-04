@@ -158,7 +158,8 @@ for renderer, hwdec in (("gl", "auto-safe"), ("sw", "auto-safe"), ("gl", "no")):
             probe = probes[name]
             result = subprocess.run(
                 [str(probe), str(fixture), renderer, hwdec, "-", "-"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True, text=True, encoding="utf-8",
+                errors="backslashreplace", timeout=30,
             )
             row = {"variant": name, "lane": os.environ["DIAGNOSTIC_LANE"], "renderer": renderer, "hwdec": hwdec,
                    "iteration": iteration, "exit": result.returncode,
