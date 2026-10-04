@@ -147,14 +147,37 @@ observed = observed.replace(
     '                glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);',
     '                glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fbo.fbo);',
 )
+observed = observed.replace(
+    'mpv_opengl_fbo fbo = {(int)framebuffer, 64, 64, 0};',
+    'mpv_opengl_fbo fbo = {0, 64, 64, 0};',
+)
+upload_observer = Path(__file__).with_name("observe-mpv-upload.inc.c").read_text()
+uploaded = observed.replace('static void update(void *opaque)',
+    upload_observer + '\nstatic void update(void *opaque)')
+uploaded = uploaded.replace('    return (void*)eglGetProcAddress(name);', r'''
+    void *proc = (void*)eglGetProcAddress(name);
+    if (!strcmp(name,"glTexSubImage2D") && proc) {
+        real_upload = (upload_proc)proc;
+        return (void*)track_upload;
+    }
+    if (!strcmp(name,"glDrawArrays") && proc) {
+        real_draw = (draw_proc)proc;
+        return (void*)track_draw;
+    }
+    return proc;
+''')
+uploaded = uploaded.replace('            if (mpv_render_context_render(render,',
+    '            measured_frame = frames;\n            if (mpv_render_context_render(render,')
+uploaded = uploaded.replace('    flag_set(&c.stop, 1);',
+    '    measured_frame = -2;\n    flag_set(&c.stop, 1);')
+uploaded = uploaded.replace('    mpv_free(c.hw);',
+    '    print_gpu_observations();\n    mpv_free(c.hw);')
 variants = {
-    "observe-target-custom-fbo": observed,
-    "observe-target-default-fbo": observed.replace(
-        'mpv_opengl_fbo fbo = {(int)framebuffer, 64, 64, 0};',
-        'mpv_opengl_fbo fbo = {0, 64, 64, 0};',
-    ),
+    "observe-default-fbo-baseline": observed,
+    "observe-default-fbo-upload-draw": uploaded,
 }
-assert variants["observe-target-default-fbo"] != observed
+assert uploaded.count('static void APIENTRY track_upload(') == 1
+assert uploaded.count('measured_frame = frames;') == 1
 
 probes = {}
 for name, code in variants.items():
