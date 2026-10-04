@@ -168,6 +168,10 @@ uploaded = uploaded.replace('    return (void*)eglGetProcAddress(name);', r'''
         real_buffer = (buffer_proc)proc;
         return (void*)track_buffer;
     }
+    if (!strcmp(name,"glTexImage2D") && proc) {
+        real_image = (image_proc)proc;
+        return (void*)track_image;
+    }
     return proc;
 ''')
 uploaded = uploaded.replace('            if (mpv_render_context_render(render,',
