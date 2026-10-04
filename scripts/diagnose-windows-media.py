@@ -116,7 +116,7 @@ observed = observed.replace('    flag_set(&c.stop, 1);', r'''
     flag_set(&c.stop, 1);
     if (use_gl && distinct < 10) {
         unsigned char diagnostic[4] = {0};
-        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+        glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fbo.fbo);
         glClearColor(1,0,1,1);
         glClear(GL_COLOR_BUFFER_BIT);
         glReadPixels(0,0,1,1,GL_RGBA,GL_UNSIGNED_BYTE,diagnostic);
