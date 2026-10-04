@@ -122,16 +122,39 @@ observed = observed.replace('    flag_set(&c.stop, 1);', r'''
         glReadPixels(0,0,1,1,GL_RGBA,GL_UNSIGNED_BYTE,diagnostic);
         printf("after_failure_magenta=%u,%u,%u,%u error=%u\n", diagnostic[0],diagnostic[1],diagnostic[2],diagnostic[3],glGetError());
         glBindFramebuffer(GL_FRAMEBUFFER,0);
+        for (int target_index = 0; target_index < 2; target_index++) {
+            mpv_opengl_fbo retry_fbo = {target_index ? 0 : (int)framebuffer,64,64,0};
+            mpv_render_param retry_params[] = {
+                {MPV_RENDER_PARAM_OPENGL_FBO,&retry_fbo},
+                {MPV_RENDER_PARAM_FLIP_Y,&flip_y},
+                {MPV_RENDER_PARAM_INVALID,NULL},
+            };
+            unsigned char retry_pixels[64*64*4] = {0};
+            int retry_result = mpv_render_context_render(render,retry_params);
+            glBindFramebuffer(GL_FRAMEBUFFER,(GLuint)retry_fbo.fbo);
+            glReadPixels(0,0,64,64,GL_RGBA,GL_UNSIGNED_BYTE,retry_pixels);
+            uint64_t retry_hash = 1469598103934665603ULL;
+            for (size_t n = 0; n < sizeof retry_pixels; n++) { retry_hash ^= retry_pixels[n]; retry_hash *= 1099511628211ULL; }
+            printf("after_failure_redraw_fbo=%d result=%d hash=%016llx pixel=%u,%u,%u,%u error=%u\n",retry_fbo.fbo,retry_result,(unsigned long long)retry_hash,retry_pixels[0],retry_pixels[1],retry_pixels[2],retry_pixels[3],glGetError());
+            glBindFramebuffer(GL_FRAMEBUFFER,0);
+        }
     }
 ''')
+observed = observed.replace(
+    '                glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);\n                GLenum error',
+    '                glBindFramebuffer(GL_FRAMEBUFFER, 0);\n                GLenum error',
+).replace(
+    '                glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);',
+    '                glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fbo.fbo);',
+)
 variants = {
-    "observe-fbo-entry-baseline": observed,
-    "observe-fbo-entry-default": observed.replace(
-        '                glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);\n                GLenum error',
-        '                glBindFramebuffer(GL_FRAMEBUFFER, 0);\n                GLenum error',
+    "observe-target-custom-fbo": observed,
+    "observe-target-default-fbo": observed.replace(
+        'mpv_opengl_fbo fbo = {(int)framebuffer, 64, 64, 0};',
+        'mpv_opengl_fbo fbo = {0, 64, 64, 0};',
     ),
 }
-assert variants["observe-fbo-entry-default"] != observed
+assert variants["observe-target-default-fbo"] != observed
 
 probes = {}
 for name, code in variants.items():
