@@ -69,6 +69,10 @@ class PinnedFlutterActionTests(unittest.TestCase):
                 "stable/linux/flutter_linux_3.47.5-stable.tar.xz",
                 "2132e990f236f8d22e7c6314b29a191a95b10d7cbcfec9b4e2e303d996652cbb",
             ),
+            ("3.47.6", "Linux"): (
+                "stable/linux/flutter_linux_3.47.6-stable.tar.xz",
+                "f1631b9c2c8b3529323db412b0d1beacf4a748f8783b0d7cf599a8fd5f461675",
+            ),
             ("3.47.4", "Darwin"): (
                 "stable/macos/flutter_macos_3.47.4-stable.zip",
                 "72ced0f81a5ea48f30d221699fa45378cdd1fa15426512444f32e4e1bee9db8b",
@@ -77,6 +81,10 @@ class PinnedFlutterActionTests(unittest.TestCase):
                 "stable/macos/flutter_macos_3.47.5-stable.zip",
                 "a7893bb0feecd8bd066f4f7e850356f896a6fc3b862e6c506d21c76691a66b72",
             ),
+            ("3.47.6", "Darwin"): (
+                "stable/macos/flutter_macos_3.47.6-stable.zip",
+                "f1f68c777b2b34153e1631670445efbeb218f42a398be32bba2051476719b0a4",
+            ),
             ("3.47.4", "Windows"): (
                 "stable/windows/flutter_windows_3.47.4-stable.zip",
                 "31173300481bd06e377fd55ee84214689648b1817563efd7b450b7b78bdf351a",
@@ -84,6 +92,10 @@ class PinnedFlutterActionTests(unittest.TestCase):
             ("3.47.5", "Windows"): (
                 "stable/windows/flutter_windows_3.47.5-stable.zip",
                 "0ccd71931f49c2fbe394b1eeb6d79af3d624058a043ea0d03d34160581624fb8",
+            ),
+            ("3.47.6", "Windows"): (
+                "stable/windows/flutter_windows_3.47.6-stable.zip",
+                "a01bb0d26de91bc23c97cd9ccfaad281a612fb8304213fdd5df1119a09404796",
             ),
         }
 
@@ -253,5 +265,9 @@ class PinnedFlutterActionTests(unittest.TestCase):
             ("3.47.5", "Darwin", "ARM64"): (
                 "stable/macos/flutter_macos_arm64_3.47.5-stable.zip",
                 "d4dd908b5f8f65515831b6d68ae33307a813f2b68947dded7a1994ee5ea7cead",
+            ),
+            ("3.47.6", "Darwin", "ARM64"): (
+                "stable/macos/flutter_macos_arm64_3.47.6-stable.zip",
+                "a1946d3b6b3de15ce247dc89649df9035ce29e6b4e7ebe91919a25890ea2e79a",
             ),
         }
