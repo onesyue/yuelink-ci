@@ -21,7 +21,7 @@ permissions:
   contents: read
 
 env:
-  FLUTTER_VERSION: '3.47.5'
+  FLUTTER_VERSION: '3.47.6'
   # Match the exact patch used by the private release builder; an attestation
   # on an older standard library would not prove the shipped Go graph.
   # 2026-09-20: 私有构建器跨 minor 升到 1.27.1（与 yue-node/Xray-core fork 对齐），
@@ -92,7 +92,7 @@ jobs:
         run: python3 core/mihomo/third_party/verify_quic_source.py
 
       - name: Set up Flutter
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@5823380ae89c51ecf41a64da808ab64a2e3ee0d5 # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@0abbca8285e980d4a40deb14f3fb5088c175aee9 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           # Cache ON — reviewed 2026-08-31 decision (receipt-verified SDK,
@@ -357,7 +357,7 @@ jobs:
           test "$version" = 'Xcode 26.6' || { echo "::error::unexpected Xcode: $version"; exit 1; }
           echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
       - name: Set up Flutter
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@5823380ae89c51ecf41a64da808ab64a2e3ee0d5 # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@0abbca8285e980d4a40deb14f3fb5088c175aee9 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
@@ -401,7 +401,7 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Set up Flutter
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@5823380ae89c51ecf41a64da808ab64a2e3ee0d5 # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@0abbca8285e980d4a40deb14f3fb5088c175aee9 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true

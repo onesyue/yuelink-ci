@@ -11,7 +11,7 @@ REQUIRED = (
     'test "$(git rev-parse HEAD)" = "$SOURCE_SHA"',
     'git merge-base --is-ancestor "$SOURCE_SHA" "refs/remotes/origin/$SOURCE_BRANCH"',
     'persist-credentials: false',
-    'flutter-version: \'3.47.5\'',
+    'flutter-version: \'3.47.6\'',
     'flutter pub get --enforce-lockfile',
     '--update-goldens --dart-define=YUELINK_THEME_GOLDENS=true',
     '--machine --dart-define=YUELINK_THEME_GOLDENS=true',

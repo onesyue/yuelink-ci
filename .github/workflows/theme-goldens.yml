@@ -57,9 +57,9 @@ jobs:
           git show-ref --verify "refs/remotes/origin/$SOURCE_BRANCH"
           git merge-base --is-ancestor "$SOURCE_SHA" "refs/remotes/origin/$SOURCE_BRANCH"
       - name: Set up verified Flutter
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@5823380ae89c51ecf41a64da808ab64a2e3ee0d5 # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@0abbca8285e980d4a40deb14f3fb5088c175aee9 # pinned installer v1
         with:
-          flutter-version: '3.47.5'
+          flutter-version: '3.47.6'
           cache: true
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
@@ -85,7 +85,7 @@ jobs:
           assert events[-1].get('success') is True
           passed = [e for e in events if e.get('type') == 'testDone' and e.get('result') == 'success' and not e.get('hidden') and not e.get('skipped')]
           assert len(passed) >= 29, f'test floor: {len(passed)}'
-          proof = {'schemaVersion': 1, 'sourceRepository': 'onesyue/yuelink', 'sourceSha': os.environ['SOURCE_SHA'], 'workflowSha': os.environ['WORKFLOW_SHA'], 'runId': os.environ['RUN_ID'], 'runAttempt': os.environ['RUN_ATTEMPT'], 'flutterVersion': '3.47.5', 'platform': 'ubuntu-24.04', 'passed': len(passed), 'sha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in images}}
+          proof = {'schemaVersion': 1, 'sourceRepository': 'onesyue/yuelink', 'sourceSha': os.environ['SOURCE_SHA'], 'workflowSha': os.environ['WORKFLOW_SHA'], 'runId': os.environ['RUN_ID'], 'runAttempt': os.environ['RUN_ATTEMPT'], 'flutterVersion': '3.47.6', 'platform': 'ubuntu-24.04', 'passed': len(passed), 'sha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in images}}
           pathlib.Path('theme-goldens.json').write_text(json.dumps(proof, sort_keys=True, indent=2) + '\n')
           PY
       - name: Upload image evidence
