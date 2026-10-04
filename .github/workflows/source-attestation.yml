@@ -9,6 +9,10 @@ permissions:
 
 jobs:
   diagnose:
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [1, 2, 3]
     runs-on: windows-2025-vs2026
     timeout-minutes: 20
     steps:
@@ -37,4 +41,6 @@ jobs:
 
       - name: Compile and compare bounded media probes
         shell: bash
+        env:
+          DIAGNOSTIC_LANE: ${{ matrix.lane }}
         run: python3 diagnostic/scripts/diagnose-windows-media.py source "$RUNNER_TEMP/windows-media-diagnostic"

@@ -4,6 +4,7 @@ import json
 import shutil
 import subprocess
 import sys
+import os
 from pathlib import Path
 
 
@@ -65,24 +66,23 @@ observed = original.replace(
 ).replace(
     '    mpv_free(c.hw);',
     '    printf("decoded_frames=%d decoded_distinct=%d decoded_tail_hash=%016llx render_tail_hash=%016llx\\n", c.decoded_frames, c.decoded_distinct, (unsigned long long)c.decoded_hash, (unsigned long long)previous);\n'
+    '    unsigned int lo[4] = {255,255,255,255}, hi[4] = {0,0,0,0};\n'
+    '    for (size_t p = 0; p < sizeof pixels; p++) { unsigned int channel = p % 4; if (pixels[p] < lo[channel]) lo[channel] = pixels[p]; if (pixels[p] > hi[channel]) hi[channel] = pixels[p]; }\n'
+    '    printf("pixel_first=%u,%u,%u,%u pixel_min=%u,%u,%u,%u pixel_max=%u,%u,%u,%u\\n", pixels[0],pixels[1],pixels[2],pixels[3],lo[0],lo[1],lo[2],lo[3],hi[0],hi[1],hi[2],hi[3]);\n'
     '    mpv_free(c.hw);',
 )
 assert observed.count('static void observe_decode(') == 1
 assert observed.count('observe_decode(c);') == 1
 variants = {
     "observe-at-eof-baseline": observed,
-    "observe-at-eof-first-error": observed.replace(
+    "observe-at-eof-no-direct-render": observed.replace(
         'option(mpv, "hwdec", argv[3]);',
         'option(mpv, "hwdec", argv[3]);\n'
-        '    option(mpv, "hwdec-software-fallback", "yes");',
-    ),
-    "observe-at-eof-hw-thread-one": observed.replace(
-        'option(mpv, "hwdec", argv[3]);',
-        'option(mpv, "hwdec", argv[3]);\n'
-        '    option(mpv, "hwdec-threads", "1");',
+        '    option(mpv, "vd-lavc-dr", "no");',
     ),
 }
 
+probes = {}
 for name, code in variants.items():
     tree = work / name
     shutil.copytree(source / "scripts/native_tests/media", tree)
@@ -94,14 +94,22 @@ for name, code in variants.items():
         check=True,
     )
     subprocess.run(["cmake", "--build", str(build), "--config", "Release", "--parallel", "2"], check=True)
-    probe = build / "Release/player-probe.exe"
-    for renderer, hwdec in (("gl", "auto-safe"), ("sw", "auto-safe"), ("gl", "no")):
-        for iteration in range(40 if (renderer, hwdec) == ("gl", "auto-safe") else 5):
+    probes[name] = build / "Release/player-probe.exe"
+
+# Interleave both options on each runner; independent matrix lanes test whether
+# a runner-local graphics condition explains the sparse original failure.
+for renderer, hwdec in (("gl", "auto-safe"), ("sw", "auto-safe"), ("gl", "no")):
+    for iteration in range(60 if (renderer, hwdec) == ("gl", "auto-safe") else 5):
+        names = list(variants)
+        if (iteration + int(os.environ["DIAGNOSTIC_LANE"])) % 2:
+            names.reverse()
+        for name in names:
+            probe = probes[name]
             result = subprocess.run(
                 [str(probe), str(fixture), renderer, hwdec, "-", "-"],
                 capture_output=True, text=True, timeout=30,
             )
-            row = {"variant": name, "renderer": renderer, "hwdec": hwdec,
+            row = {"variant": name, "lane": os.environ["DIAGNOSTIC_LANE"], "renderer": renderer, "hwdec": hwdec,
                    "iteration": iteration, "exit": result.returncode,
                    "stdout": result.stdout, "stderr": result.stderr}
             receipts.append(row)
