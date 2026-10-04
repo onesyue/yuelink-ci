@@ -73,12 +73,59 @@ observed = original.replace(
 )
 assert observed.count('static void observe_decode(') == 1
 assert observed.count('observe_decode(c);') == 1
+
+state_observer = r'''
+struct gl_state {
+    GLint viewport[4], scissor[4], program, fbo, unpack, pack, active;
+    GLboolean scissor_on, depth_on, stencil_on, cull_on, blend_on, color[4];
+};
+static void observe_gl(struct gl_state *s) {
+    glGetIntegerv(GL_VIEWPORT, s->viewport);
+    glGetIntegerv(GL_SCISSOR_BOX, s->scissor);
+    glGetIntegerv(GL_CURRENT_PROGRAM, &s->program);
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &s->fbo);
+    glGetIntegerv(0x88EF, &s->unpack);
+    glGetIntegerv(0x88ED, &s->pack);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &s->active);
+    s->scissor_on = glIsEnabled(GL_SCISSOR_TEST);
+    s->depth_on = glIsEnabled(GL_DEPTH_TEST);
+    s->stencil_on = glIsEnabled(GL_STENCIL_TEST);
+    s->cull_on = glIsEnabled(GL_CULL_FACE);
+    s->blend_on = glIsEnabled(GL_BLEND);
+    glGetBooleanv(GL_COLOR_WRITEMASK, s->color);
+}
+static void print_gl(const char *phase, int frame, struct gl_state *s) {
+    printf("gl_state=%s frame=%d viewport=%d,%d,%d,%d scissor=%d,%d,%d,%d program=%d fbo=%d unpack=%d pack=%d active=%d enabled=%u,%u,%u,%u,%u color=%u,%u,%u,%u\n",
+        phase,frame,s->viewport[0],s->viewport[1],s->viewport[2],s->viewport[3],
+        s->scissor[0],s->scissor[1],s->scissor[2],s->scissor[3],s->program,s->fbo,s->unpack,s->pack,s->active,
+        s->scissor_on,s->depth_on,s->stencil_on,s->cull_on,s->blend_on,
+        s->color[0],s->color[1],s->color[2],s->color[3]);
+}
+'''
+observed = observed.replace('int main(int argc, char **argv) {', state_observer + '\nint main(int argc, char **argv) {')
+observed = observed.replace('mpv_request_log_messages(mpv, "warn");', 'mpv_request_log_messages(mpv, "v");')
+observed = observed.replace('    int frames = 0, distinct = 0, failed = 0;',
+    '    struct gl_state pre[64] = {0}, post[64] = {0};\n    int frames = 0, distinct = 0, failed = 0;')
+observed = observed.replace('            if (mpv_render_context_render(render,',
+    '            if (use_gl && frames < 64) observe_gl(&pre[frames]);\n            if (mpv_render_context_render(render,')
+observed = observed.replace('            uint64_t hash = 1469598103934665603ULL;',
+    '            if (use_gl && frames < 64) observe_gl(&post[frames]);\n            uint64_t hash = 1469598103934665603ULL;')
+observed = observed.replace('    mpv_free(c.hw);',
+    '    if (use_gl) for (int n = 0; n < frames && n < 64; n++) { print_gl("pre", n, &pre[n]); print_gl("post", n, &post[n]); }\n    mpv_free(c.hw);')
 variants = {
-    "observe-at-eof-baseline": observed,
-    "observe-at-eof-no-direct-render": observed.replace(
-        'option(mpv, "hwdec", argv[3]);',
-        'option(mpv, "hwdec", argv[3]);\n'
-        '    option(mpv, "vd-lavc-dr", "no");',
+    "observe-gl-state-baseline": observed,
+    "observe-gl-state-defaults": observed.replace(
+        '            if (use_gl && frames < 64) observe_gl(&pre[frames]);',
+        '            if (use_gl) {\n'
+        '                glViewport(0,0,64,64); glDisable(GL_SCISSOR_TEST);\n'
+        '                glDisable(GL_DEPTH_TEST); glDisable(GL_STENCIL_TEST);\n'
+        '                glDisable(GL_CULL_FACE); glDisable(GL_BLEND);\n'
+        '                glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);\n'
+        '                glBindBuffer(0x88EC,0); glPixelStorei(0x0CF2,0);\n'
+        '                glPixelStorei(0x0CF3,0); glPixelStorei(0x0CF4,0);\n'
+        '                glPixelStorei(GL_UNPACK_ALIGNMENT,4);\n'
+        '            }\n'
+        '            if (use_gl && frames < 64) observe_gl(&pre[frames]);',
     ),
 }
 
@@ -113,7 +160,11 @@ for renderer, hwdec in (("gl", "auto-safe"), ("sw", "auto-safe"), ("gl", "no")):
                    "iteration": iteration, "exit": result.returncode,
                    "stdout": result.stdout, "stderr": result.stderr}
             receipts.append(row)
-            print(json.dumps(row), flush=True)
+            printed = dict(row)
+            if result.returncode == 0:
+                printed["stderr"] = "\n".join(line for line in result.stderr.splitlines()
+                    if any(token in line.lower() for token in ("reconfig", "resize", "video source", "video display", "decoder format", "shader", "dr failed")))
+            print(json.dumps(printed), flush=True)
             (work / "proof.json").write_text(json.dumps(receipts, indent=2) + "\n")
 
 summary = []
