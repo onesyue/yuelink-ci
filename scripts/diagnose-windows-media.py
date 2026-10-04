@@ -60,15 +60,28 @@ observed = original.replace(
     '#ifdef _WIN32\nstatic DWORD WINAPI control_thread',
     observer + '\n#ifdef _WIN32\nstatic DWORD WINAPI control_thread',
 ).replace(
-    '        int eof = 0;', '        observe_decode(c);\n        int eof = 0;',
+    'if (eof) { flag_set(&c->eof, 1); break; }',
+    'if (eof) { observe_decode(c); flag_set(&c->eof, 1); break; }',
 ).replace(
     '    mpv_free(c.hw);',
-    '    printf("decoded_frames=%d decoded_distinct=%d\\n", c.decoded_frames, c.decoded_distinct);\n'
+    '    printf("decoded_frames=%d decoded_distinct=%d decoded_tail_hash=%016llx render_tail_hash=%016llx\\n", c.decoded_frames, c.decoded_distinct, (unsigned long long)c.decoded_hash, (unsigned long long)previous);\n'
     '    mpv_free(c.hw);',
 )
 assert observed.count('static void observe_decode(') == 1
 assert observed.count('observe_decode(c);') == 1
-variants = {"observe-decoded-video": observed}
+variants = {
+    "observe-at-eof-baseline": observed,
+    "observe-at-eof-first-error": observed.replace(
+        'option(mpv, "hwdec", argv[3]);',
+        'option(mpv, "hwdec", argv[3]);\n'
+        '    option(mpv, "hwdec-software-fallback", "yes");',
+    ),
+    "observe-at-eof-hw-thread-one": observed.replace(
+        'option(mpv, "hwdec", argv[3]);',
+        'option(mpv, "hwdec", argv[3]);\n'
+        '    option(mpv, "hwdec-threads", "1");',
+    ),
+}
 
 for name, code in variants.items():
     tree = work / name
@@ -83,7 +96,7 @@ for name, code in variants.items():
     subprocess.run(["cmake", "--build", str(build), "--config", "Release", "--parallel", "2"], check=True)
     probe = build / "Release/player-probe.exe"
     for renderer, hwdec in (("gl", "auto-safe"), ("sw", "auto-safe"), ("gl", "no")):
-        for iteration in range(50 if (renderer, hwdec) == ("gl", "auto-safe") else 10):
+        for iteration in range(40 if (renderer, hwdec) == ("gl", "auto-safe") else 5):
             result = subprocess.run(
                 [str(probe), str(fixture), renderer, hwdec, "-", "-"],
                 capture_output=True, text=True, timeout=30,
