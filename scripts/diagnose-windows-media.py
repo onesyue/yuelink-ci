@@ -181,9 +181,8 @@ uploaded = uploaded.replace('    flag_set(&c.stop, 1);',
 uploaded = uploaded.replace('    mpv_free(c.hw);',
     '    print_gpu_observations();\n    mpv_free(c.hw);')
 variants = {
-    "observe-lut-original": uploaded,
-    "observe-lut-poison-padding": uploaded.replace('static int lut_mode = 0;', 'static int lut_mode = 1;'),
-    "observe-lut-zero-padding": uploaded.replace('static int lut_mode = 0;', 'static int lut_mode = 2;'),
+    "patched-original-probe": original,
+    "patched-lut-observer": uploaded,
 }
 assert uploaded.count('static void APIENTRY track_upload(') == 1
 assert uploaded.count('measured_frame = frames;') == 1
@@ -202,6 +201,17 @@ for name, code in variants.items():
     subprocess.run(["cmake", "--build", str(build), "--config", "Release", "--parallel", "2"], check=True)
     probes[name] = build / "Release/player-probe.exe"
 
+original_probe = probes["patched-original-probe"]
+subprocess.run([str(original_probe.with_name("shared-texture-probe.exe"))], check=True)
+playback_work = work / "original-release-playback"
+subprocess.run(
+    [sys.executable, str(source / "scripts/native_tests/media/playback.py"),
+     "--probe", str(original_probe), "--fixtures", str(fixture.parent),
+     "--work", str(playback_work), "--legacy-subtitles"],
+    check=True, env=dict(os.environ, PYTHONUTF8="1"),
+)
+print("ORIGINAL_RELEASE_PLAYBACK=" + (playback_work / "proof.json").read_text(), flush=True)
+
 # Interleave both options on each runner; independent matrix lanes test whether
 # a runner-local graphics condition explains the sparse original failure.
 for renderer, hwdec in (("gl", "auto-safe"), ("sw", "auto-safe"), ("gl", "no")):
@@ -210,8 +220,6 @@ for renderer, hwdec in (("gl", "auto-safe"), ("sw", "auto-safe"), ("gl", "no")):
         if (iteration + int(os.environ["DIAGNOSTIC_LANE"])) % 2:
             names.reverse()
         for name in names:
-            if name == "observe-lut-poison-padding" and iteration >= 5:
-                continue
             probe = probes[name]
             result = subprocess.run(
                 [str(probe), str(fixture), renderer, hwdec, "-", "-"],
@@ -222,6 +230,21 @@ for renderer, hwdec in (("gl", "auto-safe"), ("sw", "auto-safe"), ("gl", "no")):
                    "iteration": iteration, "exit": result.returncode,
                    "stdout": result.stdout, "stderr": result.stderr}
             receipts.append(row)
+            if name == "patched-lut-observer" and renderer == "gl":
+                cpu = [s for s in result.stdout.splitlines() if s.startswith("lut_cpu phase=original")]
+                gpu = [s for s in result.stdout.splitlines() if s.startswith("lut_gpu ")]
+                if len(cpu) != 1 or len(gpu) != 1:
+                    raise RuntimeError("Missing real patched DLL scaler LUT observations")
+                for line, width in ((cpu[0], 8), (gpu[0], 4)):
+                    values = line.split(" bits=", 1)[1]
+                    if len(values) != 2048 * width:
+                        raise RuntimeError("Incomplete scaler LUT observation")
+                    padding = [int(values[n*width:(n+1)*width], 16)
+                               for n in range(2048) if n % 8 >= 6]
+                    if any(padding):
+                        raise RuntimeError("Patched DLL uploaded nonzero scaler padding")
+                if "status=36053 error=0" not in gpu[0]:
+                    raise RuntimeError("GPU LUT could not be independently read")
             printed = dict(row)
             if result.returncode == 0:
                 printed["stderr"] = "\n".join(line for line in result.stderr.splitlines()

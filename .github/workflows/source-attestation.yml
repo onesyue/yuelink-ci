@@ -1,5 +1,5 @@
 name: Diagnose Windows media
-run-name: Diagnose signed v1.3.109 Windows media
+run-name: Verify signed Windows scaler LUT repair
 
 on:
   workflow_dispatch: {}
@@ -22,11 +22,11 @@ jobs:
           path: diagnostic
           persist-credentials: false
 
-      - name: Checkout exact previously attested source
+      - name: Checkout exact signed native repair candidate
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: 5fa1621a39599d271d846be40f595ba5c1e42aa4
+          ref: e2a3763232a4b1c6baaddede3e098101d996e047
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           path: source
           persist-credentials: false
@@ -36,7 +36,7 @@ jobs:
         working-directory: source
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 5fa1621a39599d271d846be40f595ba5c1e42aa4
+          test "$(git rev-parse HEAD)" = e2a3763232a4b1c6baaddede3e098101d996e047
           python3 scripts/native_tests/windows_media/verify.py
 
       - name: Compile and compare bounded media probes
