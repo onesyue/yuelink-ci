@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.112",
+  "channel": "stable",
+  "publishedAt": "2026-10-05T11:20:11Z",
+  "expiresAt": "2026-11-09T11:20:11Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "工单刷新与提现更稳妥。\n\n- 修复连续刷新工单或切换账号后，旧请求覆盖新列表的问题。\n- 提现申请或撤销后，即使已离开页面，也会刷新佣金余额和提现记录。\n- 切换账号后，旧账号的提现确认会失效，也不会再弹出旧请求的结果提示。\n",
+  "notesEn": "More reliable ticket refreshes and withdrawals.\n\n- Older requests no longer overwrite the latest ticket list after repeated refreshes or an account switch.\n- Commission balances and withdrawal records now refresh after submitting or cancelling a withdrawal, even if you have left the page.\n- After switching accounts, earlier withdrawal confirmations cannot act on the new account, and late results from the old account no longer appear.\n",
+  "sourceCommit": "33c788a6be2ce662e49c2db2f62c131c596bbe61",
+  "sha256SumsSha256": "4533987c7f6a0c3b016093fdfdde3675cab0d64e14c4eaa38443eb93ca2c6b97",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.112/YueLink-1.3.112-android-arm64-v8a.apk",
+      "sha256": "4aff8645649edfc9b8f05f15501219fe764415d0d469b985085a67a986a9f7ef"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.112/YueLink-1.3.112-android-armeabi-v7a.apk",
+      "sha256": "700eeacf445b00fd036bbd4594612e899c5481bb9655c18dbfce212d6910a876"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.112/YueLink-1.3.112-android-x86_64.apk",
+      "sha256": "c46f22f28c030e89d46a12e57e1d48f6fe947252ff105f684517a76e8cbd29e1"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.112/YueLink-1.3.112-android-universal.apk",
+      "sha256": "7efd5a671595c6b014136dcee50db9dd00cb268ed3671b9233813764aa924c95"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.112/YueLink-1.3.112-ios.ipa",
+      "sha256": "f6f9a2fad64bdfb863af2272b74627828610d1d5b600a946743346642b11eede"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.112/YueLink-1.3.112-macos-universal.dmg",
+      "sha256": "8f6b983f62a07edd865155f8a58169b7c6ecf0b7b699575c6ec29eba5e2de675"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.112/YueLink-1.3.112-windows-amd64-setup.exe",
+      "sha256": "1db71b9494d3cc43db1440f65963ca3947ecc6d92b653543ea3690b7736637d2"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.112/YueLink-1.3.112-windows-amd64-portable.zip",
+      "sha256": "9d1173f0851c4f9bf9e5e1270d0f3b51ff3dfb1c715e45b88d903df6fb9994cf"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.112/YueLink-1.3.112-linux-amd64.AppImage",
+      "sha256": "9671c259d3ab728b07d9ef17762f4a7d2673aafd24a08a92294cb0ca4b9843f8"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "26f2ab42fe4fa49df60bc43f59ca87454ecb1c2bcf5c7157b17e882c46b55df7",
+    "sha256SumsSha256": "4533987c7f6a0c3b016093fdfdde3675cab0d64e14c4eaa38443eb93ca2c6b97",
+    "payloadBundleSha256": "21dea6d8825218e6426608d078259741929e7001a79606cb806771d082716059",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:FptRABSZazK/JLfAkCRKY392ZE/wxVamR5UuVi5sdJFZGpWk6nwHnRVGkliuAM4HbuDSdwpD9eAZizGpaYaiBQ=="
+}
