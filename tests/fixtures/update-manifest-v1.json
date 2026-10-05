@@ -1,59 +1,59 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.110",
+  "version": "1.3.111",
   "channel": "stable",
-  "publishedAt": "2026-10-05T00:45:52Z",
-  "expiresAt": "2026-11-09T00:45:52Z",
+  "publishedAt": "2026-10-05T06:16:59Z",
+  "expiresAt": "2026-11-09T06:16:59Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "视频更稳，连接数据更及时。\n\n- 修复部分视频播放时画面偶发全黑的问题，并同步修复各平台媒体库中的相同隐患。\n- 修复连接列表可能长时间停留在旧数据的问题，数据推送停顿后自动重新连接并恢复刷新。\n",
-  "notesEn": "More reliable video playback and connection updates.\n\n- Fixed intermittent black video frames and applied the same media-library correction across platforms.\n- Fixed connection lists that could remain stale by reconnecting stalled update streams automatically.\n",
-  "sourceCommit": "a7e27a3dfb020a1024862d5eed49619a9960bee8",
-  "sha256SumsSha256": "842d050f8c9afd4b3ccc83623e731d42c5a4b8268720899098b98d436a5963ca",
+  "notes": "更新、连接与卸载更省心。\n\n- 更新包下载并校验完成后如果安装没能启动，现在可以直接重试安装，不用重新下载；Android 会在下载前先提醒开启「安装未知应用」权限。\n- 桌面端连接在等待系统授权时会明确提示，并可以随时取消。\n- Windows 卸载时会关闭悦通留下的系统代理并停止后台网络服务，不再出现卸载后无法上网。\n- Windows 上如果系统里残留了其他软件的自动代理脚本（PAC），悦通会提示流量可能没有经过它。\n- 登录后拉取订阅更快，不再被语言设置同步拖住。\n",
+  "notesEn": "Smoother updates, connects and uninstalls.\n\n- If a verified update fails to open the installer, you can now retry the install without downloading again; Android asks for the \"install unknown apps\" permission before the download starts.\n- On desktop, a connection waiting for system authorization now says so and can be cancelled at any time.\n- Uninstalling on Windows now turns off the system proxy YueLink set and stops its background network service, so the machine is not left without internet.\n- On Windows, YueLink now warns when a leftover automatic proxy script (PAC) from another app may be diverting traffic.\n- Subscriptions load faster after sign-in and no longer wait on the language-preference sync.\n",
+  "sourceCommit": "07c8642c7f94b5534fdc15392e8651da94bb9ab7",
+  "sha256SumsSha256": "ef95bb300da1503b1f87322b24c7aaab65d11a988b3415462946fa955c5c13ea",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.110/YueLink-1.3.110-android-arm64-v8a.apk",
-      "sha256": "30c9e8843c63fe69224164689ce43b6365d786912f8883fea6660020c2d823fc"
+      "url": "https://yuetong.app/v1.3.111/YueLink-1.3.111-android-arm64-v8a.apk",
+      "sha256": "47be54d854201f60e1b473a9a544ea437208149c5ef5a944a52e7a97395117c0"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.110/YueLink-1.3.110-android-armeabi-v7a.apk",
-      "sha256": "5fcacd6f56674b9a74e2bb2d8971d99b9408d0ca2aba735e5d6ea9dee5a89874"
+      "url": "https://yuetong.app/v1.3.111/YueLink-1.3.111-android-armeabi-v7a.apk",
+      "sha256": "b7a67b72832ed06c95be35b36bd7559cf73e01c24fba382c838e3289953a8749"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.110/YueLink-1.3.110-android-x86_64.apk",
-      "sha256": "df7af46345b14654335b0e2a81371b9845b86612a14085069751c9688c40b23c"
+      "url": "https://yuetong.app/v1.3.111/YueLink-1.3.111-android-x86_64.apk",
+      "sha256": "ffb50e1a743bf800141702646e7d73b4cf08a6a492cd575be75ff4f45e1fc105"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.110/YueLink-1.3.110-android-universal.apk",
-      "sha256": "57137146e08bbfd639e959e31501d30c883ecf240c30de4c4279643d3bde4b5a"
+      "url": "https://yuetong.app/v1.3.111/YueLink-1.3.111-android-universal.apk",
+      "sha256": "2dc743ca25ce4f02150c35cabcf517fbc2639ca93c26958703a8ffd4ceccd12b"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.110/YueLink-1.3.110-ios.ipa",
-      "sha256": "3bbf8ef040d6620899ba1f3648f3fc0401e0696c4849a62acc64ff1dbfb122fa"
+      "url": "https://yuetong.app/v1.3.111/YueLink-1.3.111-ios.ipa",
+      "sha256": "86a154198660d5c421e0d6a3a4282d13decb8cad8b87a1dc790e923082188bb9"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.110/YueLink-1.3.110-macos-universal.dmg",
-      "sha256": "7e34bf309ab0f5756ef5cce68074256c3a159253599f5f39ae57a7cde736d4b0"
+      "url": "https://yuetong.app/v1.3.111/YueLink-1.3.111-macos-universal.dmg",
+      "sha256": "f5a2550958b3fb2a2fcf6351b4922ffe427002285a7dddb1547e30aed96cca03"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.110/YueLink-1.3.110-windows-amd64-setup.exe",
-      "sha256": "3f36906814f7a606379744aab3e6db871417515ed0dee279a404de2b066bf5ae"
+      "url": "https://yuetong.app/v1.3.111/YueLink-1.3.111-windows-amd64-setup.exe",
+      "sha256": "d382bcd599e8e99f1e22f567a6b3592a0c3ec1f6679174997568b81997b9952e"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.110/YueLink-1.3.110-windows-amd64-portable.zip",
-      "sha256": "e01adea30a89aff23314b47b29e93e2c1f7d541389322d80c03cb63f58ad98dc"
+      "url": "https://yuetong.app/v1.3.111/YueLink-1.3.111-windows-amd64-portable.zip",
+      "sha256": "6779f96fb55832e099b91b714a06530707b53b70036fd9704956a64936b5927b"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.110/YueLink-1.3.110-linux-amd64.AppImage",
-      "sha256": "b7e07c8b4d9362eecaa5838803214b2585a5c6a91831ede783bae13f289a745d"
+      "url": "https://yuetong.app/v1.3.111/YueLink-1.3.111-linux-amd64.AppImage",
+      "sha256": "a4c13c68f2b8cb7c48c16d0b2a390c426ebff4523a403a8f64ac5e5a04615d6c"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "bbe5d5c0234e8a97bdac211e54d33b25737882ffe238265fff9d0260200cdaa6",
-    "sha256SumsSha256": "842d050f8c9afd4b3ccc83623e731d42c5a4b8268720899098b98d436a5963ca",
-    "payloadBundleSha256": "135317b1febf87ace42da50d5bf50805f72eaaa82fbb2ffb5db690afc4d18ca2",
+    "candidateSha256": "5d5b4953eb6bfb1b44f565c8d58353df9131b852bb5aaca3b28c9a55e4dad916",
+    "sha256SumsSha256": "ef95bb300da1503b1f87322b24c7aaab65d11a988b3415462946fa955c5c13ea",
+    "payloadBundleSha256": "b10bed51199a184b93975e1eae2f4e30d1f64eed80e4a10d8cdb8e46ed76be3a",
     "payloadCount": 19
   },
-  "sig": "ed25519:BC3QRuDD7/sWiv2TfNUB9YqiV3hRnvCN5uMjOlI+KOJ7a0FoDjY8CYfg94ljESwo6PmBIuR3heIdILQDTgbODQ=="
+  "sig": "ed25519:CF///ckT3U55XVhMpUsxsZ7K82xuST3/8zGNu0xIYuEBCz5YosE2tZaIUA8cUCiKRcAsisHGauoPqlruhJ/8DQ=="
 }
