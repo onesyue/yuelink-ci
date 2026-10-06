@@ -517,6 +517,9 @@ jobs:
       - name: Build source-locked Linux native media
         if: matrix.platform == 'linux'
         shell: bash
+        env:
+          # Read the reviewed prior source offers without anonymous API limits.
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           python3 -m venv "$RUNNER_TEMP/media-tools"
