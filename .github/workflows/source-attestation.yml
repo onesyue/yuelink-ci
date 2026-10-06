@@ -123,6 +123,9 @@ jobs:
       - name: Android native TUN ownership
         run: bash scripts/ci/test_android_tun_ownership.sh
 
+      - name: Native source archive recovery contracts
+        run: python3 -m unittest discover -s scripts/native_tests/source_offer -p 'test_*.py'
+
       - name: Format check for the complete unreleased delta
         shell: bash
         run: |
