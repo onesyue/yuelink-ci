@@ -202,6 +202,7 @@ jobs:
           flutter test --no-pub --coverage --machine | tee /tmp/flutter-tests.jsonl
           python3 .source-attestation-tools/scripts/count-flutter-machine-tests.py \
             /tmp/flutter-tests.jsonl --minimum 2044
+          dart run tool/automation/coverage_ratchet.dart --check
 
   # 2026-08-31: the four probe jobs below no longer `needs: source_contract`.
   # They only ever consumed its validated copy of `inputs.source_sha`, and

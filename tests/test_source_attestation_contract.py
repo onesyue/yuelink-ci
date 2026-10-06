@@ -48,6 +48,7 @@ WORKFLOW_MARKERS = (
     "flutter test --no-pub --coverage --machine",
     ".source-attestation-tools/scripts/count-flutter-machine-tests.py",
     "/tmp/flutter-tests.jsonl --minimum 2044",
+    "dart run tool/automation/coverage_ratchet.dart --check",
     "GITLEAKS_VERSION: '8.30.1'",
     "GITLEAKS_LINUX_X64_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'",
     "gitleaks/releases/download/v${GITLEAKS_VERSION}",
