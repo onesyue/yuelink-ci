@@ -720,7 +720,7 @@ jobs:
             # "digest:" 为止,对 apksigner 输出里前缀冒号的数量不敏感(旧 awk -F': '
             # 在新 build-tools 输出格式下会误取标签文字 "certificate SHA-256 digest")。
             got=$("$APKSIGNER" verify --print-certs "$apk" \
-                  | sed -n 's/.*SHA-256 digest:[[:space:]]*//p' | head -1 \
+                  | sed -n 's/.*SHA-256 digest:[[:space:]]*//p' | sed -n '1p' \
                   | tr 'A-F' 'a-f' | tr -d '[:space:]')
             if [ "$got" != "$EXPECT_SHA256" ]; then
               echo "::error::$(basename "$apk") 签名 $got ≠ 预期 release key — 拒绝发布(防签名冲突)"
@@ -1296,9 +1296,9 @@ jobs:
         if: matrix.platform == 'linux'
         shell: bash
         run: |
-          BUNDLE_DIR=$(find build/linux -maxdepth 4 -type d -name bundle | head -1)
+          BUNDLE_DIR=$(find build/linux -maxdepth 4 -type d -name bundle | sed -n '1p')
           if [ -z "$BUNDLE_DIR" ]; then
-            echo "ERROR: bundle dir not found"; find build/linux -type d | head -20; exit 1
+            echo "ERROR: bundle dir not found"; find build/linux -type d | sed -n '1,20p'; exit 1
           fi
 
           # Copy service mode binaries next to the main yuelink binary
@@ -1781,7 +1781,7 @@ jobs:
             | grep -E '^v[0-9]' \
             | grep -Fxv "$TAG" \
             | grep -Ev '(^pre$|-pre(\.[0-9]+)?$)' \
-            | head -1)
+            | sed -n '1p')
 
           # English twin of NOTES_FILE. A curated Chinese release without its
           # twin is a release error: otherwise every English install silently
@@ -1814,7 +1814,7 @@ jobs:
             # no Build footer, no verbose per-file blurbs. Source of truth
             # for the format is the curated docs/releases/*.md files.
             if [ -n "$PREV_TAG" ]; then
-              CHANGES=$(git log --pretty=format:"- %s" "${PREV_TAG}..HEAD" -- | head -50)
+              CHANGES=$(git log --pretty=format:"- %s" "${PREV_TAG}..HEAD" -- | sed -n '1,50p')
             else
               CHANGES=$(git log --pretty=format:"- %s" -20)
             fi
@@ -1895,13 +1895,13 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          stray_sbom=$(find . -maxdepth 1 -name '*.sbom.cdx.json' -o -name '*.cdx.json' | head -5)
+          stray_sbom=$(find . -maxdepth 1 -name '*.sbom.cdx.json' -o -name '*.cdx.json' | sed -n '1,5p')
           if [ -n "$stray_sbom" ]; then
             echo "::error::per-binary SBOMs found in dist/ — delete them before release upload:"
             echo "$stray_sbom"
             exit 1
           fi
-          stray_src=$(find . -maxdepth 1 \( -name 'yuelink-source*' -o -name 'source.zip' -o -name 'source.tar.gz' \) | head -5)
+          stray_src=$(find . -maxdepth 1 \( -name 'yuelink-source*' -o -name 'source.zip' -o -name 'source.tar.gz' \) | sed -n '1,5p')
           if [ -n "$stray_src" ]; then
             echo "::error::source archives must not be uploaded as release assets:"
             echo "$stray_src"

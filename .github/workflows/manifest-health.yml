@@ -39,7 +39,8 @@ jobs:
         run: |
           python3 -m unittest -v \
             tests/test_update_manifest_verifier.py \
-            tests/test_release_page_health.py
+            tests/test_release_page_health.py \
+            tests/test_manifest_header_streams.py
 
       - name: Validate live update.json freshness
         id: check
@@ -64,8 +65,8 @@ jobs:
             exit 1
           fi
           if [ "$http_code" != 301 ] ||
-             ! tr -d '\r' < "$http_headers" | grep -Eqi \
-               '^location:[[:space:]]*https://yuetong\.app/update\.json[[:space:]]*$'; then
+             ! tr -d '\r' < "$http_headers" | grep -Ei \
+               '^location:[[:space:]]*https://yuetong\.app/update\.json[[:space:]]*$' >/dev/null; then
             echo "detail=plaintext update endpoint must 301 to the exact HTTPS URL" >> "$GITHUB_OUTPUT"
             exit 1
           fi
@@ -90,13 +91,13 @@ jobs:
             echo "detail=root manifest fetch failed: HTTP $code" >> "$GITHUB_OUTPUT"
             exit 1
           fi
-          if ! tr -d '\r' < "$https_headers" | grep -Eqi \
-               '^strict-transport-security:[[:space:]]*max-age=15552000;[[:space:]]*includeSubDomains[[:space:]]*$'; then
+          if ! tr -d '\r' < "$https_headers" | grep -Ei \
+               '^strict-transport-security:[[:space:]]*max-age=15552000;[[:space:]]*includeSubDomains[[:space:]]*$' >/dev/null; then
             echo "detail=HTTPS manifest response lost the reviewed HSTS policy" >> "$GITHUB_OUTPUT"
             exit 1
           fi
-          if ! tr -d '\r' < "$https_headers" | grep -Eqi \
-               '^x-content-type-options:[[:space:]]*nosniff[[:space:]]*$'; then
+          if ! tr -d '\r' < "$https_headers" | grep -Ei \
+               '^x-content-type-options:[[:space:]]*nosniff[[:space:]]*$' >/dev/null; then
             echo "detail=HTTPS manifest response lost X-Content-Type-Options nosniff" >> "$GITHUB_OUTPUT"
             exit 1
           fi
