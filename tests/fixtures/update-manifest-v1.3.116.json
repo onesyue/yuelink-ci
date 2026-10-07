@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.116",
+  "channel": "stable",
+  "publishedAt": "2026-10-06T05:56:31Z",
+  "expiresAt": "2026-11-10T05:56:31Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "设备识别与连接诊断更可靠。\n\n- 修复部分设备返回通用硬件标识时被误认为同一设备的问题，设备识别更准确。\n- 账号订阅地址跳转到其他域名时继续完成更新，同时移除设备标识，避免将设备信息发送给第三方。\n- 订阅更新失败时优先显示代理线路的实际原因，诊断可区分每次代理和直连尝试。\n- 修复节点测速自动恢复后仍被记录为失败的问题；崩溃诊断补充组件和应用版本，便于定位故障。\n- 提高 Linux 版本的发布可靠性。\n",
+  "notesEn": "More reliable device recognition and connection diagnostics.\n\n- Fixed devices with generic hardware identifiers being mistaken for the same device.\n- Account subscription updates continue across redirects to another domain while removing device identifiers, keeping device information away from third parties.\n- Failed subscription updates now prioritize the actual proxy connection error, with diagnostics distinguishing each proxy and direct attempt.\n- Fixed automatically recovered node latency tests still being recorded as failures. Crash diagnostics now include component and app version details to help locate faults.\n- Improved Linux release reliability.\n",
+  "sourceCommit": "9213d4ab84a6da9b7e505920f6372b0988df9a83",
+  "sha256SumsSha256": "2915e322eb9b0514618216a55f52041a61b93efa81ca3340af6bd76fa79fa953",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.116/YueLink-1.3.116-android-arm64-v8a.apk",
+      "sha256": "48ce25d39fda843ed9180b60ab5a061cb0991e061dea12adde61176d3c05787c"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.116/YueLink-1.3.116-android-armeabi-v7a.apk",
+      "sha256": "35f3a0a127ff120ae66255a52ad9a18059df896ac4170b3d4b54010ca9038304"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.116/YueLink-1.3.116-android-x86_64.apk",
+      "sha256": "c4783077e4faaf4f06625bde9d4bce77e38126c981c0b4ea32b281b9748e6469"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.116/YueLink-1.3.116-android-universal.apk",
+      "sha256": "a0cdb30efc35fbd63b0c3984614c8aaa0cd29679f113469e6b595a9c10bc74c5"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.116/YueLink-1.3.116-ios.ipa",
+      "sha256": "074d76e858b3ec6cba8b3990c61d9245eb49ed9bfa64fac7c417565e63d8b599"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.116/YueLink-1.3.116-macos-universal.dmg",
+      "sha256": "f2364f2e4b19a5f15b28749f0b08d3b83291a9eb73ce753bcc9fdb5cc1edecbd"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.116/YueLink-1.3.116-windows-amd64-setup.exe",
+      "sha256": "0224153d048ba4ea35fb69572185c8bda8fb2e79a7fee5b10b554fec5999febd"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.116/YueLink-1.3.116-windows-amd64-portable.zip",
+      "sha256": "615a0af553ea3d622f2d218e235018a32af45af91b90555a8f069b9f57e8f1d4"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.116/YueLink-1.3.116-linux-amd64.AppImage",
+      "sha256": "7b5c18d256fe8af53b9e4744511de45847cc6ddaa96f3bcf9af05f44a5c4b31a"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "d80378b8f6c94e4f3d569ae285fd91d62237b8957c609a0974f40cce97de850e",
+    "sha256SumsSha256": "2915e322eb9b0514618216a55f52041a61b93efa81ca3340af6bd76fa79fa953",
+    "payloadBundleSha256": "4fbab019edab241501ec29cef7e26b8bfb625a10a223b2f1834bf6d53441ea64",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:DfQhS/f/t18/1MBuSGuPl4Lk8S1bX8BpcQy/FdOcgoLFOpaQUqxosov8WzJNDgNI/1lkPxIzUH4cgjKmEndvDA=="
+}
