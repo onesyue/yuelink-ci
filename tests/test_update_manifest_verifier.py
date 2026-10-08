@@ -303,11 +303,52 @@ class UpdateManifestVerifierTests(unittest.TestCase):
 
     def test_platform_record_cannot_gain_an_unreviewed_field(self) -> None:
         self.assert_policy_rejects(
-            "only url and sha256",
+            "invalid asset schema",
             lambda candidate: candidate["platforms"]["ios"].update(
                 {"installCommand": "curl | sh"}
             ),
         )
+
+    def test_actual_link_producer_floor_is_signed_under_only_the_isolated_test_key(self) -> None:
+        fixture = ROOT / "tests/fixtures/macos-system-floor-20261008"
+        raw = (fixture / "manifest.json").read_bytes()
+        key = json.loads((fixture / "test-public-key.json").read_text())
+        self.assertIs(key["test_only"], True)
+        with mock.patch.object(verifier, "CURRENT_PUBLIC_KEY_B64", key["public_key_b64"]):
+            verified = verifier.verify(raw, minimum_raw=raw)
+            self.assertEqual(len(verified["platforms"]), 9)
+            self.assertEqual(verified["platforms"]["macos-universal"]["minimumSystemVersion"], "13.0")
+            with self.assertRaisesRegex(verifier.ManifestError, "signature is invalid"):
+                verifier.verify(raw.replace(b'"13.0"', b'"12.0"'), minimum_raw=raw)
+        with self.assertRaisesRegex(verifier.ManifestError, "signature is invalid"):
+            verifier.verify(raw, minimum_raw=raw)
+
+    def test_optional_mac_floor_accepts_only_reviewed_ascii_version_shape(self) -> None:
+        for minimum in ("13", "13.0", "13.0.1", "123.456.789"):
+            with self.subTest(minimum=minimum):
+                candidate = json.loads(self.raw)
+                candidate["platforms"]["macos-universal"]["minimumSystemVersion"] = minimum
+                verifier._validate_manifest_policy(candidate)
+
+    def test_mac_floor_rejects_invalid_values_even_in_authentic_policy(self) -> None:
+        for minimum in (13, True, None, "", "13.", ".13", "13.0.0.1", "1000.0", "13.0000", "13\n", " 13.0", "13.0-beta", "<script>", "１３.０", ["13.0"]):
+            with self.subTest(minimum=minimum):
+                self.assert_policy_rejects("minimumSystemVersion", lambda candidate, minimum=minimum:
+                    candidate["platforms"]["macos-universal"].update({"minimumSystemVersion": minimum}))
+
+    def test_mac_floor_is_not_allowed_on_any_other_platform(self) -> None:
+        for platform in verifier.EXPECTED_PLATFORM_ARTIFACTS:
+            if platform == "macos-universal":
+                continue
+            with self.subTest(platform=platform):
+                self.assert_policy_rejects("asset schema", lambda candidate, platform=platform:
+                    candidate["platforms"][platform].update({"minimumSystemVersion": "13.0"}))
+
+    def test_mac_floor_does_not_allow_unknown_keys_or_missing_hash(self) -> None:
+        self.assert_policy_rejects("asset schema", lambda candidate:
+            candidate["platforms"]["macos-universal"].update({"minimumSystemVersion": "13.0", "minimumMacOS": "13.0"}))
+        self.assert_policy_rejects("asset schema", lambda candidate:
+            candidate["platforms"]["macos-universal"].pop("sha256"))
 
     def test_asset_url_host_path_and_extension_are_exact(self) -> None:
         for bad_url in (

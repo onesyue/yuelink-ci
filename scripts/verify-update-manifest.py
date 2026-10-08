@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -321,8 +322,14 @@ def _validate_manifest_policy(
         raise ManifestError("platforms must contain exactly the reviewed 9 targets")
     for platform, artifact_name in EXPECTED_PLATFORM_ARTIFACTS.items():
         asset = platforms[platform]
-        if not isinstance(asset, dict) or set(asset) != {"url", "sha256"}:
-            raise ManifestError(f"platform {platform} must contain only url and sha256")
+        required = {"url", "sha256"}
+        allowed = required | ({"minimumSystemVersion"} if platform == "macos-universal" else set())
+        if not isinstance(asset, dict) or not required <= set(asset) or not set(asset) <= allowed:
+            raise ManifestError(f"platform {platform} has invalid asset schema")
+        if "minimumSystemVersion" in asset:
+            minimum = asset["minimumSystemVersion"]
+            if not isinstance(minimum, str) or not re.fullmatch(r"[0-9]{1,3}(?:\.[0-9]{1,3}){0,2}", minimum):
+                raise ManifestError(f"platform {platform} has invalid minimumSystemVersion")
         digest = asset.get("sha256")
         if (
             not isinstance(digest, str)

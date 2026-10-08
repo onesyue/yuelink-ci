@@ -172,3 +172,13 @@ The contract inventories all eight workflow files plus the composite Flutter
 action (nine action-bearing YAML definitions), checks every `uses:` against
 this policy, and rejects mutable refs, an unknown external repository, or a
 stale/extra documented pattern.
+
+The stable manifest additionally permits `minimumSystemVersion` only on the
+`macos-universal` asset (1–3 ASCII numeric components, each 1–3 digits). It is
+optional for authentic older manifests and signed as part of the asset;
+unknown fields and extensions on other platforms are rejected. Install the
+compatible Ops/site verifier before promoting a root with this field. The
+macOS producer reads its floor from the exact Runner deployment target; a
+release-history link or retained old installer is not a supported OS fallback.
+The isolated producer fixture under `tests/fixtures/macos-system-floor-20261008`
+uses an ephemeral test public key, never the production trust anchor.

@@ -1,0 +1,9 @@
+{
+  "test_only": true,
+  "public_key_b64": "XHYjJBXyADJyrNWuyKahGMWRpqiF5ezh3N0aNyewOzw=",
+  "producer_sha256": "ced0991a1abaef586aaa6ee8873a8bdb29b566d80e803a4750a79ef3e05b5689",
+  "floor_script_sha256": "bcd3c01fc3b1a03118815d87b37e72fb63ef76713fc104412645a7b2b8d5ee93",
+  "purpose": "Promotion-before platform producer compatibility fixture signed only with ephemeral TEST key; all three promotion evidence fields absent; not an actual promoted root",
+  "original_fixture_sha256": "95672f500dc82cb501f4ef8f8da4119ee3a917801936545a5f8626dd75af0185",
+  "platforms_unchanged": true
+}
