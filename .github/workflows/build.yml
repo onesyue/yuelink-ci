@@ -1976,6 +1976,10 @@ jobs:
           # two halves can't diverge in length and the manifest stays small.
           NOTES_EN=$(head -n 100 release_notes.app.en.md | jq -Rs .)
 
+          # Exact checked-out Runner floor; no inferred mapping from release
+          # numbers. setup.dart also verifies the packaged native Mach-O floor.
+          MACOS_MINIMUM_SYSTEM_VERSION="$(python3 scripts/ci/macos_minimum_system_version.py)"
+
           sha() {
             if [ -f "dist/$1.sha256" ]; then
               tr -d '[:space:]' < "dist/$1.sha256" || echo ""
@@ -1990,7 +1994,8 @@ jobs:
             # sidecar 存在即代表该平台二进制已 build+传 R2。不再 `-f dist/$fname` 本地校验。
             [ -z "$hash" ] && return
             jq -n --arg k "$key" --arg u "$BASE/$fname" --arg h "$hash" \
-              '{($k): {url: $u, sha256: $h}}'
+              --arg minimum "$MACOS_MINIMUM_SYSTEM_VERSION" \
+              '{($k): ({url: $u, sha256: $h} + (if $k == "macos-universal" then {minimumSystemVersion: $minimum} else {} end))}'
           }
 
           PLATFORMS="{}"
@@ -2077,6 +2082,7 @@ jobs:
             (.sha256SumsSha256 | test("^[0-9a-f]{64}$")) and
             (has("sig") | not) and
             (.platforms | length) == 9 and
+            (.platforms["macos-universal"].minimumSystemVersion | test("^[0-9]+(\\.[0-9]+){0,2}$")) and
             all(.platforms[]; .sha256 | test("^[0-9a-f]{64}$"))
           ' "$MANIFEST_NAME" >/dev/null
           echo "unsigned candidate complete; private signer owns trust"
