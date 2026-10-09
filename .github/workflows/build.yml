@@ -76,7 +76,8 @@ env:
   # Keep the release builder and govulncheck on this exact patch release;
   # a floating 1.27 selector can silently rebuild the same tag against a
   # different standard library.
-  GO_VERSION: '1.27.1'
+  # 2026-10-09: Go 1.27.2 security fixes; ABI guard still runs on shipped toolchain.
+  GO_VERSION: '1.27.2'
   # Production builds consume the reviewed module graph exactly. `core/go.mod`
   # and go.sum are tidy against the pinned mihomo submodule; dependency drift
   # must fail the build instead of being resolved implicitly on a runner.
