@@ -57,7 +57,7 @@ WORKFLOW_MARKERS = (
     'test "$(gitleaks version)" = "$GITLEAKS_VERSION"',
     "gitleaks git --config .gitleaks.toml --redact --verbose .",
     "module: [core, service]",
-    "GO_VERSION: '1.27.1'",
+    "GO_VERSION: '1.27.2'",
     "MODULE: ${{ matrix.module }}",
     'bash scripts/ci/govulncheck_targets.sh "$MODULE"',
     "flutter test integration_test/ -d macos --reporter expanded",
