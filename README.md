@@ -85,6 +85,17 @@ Both repositories therefore authenticate the selected source and builder
 revisions instead of relying on an unsigned ref name or a successful push exit
 status.
 
+The other GitHub preflight reads and the shared source-attestation verifier
+use `scripts/gh-read-retry.py`. Each read gets at most three attempts, a
+60-second attempt budget and a 150-second total budget (plus at most one
+second to reap its process group). Only explicit HTTPS GET/HEAD transport
+failures such as EOF or a TLS handshake timeout are retried. HTTP rejection,
+certificate/signature rejection, malformed content and unknown failures stay
+fatal. Failed stdout is discarded; artifact attempts use separate private
+directories before the original exact-file, identity and provenance checks.
+The shared helper is included in the builder's existing full source checkout.
+This does not replay tag creation, pushes, workflow dispatches or promotion.
+
 Every object below the R2 `v` prefix is now retained permanently under the
 live, enabled Cloudflare indefinite bucket-lock rule
 `yuelink-release-versioned-indefinite` (`prefix=v`). The historical

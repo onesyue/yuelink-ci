@@ -8,6 +8,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Retry only validated reads; tag creation/push and promotion never enter this helper.
+gh_read() {
+  python3 "$SCRIPT_DIR/scripts/gh-read-retry.py" "$@"
+}
+
 SOURCE_SNAPSHOT=""
 cleanup() {
   if [[ "$SOURCE_SNAPSHOT" == */yuelink-ci-source-tag.* ]] &&
@@ -48,7 +53,7 @@ if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   )
 fi
 configured_secrets="$(
-  gh secret list -R onesyue/yuelink-ci --json name --jq '.[].name'
+  gh_read gh secret list -R onesyue/yuelink-ci --json name --jq '.[].name'
 )"
 missing_secrets=0
 for secret_name in "${required_secrets[@]}"; do
@@ -80,7 +85,7 @@ git fetch --prune --no-tags origin master
 # 私有 tag 必须先存在且为 GitHub 验真的 signed annotated tag。公开 tag 在
 # 最终阶段按远端真相幂等处理；此处不以一次 ls-remote 结果决定创建或覆盖。
 if ! PRIVATE_TAG_REF_JSON="$(
-  gh api "repos/onesyue/yuelink/git/ref/tags/$TAG"
+  gh_read gh api "repos/onesyue/yuelink/git/ref/tags/$TAG"
 )"; then
   echo "::error::私有仓 onesyue/yuelink 没有 tag '$TAG' —— 先在私有仓打 tag 并推送。"
   exit 1
@@ -93,7 +98,7 @@ PRIVATE_TAG_REF_TYPE="$(jq -er '.object.type' <<<"$PRIVATE_TAG_REF_JSON")"
   exit 1
 }
 PRIVATE_TAG_JSON="$(
-  gh api "repos/onesyue/yuelink/git/tags/$PRIVATE_TAG_OBJECT_SHA"
+  gh_read gh api "repos/onesyue/yuelink/git/tags/$PRIVATE_TAG_OBJECT_SHA"
 )"
 SOURCE_COMMIT="$(jq -er '.object.sha' <<<"$PRIVATE_TAG_JSON")"
 if ! jq -e --arg tag "$TAG" --arg source "$SOURCE_COMMIT" '
@@ -119,7 +124,7 @@ git verify-commit "$BUILDER_COMMIT" >/dev/null || {
   exit 1
 }
 BUILDER_COMMIT_JSON="$(
-  gh api "repos/onesyue/yuelink-ci/commits/$BUILDER_COMMIT"
+  gh_read gh api "repos/onesyue/yuelink-ci/commits/$BUILDER_COMMIT"
 )"
 jq -e --arg builder "$BUILDER_COMMIT" '
   .sha == $builder and
@@ -131,7 +136,7 @@ jq -e --arg builder "$BUILDER_COMMIT" '
 }
 ATTESTATION_TITLE="Source attestation $SOURCE_COMMIT"
 ATTESTATION_RUN_ID="$(
-  gh api \
+  gh_read gh api \
     'repos/onesyue/yuelink-ci/actions/workflows/source-attestation.yml/runs?event=workflow_dispatch&status=success&per_page=100' \
     --jq ".workflow_runs
       | map(select(
@@ -160,7 +165,7 @@ PUBLIC_TAG_MESSAGE="$(printf \
 # 带着“未来 workflow”去 checkout 旧私仓源码，直到 runner 缺脚本才爆炸。
 SOURCE_SNAPSHOT="$(mktemp -d "${TMPDIR:-/tmp}/yuelink-ci-source-tag.XXXXXX")"
 mkdir -p "$SOURCE_SNAPSHOT/.github/workflows"
-gh api \
+gh_read gh api \
   "repos/onesyue/yuelink/contents/.github/workflows/build.yml?ref=$TAG" \
   --jq '.content' \
   | tr -d '\r\n' \

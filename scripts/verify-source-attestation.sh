@@ -4,6 +4,11 @@
 # private source checkout), so the two trust boundaries cannot drift apart.
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+gh_read() {
+  python3 "$SCRIPT_DIR/gh-read-retry.py" "$@"
+}
+
 TAG="${1:?usage: verify-source-attestation.sh TAG SOURCE_COMMIT BUILDER_COMMIT RUN_ID}"
 SOURCE_COMMIT="${2:?source commit is required}"
 BUILDER_COMMIT="${3:?builder commit is required}"
@@ -19,7 +24,7 @@ WORKFLOW_IDENTITY=onesyue/yuelink-ci/.github/workflows/source-attestation.yml
   echo "::error::invalid source-attestation tag/source/builder/run identity" >&2
   exit 2
 }
-for command_name in gh jq mktemp find wc tr; do
+for command_name in gh jq python3 mktemp find wc tr; do
   command -v "$command_name" >/dev/null 2>&1 || {
     echo "::error::missing source-attestation verifier command: $command_name" >&2
     exit 1
@@ -49,9 +54,9 @@ proof_dir="$snapshot/proof"
 proof="$proof_dir/source-attestation.json"
 mkdir -p "$proof_dir"
 
-GH_PROMPT_DISABLED=1 gh api \
+GH_PROMPT_DISABLED=1 gh_read gh api \
   "repos/$REPOSITORY/actions/runs/$RUN_ID" > "$run_json"
-GH_PROMPT_DISABLED=1 gh api \
+GH_PROMPT_DISABLED=1 gh_read gh api \
   "repos/$REPOSITORY/actions/workflows/source-attestation.yml" > "$workflow_json"
 WORKFLOW_ID="$(jq -er --arg expected_name "Source attestation" '
   select(.name == $expected_name and
@@ -84,7 +89,7 @@ jq -e \
 }
 RUN_ATTEMPT="$(jq -er '.run_attempt | tostring | select(test("^[1-9][0-9]*$"))' "$run_json")"
 
-GH_PROMPT_DISABLED=1 gh run download "$RUN_ID" \
+GH_PROMPT_DISABLED=1 gh_read gh run download "$RUN_ID" \
   -R "$REPOSITORY" \
   --name "yuelink-source-attestation-$SOURCE_COMMIT" \
   --dir "$proof_dir"
@@ -135,7 +140,7 @@ jq -e \
   exit 1
 }
 
-GH_PROMPT_DISABLED=1 gh attestation verify "$proof" \
+GH_PROMPT_DISABLED=1 gh_read gh attestation verify "$proof" \
   --repo "$REPOSITORY" \
   --signer-workflow "$WORKFLOW_IDENTITY" \
   --source-ref refs/heads/master \
