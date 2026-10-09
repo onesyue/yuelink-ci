@@ -1,60 +1,60 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.123",
+  "version": "1.3.124",
   "channel": "stable",
-  "publishedAt": "2026-10-09T07:26:37Z",
-  "expiresAt": "2026-11-13T07:26:37Z",
+  "publishedAt": "2026-10-09T11:57:46Z",
+  "expiresAt": "2026-11-13T11:57:46Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "更新内核网络安全补丁。\n\n- 更新连接内核与网络依赖，修复近期公布的 HTTP/2 和 Go 网络安全问题。\n- 订阅入口、线路分组和账户权限保持不变。完成升级后，请重新连接以使用新版内核。\n",
-  "notesEn": "Network security updates for the connection core.\n\n- Update the connection core and network dependencies to address recently disclosed HTTP/2 and Go networking security issues.\n- Subscription URLs, node groups, and account permissions remain unchanged. Reconnect after upgrading to use the updated core.\n",
-  "sourceCommit": "b155705b5dfa36730371f5a93d2b644164bcb5ce",
-  "sha256SumsSha256": "8988831e5c0e6c73d3a86b88a258650e83b63f180f806ca87ff7a741aef4061f",
+  "notes": "双入口排序更清晰。\n\n- 更新订阅后，成对线路在延迟排序下也保持 A 前 B 后，整对按较快的有效延迟排序。\n- 搜索只显示匹配的线路；单独入口和未成对线路继续按各自延迟排序。\n",
+  "notesEn": "Clearer ordering for paired entries.\n\n- After updating your subscription, paired entries stay together with A before B when sorting by latency. Each pair is ranked by its faster valid latency.\n- Search shows only matching entries. Single entries and unpaired lines continue to use their own latency.\n",
+  "sourceCommit": "ae3065150edbf8cb7321b3fec12d92258a2e8e48",
+  "sha256SumsSha256": "e04e8156e512231ece597c395a61e28e377ce284c49c5408deda72df4ef2fe2d",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.123/YueLink-1.3.123-android-arm64-v8a.apk",
-      "sha256": "3ab13fcd929a3364ef1137d8e7cf219137cb6501cc3a6426f4a925068c995254"
+      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-android-arm64-v8a.apk",
+      "sha256": "65c6bee0f7281f86a0ee95e567a2e9ac57c2abbd4508cadc959d7ce763d2a8e6"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.123/YueLink-1.3.123-android-armeabi-v7a.apk",
-      "sha256": "32f43b369292376d54a3a9dd721ed918575ae30588dd476119ca6ca53ab3eb2d"
+      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-android-armeabi-v7a.apk",
+      "sha256": "f1b578e521ed5770373244485b4909cfeaf84d080e01cf92cea24549634e6b4a"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.123/YueLink-1.3.123-android-x86_64.apk",
-      "sha256": "7dcc52a8d66d407cf528a512355822f4a3650bf01cd8c8dde0a178797632c523"
+      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-android-x86_64.apk",
+      "sha256": "47335f7dce90f459e01a677d9bc14727b1d5a708e2686d4915753e78eb19ba04"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.123/YueLink-1.3.123-android-universal.apk",
-      "sha256": "580b89ab9e4bbf340330b0833cd67810ca8109a346988894a901af00dcca3b7a"
+      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-android-universal.apk",
+      "sha256": "aa1e0c9a676cfd70d5943c624a6876db39dff98a45815b341647f40add18fb54"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.123/YueLink-1.3.123-ios.ipa",
-      "sha256": "d799f3f1b1d9b51f567b0033574eb7a967c7c7dec89f7e53b6f8ab0a1d681c11"
+      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-ios.ipa",
+      "sha256": "f4f3424ff2482442b3daecd2bb5ea3099f97029975a0ac5d6a05389d438cc81c"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.123/YueLink-1.3.123-macos-universal.dmg",
-      "sha256": "2d74551efcee194615cb5accfabb1ce58107a078e22a53d3c9e4f9e0667b919f",
+      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-macos-universal.dmg",
+      "sha256": "4a3e5cdeb831a2d6bdcb2077759c65a2af29fe2613e5b78090795a5ee894d97c",
       "minimumSystemVersion": "13.0"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.123/YueLink-1.3.123-windows-amd64-setup.exe",
-      "sha256": "dcb8ffc556158e4608af7be4601b9d8d0a47f672f36db4bfb41b5efe9f9dca3e"
+      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-windows-amd64-setup.exe",
+      "sha256": "778bc5d2aca48a3e45b6b66530a80012dbaf4013606c7cfcb35c3d0163210ebe"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.123/YueLink-1.3.123-windows-amd64-portable.zip",
-      "sha256": "8fcb1d8c4b01458d8d00f6f385c43f7d427f33ff6de953053d0ef467c49db002"
+      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-windows-amd64-portable.zip",
+      "sha256": "ba390a2a615fe22a94434b3d9cb081e68468743d40b4bda8129d3529bb50f5e8"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.123/YueLink-1.3.123-linux-amd64.AppImage",
-      "sha256": "8619e36f606c8f88c0f61a18548b962a7d8ff864790d2712b2c3350a112795a7"
+      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-linux-amd64.AppImage",
+      "sha256": "a33a0ffa2c43cef2091d2728e96202babba5eda80e7cf0eb133d933ba3bbab81"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "560abdd7a72a213fe51ed5934dfd45220b2b26941cfeb1d3f6566c7bf4762b7f",
-    "sha256SumsSha256": "8988831e5c0e6c73d3a86b88a258650e83b63f180f806ca87ff7a741aef4061f",
-    "payloadBundleSha256": "defae59d231ca5e6577def378a63d2e021cd5e3cd17c9f9d9a7bb8b47e03b6bf",
+    "candidateSha256": "4df2aaed7b5fe5b75973d447a5f75c46f854e44761a4bc905d2b5c3bd333aa68",
+    "sha256SumsSha256": "e04e8156e512231ece597c395a61e28e377ce284c49c5408deda72df4ef2fe2d",
+    "payloadBundleSha256": "12f9d57ca155bc5a046d783f9e4dd81b9567e479755de25c13719a240c92550c",
     "payloadCount": 19
   },
-  "sig": "ed25519:Lf1v3K7Nx62Eo+BUZdQuHPfg5zukaVtae5tbUMbrqdKBWldowDQKHNo7ihW+EjI3B4Nv8eWUPW2hPgTWTDAECw=="
+  "sig": "ed25519:hjP3xHhsp7WWwQpM7R8C+/hRvcCSPo6XO40nuj2XJbpDyFnRtvA1QaBL6HQe8qcIRMTgTcJC0WvtG7PU4agOBA=="
 }
