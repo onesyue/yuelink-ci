@@ -1,60 +1,60 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.124",
+  "version": "1.3.125",
   "channel": "stable",
-  "publishedAt": "2026-10-09T11:57:46Z",
-  "expiresAt": "2026-11-13T11:57:46Z",
+  "publishedAt": "2026-10-10T16:35:51Z",
+  "expiresAt": "2026-11-14T16:35:51Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "双入口排序更清晰。\n\n- 更新订阅后，成对线路在延迟排序下也保持 A 前 B 后，整对按较快的有效延迟排序。\n- 搜索只显示匹配的线路；单独入口和未成对线路继续按各自延迟排序。\n",
-  "notesEn": "Clearer ordering for paired entries.\n\n- After updating your subscription, paired entries stay together with A before B when sorting by latency. Each pair is ranked by its faster valid latency.\n- Search shows only matching entries. Single entries and unpaired lines continue to use their own latency.\n",
-  "sourceCommit": "ae3065150edbf8cb7321b3fec12d92258a2e8e48",
-  "sha256SumsSha256": "e04e8156e512231ece597c395a61e28e377ce284c49c5408deda72df4ef2fe2d",
+  "notes": "测速改为 1–10 分评分。\n\n- 线路测速改为 1–10 分评分：8–10 分好、5–7 分中、1–4 分差，测速失败显示“不可用”，未测速显示“—”；节点列表、连接测试、连接诊断与智能客服诊断卡不再显示毫秒。\n- “按评分”排序：高分在前、同分按实测快慢；成对线路保持 A 前 B 后；不可用与未测速排在最后。自动选择与故障切换仍按原始延迟工作。\n- 测速同时进行的请求上限为 32 个（原为整组同时发出），结果边测边显示；测速失败的线路不再保留上一次的好成绩；一次“全部测速”中每条线路只测一次。\n- 节点列表在测速和排序变化时只刷新受影响的卡片。\n",
+  "notesEn": "Line tests now show a 1–10 score.\n\n- Line tests now show a score from 1 to 10: 8–10 is good, 5–7 is fair and 1–4 is poor. A failed test shows \"Unavailable\" and an untested line shows \"—\". The node list, connection test, connection diagnostics and the support diagnosis card no longer show milliseconds.\n- \"By score\" sorting puts higher scores first and breaks ties by measured speed. Paired entries stay together with A before B. Unavailable and untested lines come last. Automatic selection and failover still use the raw latency.\n- At most 32 test requests run at once instead of a whole group at the same time, and results appear as they arrive. A line that fails a test no longer keeps its previous good result, and \"Test all groups\" tests each line only once.\n- The node list now refreshes only the affected cards while testing or re-sorting.\n",
+  "sourceCommit": "54681f8281e5390cee9b25be4ab1009ca878da4b",
+  "sha256SumsSha256": "63854327b9dae4d77f46e15a1a861dac16aae5eae315135126bde77a74b8f0c2",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-android-arm64-v8a.apk",
-      "sha256": "65c6bee0f7281f86a0ee95e567a2e9ac57c2abbd4508cadc959d7ce763d2a8e6"
+      "url": "https://yuetong.app/v1.3.125/YueLink-1.3.125-android-arm64-v8a.apk",
+      "sha256": "dd3b6263b98fb9a3def27b3813da357ffafb013790f8ecb015613e66433ee980"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-android-armeabi-v7a.apk",
-      "sha256": "f1b578e521ed5770373244485b4909cfeaf84d080e01cf92cea24549634e6b4a"
+      "url": "https://yuetong.app/v1.3.125/YueLink-1.3.125-android-armeabi-v7a.apk",
+      "sha256": "b245bda1f7f595d34189590daa6675d92fb653b3e629acad943c11397d47daec"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-android-x86_64.apk",
-      "sha256": "47335f7dce90f459e01a677d9bc14727b1d5a708e2686d4915753e78eb19ba04"
+      "url": "https://yuetong.app/v1.3.125/YueLink-1.3.125-android-x86_64.apk",
+      "sha256": "b8f5d920cc2112f8eb9cba75a702497c251729bb3a14d0d649be77e7fe3840f4"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-android-universal.apk",
-      "sha256": "aa1e0c9a676cfd70d5943c624a6876db39dff98a45815b341647f40add18fb54"
+      "url": "https://yuetong.app/v1.3.125/YueLink-1.3.125-android-universal.apk",
+      "sha256": "bf50f42a6462d25334ed90927c47349fe9b494204931de283af9e0aaeddce83c"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-ios.ipa",
-      "sha256": "f4f3424ff2482442b3daecd2bb5ea3099f97029975a0ac5d6a05389d438cc81c"
+      "url": "https://yuetong.app/v1.3.125/YueLink-1.3.125-ios.ipa",
+      "sha256": "7c564d59706b648e0505e3589e6ac348c89fc27ed1e5ab358403de279acb0398"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-macos-universal.dmg",
-      "sha256": "4a3e5cdeb831a2d6bdcb2077759c65a2af29fe2613e5b78090795a5ee894d97c",
+      "url": "https://yuetong.app/v1.3.125/YueLink-1.3.125-macos-universal.dmg",
+      "sha256": "a56ebea51dcf5ca7f6f9f019fcce915cfb2a467165b9ef66b48873fba62c5365",
       "minimumSystemVersion": "13.0"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-windows-amd64-setup.exe",
-      "sha256": "778bc5d2aca48a3e45b6b66530a80012dbaf4013606c7cfcb35c3d0163210ebe"
+      "url": "https://yuetong.app/v1.3.125/YueLink-1.3.125-windows-amd64-setup.exe",
+      "sha256": "83696f121b0049325a9837e998b3b6c6e5139e13e03b846dcfa58bf31f95f709"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-windows-amd64-portable.zip",
-      "sha256": "ba390a2a615fe22a94434b3d9cb081e68468743d40b4bda8129d3529bb50f5e8"
+      "url": "https://yuetong.app/v1.3.125/YueLink-1.3.125-windows-amd64-portable.zip",
+      "sha256": "8460b84f49d1106609a6762b4fb3f3c1c65a63e4d9feeae5bd537077f4b63291"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.124/YueLink-1.3.124-linux-amd64.AppImage",
-      "sha256": "a33a0ffa2c43cef2091d2728e96202babba5eda80e7cf0eb133d933ba3bbab81"
+      "url": "https://yuetong.app/v1.3.125/YueLink-1.3.125-linux-amd64.AppImage",
+      "sha256": "e202bf78231fd9d0bd1caef29a044042205f47e073e0b630b4884ba551b68006"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "4df2aaed7b5fe5b75973d447a5f75c46f854e44761a4bc905d2b5c3bd333aa68",
-    "sha256SumsSha256": "e04e8156e512231ece597c395a61e28e377ce284c49c5408deda72df4ef2fe2d",
-    "payloadBundleSha256": "12f9d57ca155bc5a046d783f9e4dd81b9567e479755de25c13719a240c92550c",
+    "candidateSha256": "c678bad8c9c04b1d388b491c27aa80d1629d9cac26c2252f0f9a8bdcf744bfee",
+    "sha256SumsSha256": "63854327b9dae4d77f46e15a1a861dac16aae5eae315135126bde77a74b8f0c2",
+    "payloadBundleSha256": "c804cf0895cdd2ccb65e4dd7fa5b45a0ff07479ae4cd409e807e38730401547b",
     "payloadCount": 19
   },
-  "sig": "ed25519:hjP3xHhsp7WWwQpM7R8C+/hRvcCSPo6XO40nuj2XJbpDyFnRtvA1QaBL6HQe8qcIRMTgTcJC0WvtG7PU4agOBA=="
+  "sig": "ed25519:fhCPTU0TgypcuE2vWt6O0/hz68uU9d8K74v6fSJP2EAtOISo/ERVoaZG1b6LyAqL38UqjHq2+oZhL163D1LDAA=="
 }
