@@ -1,60 +1,60 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.126",
+  "version": "1.3.127",
   "channel": "stable",
-  "publishedAt": "2026-10-11T02:22:12Z",
-  "expiresAt": "2026-11-15T02:22:12Z",
+  "publishedAt": "2026-10-11T06:49:21Z",
+  "expiresAt": "2026-11-15T06:49:21Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "测速结果更准、更稳。\n\n- 测速更准：成对线路的 A、B 一起抽测，A 入口被屏蔽时 B 入口照常测出评分，整组不再被误判为“全部超时”；只有直连访问固定检测地址也不通时才判定为网络离线并提前停止，没测到的线路保留原来的结果，不再显示“不可用”。\n- “全部测速”中前一组提前停止时，后面的分组仍会测完它们自己的线路。\n- 自动选择、故障切换和负载均衡组按分组自己的测速地址测速，测速后内核按新结果选线（内核约 10 秒内更新）。\n- 测速超时不再把已显示的评分改成“不可用”，超时后不再发出新的测速请求；测速请求同时最多 32 个（另含 1 个网络判定请求）。\n- 线路较多（超过 32 条）的分组全部测不通时不再整组重测一遍，更快给出结果。\n- 更新订阅后重新累计评分样本；连接测试和连接诊断只在检测通过且经过线路时显示评分；分组里有同名线路时列表显示正常。\n",
-  "notesEn": "More accurate, steadier speed tests.\n\n- Paired entries are now sampled together. If your network blocks the A entries, the B entries still get a score, and the whole group is no longer reported as \"all timed out\". A test only stops early as offline when a direct connection to a fixed check address fails too, and lines it did not reach keep their previous result instead of showing \"Unavailable\".\n- When one group stops early during \"Test all groups\", the following groups still test their own lines.\n- Auto-select, failover and load-balance groups are tested with the group's own test address, so the core picks a line from the fresh results (within about 10 seconds).\n- A test that runs out of time no longer turns scores already shown into \"Unavailable\" and sends no further requests. At most 32 test requests run at once, plus one network check.\n- When every line in a larger group (more than 32 lines) fails, the group is no longer tested a second time, so the result comes sooner.\n- Score samples restart after a subscription update. The connection test and connection diagnostics show a score only when the check passes through a line. Groups that list the same line twice display correctly.\n- English wording: \"Test speed\" and \"Test this node\", and the mode-switch message now says line scores refresh in a few seconds.\n",
-  "sourceCommit": "65827e8e7e275bba26e858a612e33b5d9fa4b5a2",
-  "sha256SumsSha256": "c3c8c561aa4fbc40bf4e5e63196c64959f623d28b0bedf1ab93c1ff61937ad06",
+  "notes": "Windows 开 TUN 更稳。\n\n- Windows 服务模式下开启 TUN 时，不再因网卡还在创建就误报 E008 启动失败：等网卡真正就绪再判断（最多 30 秒），网卡确认创建失败时直接提示“TUN 网卡未创建”并给出修复入口；核心进程意外退出时立即报错，不再空等。\n- 切换连接模式、恢复默认设置等操作进行中关闭页面，不再出现崩溃或设置没生效；全应用同类问题一并修复。\n- 连接失败时的诊断上报更完整：每次连接失败都会记录一次失败步骤和错误码（不含地址、账号等信息），取消连接不记为失败。\n",
+  "notesEn": "Steadier TUN start on Windows.\n\n- On Windows in service mode, turning on TUN no longer reports a false E008 start failure while the adapter is still being created. The app now waits for the adapter to be ready (up to 30 seconds); if creating it really fails, you see \"The TUN adapter was not created\" with a repair option, and if the core process exits unexpectedly you are told right away instead of waiting.\n- Closing a page while switching connection mode or restoring default settings no longer crashes the app or leaves the setting unapplied; the same issue is fixed across the app.\n- Connection failure diagnostics are more complete: each failed connection records the failing step and error code once (no addresses or account details), and cancelling a connection is not counted as a failure.\n",
+  "sourceCommit": "0f2d39b73be16cc33db265c5cea87ffa3da837bd",
+  "sha256SumsSha256": "f05d34260601fdf8575f16988838337427d3fa13560724a80069b2c8eac67bbd",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.126/YueLink-1.3.126-android-arm64-v8a.apk",
-      "sha256": "c58e542a4812eac8fe48ba372e62369c96a11941d5f9c816c319daf4b1a77d29"
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-android-arm64-v8a.apk",
+      "sha256": "a634249cc477beb9067b2090daf936700f3789d55f35d79952019ea651cbb35f"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.126/YueLink-1.3.126-android-armeabi-v7a.apk",
-      "sha256": "93e10a5d4d70f3cfb49914c49fc26bd65ed054da36b58837bc208c44e95660b4"
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-android-armeabi-v7a.apk",
+      "sha256": "d4175fa359d95700f8380f43dc174bdb9f7d14e09be5f099e1b7be038bf124d4"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.126/YueLink-1.3.126-android-x86_64.apk",
-      "sha256": "c24bfd9beceb25cf787c24300a8f8747189729a809d53b298608494f22a31b86"
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-android-x86_64.apk",
+      "sha256": "b94ffca5a4a27c24341c3453552b50f642abc8cee13e660e5878f7bf29306a6d"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.126/YueLink-1.3.126-android-universal.apk",
-      "sha256": "2a38c424c02e9b2c1af7970f1c567e49cf5c2f83ee04bf9a4a66656d335e942e"
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-android-universal.apk",
+      "sha256": "f2124edbd50ebb00d997c827376a5275d1ae19a0e56e6ce1b101f13c3b20b232"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.126/YueLink-1.3.126-ios.ipa",
-      "sha256": "19cf1d18ba18548546d63c43a1a468aa262ea74be7541f5a40341929adf711a4"
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-ios.ipa",
+      "sha256": "4397bf63da1950c9bfbf10831c6d8b64f95f54990bdbc17b7af28f809d40bf07"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.126/YueLink-1.3.126-macos-universal.dmg",
-      "sha256": "9e681fef2cf22c091f747bb63b51f1b5357945db030de403a87fba940d7da14f",
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-macos-universal.dmg",
+      "sha256": "f963bc4f92e9929d455b5da6b4beadc1010f9c1d9b37c5fd2def79c6ed081f24",
       "minimumSystemVersion": "13.0"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.126/YueLink-1.3.126-windows-amd64-setup.exe",
-      "sha256": "f94f70392015b7a00f44826ff0df4e9ca9e7da611c0f1669c1256698e29de93d"
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-windows-amd64-setup.exe",
+      "sha256": "911215765a240da5ef1a1e4292798a65c567aa1a693e73e52957b9d64f0699ec"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.126/YueLink-1.3.126-windows-amd64-portable.zip",
-      "sha256": "9797099060205e78a3236dc3946b83e85198bf819be921061c4d4fd4e7036f16"
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-windows-amd64-portable.zip",
+      "sha256": "3a046f2fc9ac44e8e116f7eafb86d9b3f10ad368d51cafafa301c44a5b15992d"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.126/YueLink-1.3.126-linux-amd64.AppImage",
-      "sha256": "ed2ed440cfe5968b020cf5a8086c24069fbf3cb949f9edc6c480250175b5f797"
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-linux-amd64.AppImage",
+      "sha256": "606080a34f4c90cd058647be8593148daa49982b8c46655ecb18d31129bb88e2"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "ebedb5a295504ff32b0642add0f16e143e8ce415283452941fe7b10aeb024de9",
-    "sha256SumsSha256": "c3c8c561aa4fbc40bf4e5e63196c64959f623d28b0bedf1ab93c1ff61937ad06",
-    "payloadBundleSha256": "0ba6e36aeb2860e129bf774e27edb4b8d0265579f942f94ae26df5b1f75cb7d2",
+    "candidateSha256": "ff4586871880b7805ab63fd01573505a1db0eaf30759c2cdd1425f17a53d96bf",
+    "sha256SumsSha256": "f05d34260601fdf8575f16988838337427d3fa13560724a80069b2c8eac67bbd",
+    "payloadBundleSha256": "456a5b6dd5067261d8b7ddfd9db302aac812a0a6e871e3a7b73d5a98be94da1d",
     "payloadCount": 19
   },
-  "sig": "ed25519:ntOydo76B3bGYsv6ME5C7oL5e6z8n2yaUsBU2M4crh9ksfX2Ttoho0+Cl/6y8fz2kaZ+BPY2qrALI474Ne6WAg=="
+  "sig": "ed25519:Zaeeiod4c6Hm84mcrZQ/7IyRlKmvgB8MIdXhU2zNPPxmU2OWpy9wtZoseMgpeDd504uUgFWuP7f9hc8BR8/1AQ=="
 }
