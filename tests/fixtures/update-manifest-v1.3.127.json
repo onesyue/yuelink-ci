@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.127",
+  "channel": "stable",
+  "publishedAt": "2026-10-11T06:49:21Z",
+  "expiresAt": "2026-11-15T06:49:21Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "Windows 开 TUN 更稳。\n\n- Windows 服务模式下开启 TUN 时，不再因网卡还在创建就误报 E008 启动失败：等网卡真正就绪再判断（最多 30 秒），网卡确认创建失败时直接提示“TUN 网卡未创建”并给出修复入口；核心进程意外退出时立即报错，不再空等。\n- 切换连接模式、恢复默认设置等操作进行中关闭页面，不再出现崩溃或设置没生效；全应用同类问题一并修复。\n- 连接失败时的诊断上报更完整：每次连接失败都会记录一次失败步骤和错误码（不含地址、账号等信息），取消连接不记为失败。\n",
+  "notesEn": "Steadier TUN start on Windows.\n\n- On Windows in service mode, turning on TUN no longer reports a false E008 start failure while the adapter is still being created. The app now waits for the adapter to be ready (up to 30 seconds); if creating it really fails, you see \"The TUN adapter was not created\" with a repair option, and if the core process exits unexpectedly you are told right away instead of waiting.\n- Closing a page while switching connection mode or restoring default settings no longer crashes the app or leaves the setting unapplied; the same issue is fixed across the app.\n- Connection failure diagnostics are more complete: each failed connection records the failing step and error code once (no addresses or account details), and cancelling a connection is not counted as a failure.\n",
+  "sourceCommit": "0f2d39b73be16cc33db265c5cea87ffa3da837bd",
+  "sha256SumsSha256": "f05d34260601fdf8575f16988838337427d3fa13560724a80069b2c8eac67bbd",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-android-arm64-v8a.apk",
+      "sha256": "a634249cc477beb9067b2090daf936700f3789d55f35d79952019ea651cbb35f"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-android-armeabi-v7a.apk",
+      "sha256": "d4175fa359d95700f8380f43dc174bdb9f7d14e09be5f099e1b7be038bf124d4"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-android-x86_64.apk",
+      "sha256": "b94ffca5a4a27c24341c3453552b50f642abc8cee13e660e5878f7bf29306a6d"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-android-universal.apk",
+      "sha256": "f2124edbd50ebb00d997c827376a5275d1ae19a0e56e6ce1b101f13c3b20b232"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-ios.ipa",
+      "sha256": "4397bf63da1950c9bfbf10831c6d8b64f95f54990bdbc17b7af28f809d40bf07"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-macos-universal.dmg",
+      "sha256": "f963bc4f92e9929d455b5da6b4beadc1010f9c1d9b37c5fd2def79c6ed081f24",
+      "minimumSystemVersion": "13.0"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-windows-amd64-setup.exe",
+      "sha256": "911215765a240da5ef1a1e4292798a65c567aa1a693e73e52957b9d64f0699ec"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-windows-amd64-portable.zip",
+      "sha256": "3a046f2fc9ac44e8e116f7eafb86d9b3f10ad368d51cafafa301c44a5b15992d"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.127/YueLink-1.3.127-linux-amd64.AppImage",
+      "sha256": "606080a34f4c90cd058647be8593148daa49982b8c46655ecb18d31129bb88e2"
+    }
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "ff4586871880b7805ab63fd01573505a1db0eaf30759c2cdd1425f17a53d96bf",
+    "sha256SumsSha256": "f05d34260601fdf8575f16988838337427d3fa13560724a80069b2c8eac67bbd",
+    "payloadBundleSha256": "456a5b6dd5067261d8b7ddfd9db302aac812a0a6e871e3a7b73d5a98be94da1d",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:Zaeeiod4c6Hm84mcrZQ/7IyRlKmvgB8MIdXhU2zNPPxmU2OWpy9wtZoseMgpeDd504uUgFWuP7f9hc8BR8/1AQ=="
+}
