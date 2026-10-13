@@ -1,60 +1,60 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.131",
+  "version": "1.3.132",
   "channel": "stable",
-  "publishedAt": "2026-10-13T07:23:58Z",
-  "expiresAt": "2026-11-17T07:23:58Z",
+  "publishedAt": "2026-10-13T08:47:30Z",
+  "expiresAt": "2026-11-17T08:47:30Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "连接更稳，重载更可靠。\n\n- 加密 DNS 上游无响应时，限制建连和握手等待，避免已取消查询长期占用连接。\n- 修复配置重载后新域名可能覆盖旧地址映射的问题，减少访问异常。\n\n- “我的”按语义分组自适应排列，偏好设置在宽屏保持清晰的阅读宽度；减少动效设置继续生效。\n- 精简连接修复提示，并改善重启与节点切换问题的诊断归因。\n",
-  "notesEn": "More reliable DNS and reloads.\n\n- Bound connection and handshake waits when an encrypted DNS upstream stops responding, so cancelled queries cannot retain connections indefinitely.\n- Fix a mapping collision that could send domain traffic to the wrong destination after a configuration reload.\n\n- Group My Account actions into a responsive layout and keep Preferences at a comfortable reading width, respecting reduced motion.\n- Simplify repair guidance and improve restart and node-switch diagnostics.\n",
-  "sourceCommit": "8be76e578e4d6fa57d30b513923b2809ab623d12",
-  "sha256SumsSha256": "220491fc8eed6079e8b595cab5670f8248e5d316f21c764131f9a4aba3d5a99d",
+  "notes": "测速更准，切换更清晰。\n\n- 切换订阅、重载配置或停止连接后，旧测速结果不再覆盖当前线路评分；重新测速时，旧请求也不会覆盖新结果。\n- 在“我的→偏好设置→连接”显示“切换节点时断开旧连接”开关。默认开启并保留已有设置；关闭后，原有连接可继续使用旧节点。\n",
+  "notesEn": "Reliable test results, clearer node switching.\n\n- Prevent stale speed-test results from replacing current node scores after switching subscriptions, reloading configuration or stopping the connection. Starting a new test also keeps older requests from overwriting its results.\n- Show “Close old connections when switching nodes” in My Account → Preferences → Connection. It is on by default and preserves your existing setting; turn it off to let existing connections continue using the previous node.\n",
+  "sourceCommit": "98eea027a8541bab566bdc7d826adea82b6d9044",
+  "sha256SumsSha256": "bfd775d3cfe0c5b2b628f7d02452dcea5b910e41ddc8db5ea810df98eecd06cb",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.131/YueLink-1.3.131-android-arm64-v8a.apk",
-      "sha256": "22084f4a3badfff0c0c38d56a9ba4ec342cc39bf84e53246d77e54129c26e0f0"
+      "url": "https://yuetong.app/v1.3.132/YueLink-1.3.132-android-arm64-v8a.apk",
+      "sha256": "588927e924cb2a1a2d38ed5522fb0b0c4e25ab7e0f9e27f06c41b6eb3a1b8167"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.131/YueLink-1.3.131-android-armeabi-v7a.apk",
-      "sha256": "bba28533a0cfa080c73ec52b1c78957e818a24b1e199163b326a8f90a656005d"
+      "url": "https://yuetong.app/v1.3.132/YueLink-1.3.132-android-armeabi-v7a.apk",
+      "sha256": "9312ee5d65d8a8161ed2532c41971a88156ed13249e99be1240ac8dff69dee82"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.131/YueLink-1.3.131-android-x86_64.apk",
-      "sha256": "a6d25efedba8c2701c92a21848899abacb9e3104d44f27cf048ff4d6ffb431d3"
+      "url": "https://yuetong.app/v1.3.132/YueLink-1.3.132-android-x86_64.apk",
+      "sha256": "c1c7ff1b4ed38f4bc35fe21a3dd12064c9a461b894357f26dad9c98d1cce06d6"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.131/YueLink-1.3.131-android-universal.apk",
-      "sha256": "215a9c6d990fc02d3b817e236b0ba87520f5abd892b2986ce3c22641809c5116"
+      "url": "https://yuetong.app/v1.3.132/YueLink-1.3.132-android-universal.apk",
+      "sha256": "ceb1973fd9c5ac2ca9498ea840540be8ba03bba962f52509a36a9c251656a572"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.131/YueLink-1.3.131-ios.ipa",
-      "sha256": "9678817891ebd5d404681a5001b8892d558b661c9c6d2a6e0cb2c3954a5a274b"
+      "url": "https://yuetong.app/v1.3.132/YueLink-1.3.132-ios.ipa",
+      "sha256": "fb5ba82314e9d4b5dc4eaed4763cbc0e8aa6f97362892131fcb604b4ff4de5c7"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.131/YueLink-1.3.131-macos-universal.dmg",
-      "sha256": "8fde5961b07a873ac2359fca6ea0f772d549694970147fc3b890da57fc0f1be7",
+      "url": "https://yuetong.app/v1.3.132/YueLink-1.3.132-macos-universal.dmg",
+      "sha256": "31f1f6be81a97e7c32ffea21bf5499f5627e792724ce3c66f11cbc23b6f3efd7",
       "minimumSystemVersion": "13.0"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.131/YueLink-1.3.131-windows-amd64-setup.exe",
-      "sha256": "fb07c033cc8004cfed54e4d510001c9597b18a2b0c8e343245b7148496b925f5"
+      "url": "https://yuetong.app/v1.3.132/YueLink-1.3.132-windows-amd64-setup.exe",
+      "sha256": "1a86a75d53529ac58c6493cfc2d68ee99b9f38f6002d40a8fa0e5d50618e091c"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.131/YueLink-1.3.131-windows-amd64-portable.zip",
-      "sha256": "0b62940589116ae79990d585ce38e784383921f8816606337484077129872f08"
+      "url": "https://yuetong.app/v1.3.132/YueLink-1.3.132-windows-amd64-portable.zip",
+      "sha256": "c603a210cec3befff03a6c1c84e4e8e44d5d2903e8bf9e15bb38ec8bc881f478"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.131/YueLink-1.3.131-linux-amd64.AppImage",
-      "sha256": "384e1871af4b29a7ca01e9d8c68aeaac2d0a2800e784af8de7c2530ed156b9cf"
+      "url": "https://yuetong.app/v1.3.132/YueLink-1.3.132-linux-amd64.AppImage",
+      "sha256": "653770ba5d7c1dc62e85715ed67d9cc7b99595be82cf822ef3b6b8691aeaeb22"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "fa62a0efce116f652ace7e984e9728111bc576ae43e2e6624c24ed7fff1390f2",
-    "sha256SumsSha256": "220491fc8eed6079e8b595cab5670f8248e5d316f21c764131f9a4aba3d5a99d",
-    "payloadBundleSha256": "7ded6aa2434ad8b1db387b31294860237fa187ef2f4005a3fc107373fda80fb5",
+    "candidateSha256": "3b8a070e3ca11e22952ec867da7589ef390153505a569b76d0bddd5de74310e9",
+    "sha256SumsSha256": "bfd775d3cfe0c5b2b628f7d02452dcea5b910e41ddc8db5ea810df98eecd06cb",
+    "payloadBundleSha256": "dbf0dbeacdfb0785ee3f2da0eec60f8bf87720f28b9f2fcd13f351e00e6acd11",
     "payloadCount": 19
   },
-  "sig": "ed25519:getbUSThtoksa+aTIbKrIifui3MimPPEfBwfDlHptotSCmD/JNPeOkFG01cPBYpl8XCGB2keGE+iadaodnonDQ=="
+  "sig": "ed25519:czBTyod6KV9XZHrcBGVUjLWL/ylYNo4I68MLjt4V/gBFo2kK/SGigx7I3iEoftLZ+XkvPkXlW66hUXY6Fa7zAg=="
 }
