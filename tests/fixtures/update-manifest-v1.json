@@ -1,60 +1,60 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.128",
+  "version": "1.3.130",
   "channel": "stable",
-  "publishedAt": "2026-10-12T13:35:27Z",
-  "expiresAt": "2026-11-16T13:35:27Z",
+  "publishedAt": "2026-10-13T03:15:29Z",
+  "expiresAt": "2026-11-17T03:15:29Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "订阅和购买更稳。\n\n- 连接成功后补同步未完成的订阅。临时失败按当前账号、订阅与配置退避，切换账号或恢复配置后重新判断。\n- 经代理更新订阅遇到服务端临时错误时，先尝试同一地址直连，再尝试已授权备用入口；保留正常证书验证。\n- 取消更新后不再继续重试，退出账号后未完成的同步不再显示成功。切换连接时，旧线路结果不会覆盖新状态。\n- 可达性上报沿用受信 DNS 解析，改善复杂网络下的测量完整性。\n- 购买与支付报价按服务端有效期和实际经过时间判断，不再因本机时钟偏差反复刷新。\n- macOS 强制升级提示先确认目标版本可在当前系统安装，避免无法完成升级时锁住界面。\n- iOS 启动配置失败时保留正确的诊断步骤。\n",
-  "notesEn": "More reliable updates and purchases.\n\n- After connecting, the app catches up on an unfinished subscription update. Temporary failures use backoff scoped to the current account, subscription and configuration; changing accounts or recovering the configuration starts a fresh check.\n- If a subscription update through the proxy encounters a temporary server error, the app first tries the same address directly, then authorized fallback addresses. Normal certificate verification remains enabled.\n- Cancelling an update stops further retries. An unfinished update no longer reports success after sign-out, and results from a previous connection cannot overwrite the current node state.\n- Reachability reports use the trusted DNS path for more complete measurements on difficult networks.\n- Purchase and payment quotes use server validity and elapsed time, preventing repeated refreshes when the device clock is incorrect.\n- Required macOS upgrades first check that the offered version can be installed on the current system, avoiding an upgrade screen that cannot be completed.\n- iOS configuration startup failures retain the correct diagnostic step.\n",
-  "sourceCommit": "c7409cc636d71f943f4bdb8c88b649460869c2d8",
-  "sha256SumsSha256": "171cd0c7da1400d9700fda82db38f8a167a3ea3ed6c482790fc6e8d50d0cae76",
+  "notes": "帮助更近，页面更清爽。\n\n- 新增应用内帮助中心，可离线阅读中英文说明、搜索常见问题。设置页和内核日志页可直接打开相关帮助。\n- 切换标签页后暂停隐藏页面的动画和实时数据显示，返回时恢复。连接期间的今日流量仍持续累计。\n- 首页提醒按优先级显示一条，减少重复提示。设备重置的后果说明保留在确认弹窗中。\n- 遵循系统的减少动画设置，相关页面切换改用淡入淡出。\n- 启动时在后台解析节点清单，减少解析对界面响应的影响，保留原有节点识别与账号切换边界。\n",
+  "notesEn": "Help at hand, cleaner pages.\n\n- The new in-app help center provides offline articles in English and Chinese, with search for common questions. Settings and core logs link directly to relevant help.\n- Hidden tabs pause animations and live displays, then resume when selected again. Daily traffic continues counting while connected.\n- The dashboard shows one reminder at a time, chosen by priority. Device reset consequences remain in the confirmation dialog.\n- Page transitions use a fade when the system's reduced motion setting is enabled.\n- Startup parses the node inventory on a worker isolate to reduce its effect on interface responsiveness, while preserving node identity and account change boundaries.\n",
+  "sourceCommit": "49e0eb8de13ed80d80bea629d7a10eb7fd6c4a4c",
+  "sha256SumsSha256": "fd56baca2fadb3c5c26f29fb32d152bd1a36dba84fbfd0f71b7dc78022895eaa",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.128/YueLink-1.3.128-android-arm64-v8a.apk",
-      "sha256": "f8e8e929cac64e6bc817fc27e37fc5f058c161be88bd6119c9356e62e26ce33d"
+      "url": "https://yuetong.app/v1.3.130/YueLink-1.3.130-android-arm64-v8a.apk",
+      "sha256": "5a294f9d8fee25fdd3e95fe151c0830dffd1ba01a7d6ed3fbd74dbfabf1f2308"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.128/YueLink-1.3.128-android-armeabi-v7a.apk",
-      "sha256": "0a98cd52798fb1d5fbccb82c5e6079f34eef91642c4faddd906ef08e8681ab69"
+      "url": "https://yuetong.app/v1.3.130/YueLink-1.3.130-android-armeabi-v7a.apk",
+      "sha256": "9cc9619f0d691e80693d7916286d88b0b85984d6aaae9c331f16be00b4f1349a"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.128/YueLink-1.3.128-android-x86_64.apk",
-      "sha256": "2809d9d4100f3b847288304f26313777bbc063d0aad900a63c65b53685de0acb"
+      "url": "https://yuetong.app/v1.3.130/YueLink-1.3.130-android-x86_64.apk",
+      "sha256": "41dae74e6ca364064ba6ef9d23aee9a7f32ec017b86644a1b58bcf1d02fc2dab"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.128/YueLink-1.3.128-android-universal.apk",
-      "sha256": "2c8bf60a54dbd3e69490c92f123f1fa041f25e310a62212a125bd5c76270d489"
+      "url": "https://yuetong.app/v1.3.130/YueLink-1.3.130-android-universal.apk",
+      "sha256": "9dcd7f7dfa8663b69ee5ccedd81ac3c0b220cb3e9f85f4fa803ed97010308637"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.128/YueLink-1.3.128-ios.ipa",
-      "sha256": "094a77e76755159c266da4db757acb366148afeafdf3c341167834e99578579a"
+      "url": "https://yuetong.app/v1.3.130/YueLink-1.3.130-ios.ipa",
+      "sha256": "db4fe504f8777c576e7ac273d2626a724e96b19322125e0e8911f85165df4786"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.128/YueLink-1.3.128-macos-universal.dmg",
-      "sha256": "4aca4dfc5526c511ada3fbc033dfaccf0d84c917d3254e14812407d8a281326a",
+      "url": "https://yuetong.app/v1.3.130/YueLink-1.3.130-macos-universal.dmg",
+      "sha256": "7ec931dbcc28bfa71e4737a0ce956c5262f8e04505cebc550e450f62994d1645",
       "minimumSystemVersion": "13.0"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.128/YueLink-1.3.128-windows-amd64-setup.exe",
-      "sha256": "88fa98b4dd662b665fdfa88af51c2cd49fcf68e8d7dbe0d045fd8b5357cd479b"
+      "url": "https://yuetong.app/v1.3.130/YueLink-1.3.130-windows-amd64-setup.exe",
+      "sha256": "88e8d9c7ded0eba134363f33e71a0ecf2836d0436c39614a79409a16ef99b0d5"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.128/YueLink-1.3.128-windows-amd64-portable.zip",
-      "sha256": "51ff809ae8c175b6a136500d11468bfa12395024a4165e0abd4c8c9a9c21e639"
+      "url": "https://yuetong.app/v1.3.130/YueLink-1.3.130-windows-amd64-portable.zip",
+      "sha256": "db0e091fba7b87c4601d2ea1f5f5f93245ce0df790311123cda8affc16eda948"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.128/YueLink-1.3.128-linux-amd64.AppImage",
-      "sha256": "d831c79bc57871cdb3b6bf8ba1578ac3a1e2589457c2456c7f573ea1539ceb01"
+      "url": "https://yuetong.app/v1.3.130/YueLink-1.3.130-linux-amd64.AppImage",
+      "sha256": "a7469b8e57e16a6f80ab3a6a7279243cb9006d905fe14b178553072f654c54e3"
     }
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "9d781c942ab7cb3ae2e0576eb8f568b6988619a98869620f7638a4b5f9e05569",
-    "sha256SumsSha256": "171cd0c7da1400d9700fda82db38f8a167a3ea3ed6c482790fc6e8d50d0cae76",
-    "payloadBundleSha256": "8dad3028cc09c21243c655eede4f45509e95900dcfe7897fb39fe2d3ba045f5a",
+    "candidateSha256": "f732bb6e79ef915280ffd610dcc39474a70ae76b35a2d5ea3ad64e3b5e4b0284",
+    "sha256SumsSha256": "fd56baca2fadb3c5c26f29fb32d152bd1a36dba84fbfd0f71b7dc78022895eaa",
+    "payloadBundleSha256": "bf9c8a658bccee10764f8b50f7b5994878cf7826027ccd7bb9adaec90c65db8c",
     "payloadCount": 19
   },
-  "sig": "ed25519:uvTi9MpTfsZJGr0ul9KkHNUVqgDizC6+l/GXg/HixaYZ2VIw8zRgoR7UjMQCpKR/4pSNRdcBPnMdnOnPBO6IAw=="
+  "sig": "ed25519:lLDJOTtU0+bpo++gvsyrfvoV+3s+DNghVlpTHWABtk/Xifw7XQqujSxpuTu5ctJF71tNthuxEBRGWzB5f1V0BA=="
 }
