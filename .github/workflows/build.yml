@@ -1629,6 +1629,15 @@ jobs:
           echo "ATTESTED_SOURCE_COMMIT=$ATTESTED_SOURCE_COMMIT"
           echo "BUILT_SOURCE_COMMIT=$BUILT_SOURCE_COMMIT"
 
+      - name: Checkout exact policy builder
+        if: needs.preflight.outputs.tag_kind == 'stable'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.workflow_sha }}
+          path: .release-builder
+          persist-credentials: false
+
       - name: Set up Flutter for release-candidate verification
         if: needs.preflight.outputs.tag_kind == 'stable'
         uses: onesyue/yuelink-ci/.github/actions/setup-flutter@0abbca8285e980d4a40deb14f3fb5088c175aee9 # pinned installer v1
@@ -2053,6 +2062,30 @@ jobs:
       # malformed entry would only sneak in via a future refactor that
       # added one of those files to the iteration list. Cheap defensive
       # check; fails loudly before publishing.
+      - name: Attach reviewed observation policy
+        if: env.SKIP_MANIFEST != '1'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_APP_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_ENDPOINT: https://1e192a89cfaab399d211bb1dfe77a5cd.r2.cloudflarestorage.com
+          BUILDER_COMMIT: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          policy_work="$(mktemp -d)"
+          trap 'rm -rf "$policy_work"' EXIT
+          aws s3api get-object --bucket yuelink-dist --key update.json \
+            --endpoint-url "$R2_ENDPOINT" "$policy_work/previous.json" >/dev/null
+          python3 scripts/ci/candidate_policy.py \
+            --candidate "$MANIFEST_NAME" \
+            --previous-manifest "$policy_work/previous.json" \
+            --output "$policy_work/attached.json"
+          dart run tool/automation/validate_update_candidate.dart \
+            --path "$policy_work/attached.json"
+          mv "$policy_work/attached.json" "$MANIFEST_NAME"
+
       - name: Manifest URL extension guard
         if: env.SKIP_MANIFEST != '1'
         run: |
