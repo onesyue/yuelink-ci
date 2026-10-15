@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import importlib.util
 import json
 import re
 import subprocess
@@ -24,6 +25,21 @@ CURRENT_KEY_ID = "update-manifest-2026-01"
 CURRENT_PUBLIC_KEY_B64 = "cE530BJZ2rpNcn5bNAduC/uaCfgU6JLJoGZdYV7uypE="
 # RFC 8410 SubjectPublicKeyInfo prefix for a 32-byte Ed25519 raw public key.
 ED25519_SPKI_PREFIX = bytes.fromhex("302a300506032b6570032100")
+_POLICY_SPEC = importlib.util.spec_from_file_location(
+    "manifest_client_support_policy", Path(__file__).parent / "lib/client_support_policy.py"
+)
+_COMPATIBILITY = importlib.util.module_from_spec(_POLICY_SPEC)
+_POLICY_SPEC.loader.exec_module(_COMPATIBILITY)
+
+
+def _validate_compatibility(manifest):
+    if "compatibility" in manifest:
+        try:
+            _COMPATIBILITY.validate(manifest["compatibility"], published_at=manifest["publishedAt"])
+        except (ValueError, TypeError, KeyError) as exc:
+            raise ManifestError(str(exc)) from exc
+
+
 REQUIRED_TOP_LEVEL_KEYS = {
     "schemaVersion",
     "keyId",
@@ -59,6 +75,7 @@ REQUIRED_TOP_LEVEL_KEYS = {
 # `sourceCommit` 与晋级证据来自新稳定根；真实旧根没有这些键，因此仍是可选，
 # 但 policy 会要求三键全有或全无并严格交叉绑定，不能把“前向兼容”误写成任意扩展。
 OPTIONAL_TOP_LEVEL_KEYS = {
+    "compatibility",
     "notesEn",
     "sourceCommit",
     "sha256SumsSha256",
@@ -226,6 +243,7 @@ def _published_at(raw: Any) -> datetime:
 def _validate_manifest_policy(
     manifest: dict[str, Any], *, now: datetime | None = None
 ) -> None:
+    _validate_compatibility(manifest)
     if manifest.get("schemaVersion") != 1 or isinstance(
         manifest.get("schemaVersion"), bool
     ):
@@ -346,6 +364,11 @@ def _validate_manifest_policy(
 
 
 def _enforce_minimum(manifest: dict[str, Any], floor: dict[str, Any]) -> None:
+    _validate_compatibility(floor)
+    try:
+        _COMPATIBILITY.validate_transition(manifest.get("compatibility"), floor.get("compatibility"))
+    except (ValueError, TypeError, KeyError) as exc:
+        raise ManifestError(str(exc)) from exc
     candidate_version = _stable_version(manifest.get("version"))
     floor_version = _stable_version(floor.get("version"))
     candidate_published = _published_at(manifest.get("publishedAt"))

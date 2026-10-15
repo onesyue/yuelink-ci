@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "policyRevision": 1,
+  "effectiveAt": "2026-10-15T00:00:00Z",
+  "transitionDays": 90,
+  "enforcement": "observe",
+  "unknownClient": "unverified",
+  "releases": [
+    {
+      "product": "sing-box",
+      "version": "1.13.21",
+      "releasedAt": "2026-08-30T11:24:04Z",
+      "evidence": {
+        "url": "https://github.com/SagerNet/sing-box/releases/download/v1.13.21/sing-box-1.13.21-linux-arm64.tar.gz",
+        "sha256": "3e30b876c9a93c19e503e2a2d6249cf05e6a26766553d4b61e1daf48223f304f"
+      },
+      "certifications": [],
+      "maintainedLatest": null
+    },
+    {
+      "product": "sing-box",
+      "version": "1.14.3",
+      "releasedAt": "2026-10-09T05:35:00Z",
+      "evidence": {
+        "url": "https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-linux-arm64.tar.gz",
+        "sha256": "29dae24d76bea3bc62d07dd3e60cfc12003de7debbd6b768df9be9c68360174e"
+      },
+      "certifications": [],
+      "maintainedLatest": null
+    }
+  ]
+}
