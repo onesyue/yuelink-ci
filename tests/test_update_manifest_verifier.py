@@ -15,7 +15,7 @@ PRUNE_R2 = ROOT / ".github/workflows/prune-r2.yml"
 # 归档的旧签名根，用来证明「签名合法但版本更旧」会被单调地板拒绝。
 # 指向**最近**的那一个而不是最老的：上一版真正在 CDN 上服役过的根
 # 是最现实的回放样本。更早的那些仍留在仓里。
-OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.3.133.json"
+OLDER_FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.3.134.json"
 # 1.3.6 是最后一个没有可选 `notesEn` 的真实签名根。它单独覆盖旧 schema
 # 兼容性；不能复用紧邻 replay fixture，因为 1.3.7 起该字段已经存在。
 LEGACY_WITHOUT_OPTIONAL_FIXTURE = (
@@ -85,8 +85,25 @@ class UpdateManifestVerifierTests(unittest.TestCase):
             tuple(int(x) for x in signed["version"].split(".")),
             tuple(int(x) for x in self.manifest["version"].split(".")),
         )
-        with self.assertRaisesRegex(verifier.ManifestError, "below the reviewed minimum"):
+        # A floor that first introduces policy rejects a policy-less replay
+        # before the independent version comparison. Keep that reason exact.
+        expected = (
+            "compatibility: cannot silently remove existing policy"
+            if "compatibility" in self.manifest and "compatibility" not in signed
+            else "manifest version is below the reviewed minimum"
+        )
+        with self.assertRaisesRegex(verifier.ManifestError, expected):
             verifier.verify(older)
+
+    def test_older_version_with_same_policy_is_rejected(self) -> None:
+        # Exercise the version gate independently of policy transition. This
+        # in-memory candidate is not represented as a valid signed manifest.
+        candidate = dict(self.manifest)
+        candidate["version"] = json.loads(OLDER_FIXTURE.read_bytes())["version"]
+        with self.assertRaisesRegex(
+            verifier.ManifestError, "manifest version is below the reviewed minimum"
+        ):
+            verifier._enforce_minimum(candidate, self.manifest)
 
     def test_authentic_older_root_remains_valid_as_a_historical_archive(self) -> None:
         older = OLDER_FIXTURE.read_bytes()
