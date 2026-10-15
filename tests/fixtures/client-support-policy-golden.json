@@ -1,0 +1,36 @@
+{
+  "test_only": true,
+  "publishedAt": "2026-10-15T00:00:00Z",
+  "compatibility": {
+    "schemaVersion": 1,
+    "policyRevision": 1,
+    "effectiveAt": "2026-07-17T00:00:00Z",
+    "transitionDays": 90,
+    "enforcement": "observe",
+    "unknownClient": "unverified",
+    "releases": [
+      {
+        "product": "sing-box",
+        "version": "1.2.3",
+        "releasedAt": "2026-07-17T00:00:00Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/tag/v1.2.3",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "certifications": [
+          {
+            "platform": "linux",
+            "core": null,
+            "testedAt": "2026-07-18T00:00:00Z",
+            "evidence": {
+              "url": "https://github.com/onesyue/yuelink-ci/blob/cccccccccccccccccccccccccccccccccccccccc/tests/fixtures/isolated-certification.json",
+              "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          }
+        ],
+        "maintainedLatest": null
+      }
+    ],
+    "policySourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}
