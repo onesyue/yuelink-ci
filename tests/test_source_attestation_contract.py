@@ -16,6 +16,7 @@ EXPECTED_ACTION_YAML = {
     ".github/workflows/backup-critical-workstation-keys.yml",
     ".github/workflows/build.yml",
     ".github/workflows/ephemeral-signer-bridge.yml",
+    ".github/workflows/flutter-teardown-diagnostic.yml",
     ".github/workflows/manifest-health.yml",
     ".github/workflows/policy-ci.yml",
     ".github/workflows/prune-r2.yml",
