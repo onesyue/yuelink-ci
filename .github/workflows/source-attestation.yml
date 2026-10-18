@@ -200,17 +200,25 @@ jobs:
 
       - name: Run complete Flutter suite and enforce reviewed floor
         shell: bash
-        timeout-minutes: 32
+        timeout-minutes: 40
         run: |
           set -euo pipefail
-          # Concurrent Flutter tester processes crashed during coverage teardown
-          # and left the runner waiting indefinitely. Serialize the same full
-          # suite and bound teardown; a timeout or crash remains a failed gate.
-          timeout --signal=TERM --kill-after=30s 1800 \
-            flutter test --no-pub --coverage --machine --concurrency=1 | tee /tmp/flutter-tests.jsonl
-          python3 .source-attestation-tools/scripts/count-flutter-machine-tests.py \
-            /tmp/flutter-tests.jsonl --minimum 2044
+          if ! command -v lcov >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y lcov
+          fi
+          # Preserve every test and the native coverage union. The two files
+          # pass in a fresh compiler session but crash after the full-suite prefix.
+          python3 .source-attestation-tools/scripts/run-flutter-coverage.py
           dart run tool/automation/coverage_ratchet.dart --check
+
+      - name: Retain complete Flutter execution evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flutter-coverage-execution-${{ github.run_id }}
+          path: coverage/source-gate/
+          if-no-files-found: ignore
 
       - name: Capture executed Flutter gate identities
         run: python3 scripts/ci/attested_preflight.py capture --kind flutter --output "$RUNNER_TEMP/flutter-reuse.json"

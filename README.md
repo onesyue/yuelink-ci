@@ -142,11 +142,15 @@ release tags, Windows also builds the native DLL, packages it as ZIP and runs
 three complete startup/traffic/shutdown cycles with required engine leases.
 Real listening and closed loopback sockets verify the refusal/rebind check;
 a timeout never counts as a released port. These 17 gates bind the exact source.
-The full Flutter coverage suite runs with one tester process at a time and a
-30-minute process deadline (32-minute step deadline). The cancelled run39142519080
-recorded two tester segmentation faults during teardown, then produced no further
-test events for58 minutes. Serialization is the bounded mitigation; a crash or
-timeout still fails, and neither the test floor nor coverage ratchet is reduced.
+The full Flutter coverage gate inventories every tracked test (at least500 files),
+runs the two recorded teardown-crash files in a separate compiler session, then
+runs every remaining file. Each invocation uses two testers and a30-minute
+process deadline. Both machine streams must end successfully; their combined
+count retains the2044 floor. Native lcov merges both reports before the unchanged
+coverage ratchet. Runs39142519080,39147868880 and39151489566 demonstrate that
+serialization and explicit test binding did not fix the full-suite crash; the
+two files passed in isolation in39150512097. No failing file is skipped, and a
+crash, incomplete corpus, missing coverage or failed merge still fails the gate.
 The final JSON proof is uploaded under the exact source SHA and receives GitHub
 build-provenance attestation. Updater signing material is never copied into
 Git. It remains in protected repository Secrets; the protected promotion step
