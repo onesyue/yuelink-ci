@@ -200,9 +200,14 @@ jobs:
 
       - name: Run complete Flutter suite and enforce reviewed floor
         shell: bash
+        timeout-minutes: 32
         run: |
           set -euo pipefail
-          flutter test --no-pub --coverage --machine | tee /tmp/flutter-tests.jsonl
+          # Concurrent Flutter tester processes crashed during coverage teardown
+          # and left the runner waiting indefinitely. Serialize the same full
+          # suite and bound teardown; a timeout or crash remains a failed gate.
+          timeout --signal=TERM --kill-after=30s 1800 \
+            flutter test --no-pub --coverage --machine --concurrency=1 | tee /tmp/flutter-tests.jsonl
           python3 .source-attestation-tools/scripts/count-flutter-machine-tests.py \
             /tmp/flutter-tests.jsonl --minimum 2044
           dart run tool/automation/coverage_ratchet.dart --check
