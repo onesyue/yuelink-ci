@@ -50,6 +50,11 @@ if args[:2]==['pub','get']:
 assert args[:5]==['test','--no-pub','--coverage','--machine','--concurrency=1']
 files=[a for a in args if a.startswith('test/')]
 assert len(files)==1
+if os.environ.get('SUBMODULE_REQUIRED'):
+    assert Path('core/mihomo/go.mod').read_text()=='module fixture\\n'
+    assert Path('core/mihomo/dependency/leaf.txt').read_text()=='pinned dependency\\n'
+    if os.environ.get('SUBMODULE_MUTATION'):
+        Path('core/mihomo/go.mod').write_text('mutated')
 cache=Path('build/test_cache')
 assert not cache.exists(), 'prior compiler kernel was reused'
 cache.parent.mkdir(exist_ok=True)
@@ -177,6 +182,54 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
         result = self.run_gate()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unassigned platform-specific test", result.stderr)
+
+    def commit_fixture(self, repo, message):
+        subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                        "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
+                        "commit", "-qm", message], cwd=repo, check=True)
+
+    def add_recursive_native_fixture(self):
+        leaf = self.root / "leaf-source"
+        parent = self.root / "native-source"
+        for repo, name, value in [(leaf, "leaf.txt", "pinned dependency\n"),
+                                  (parent, "go.mod", "module fixture\n")]:
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            (repo / name).write_text(value)
+            subprocess.run(["git", "add", name], cwd=repo, check=True)
+            self.commit_fixture(repo, "native source")
+        subprocess.run(["git", "-c", "protocol.file.allow=always", "submodule", "add", "-q",
+                        str(leaf), "dependency"], cwd=parent, check=True)
+        self.commit_fixture(parent, "nested pinned dependency")
+        subprocess.run(["git", "-c", "protocol.file.allow=always", "submodule", "add", "-q",
+                        str(parent), "core/mihomo"], cwd=self.root, check=True)
+        subprocess.run(["git", "-c", "protocol.file.allow=always", "submodule", "update",
+                        "--init", "--recursive", "--quiet"], cwd=self.root, check=True)
+        self.commit_fixture(self.root, "pinned native Gitlink")
+
+    def test_recursive_gitlinks_execute_from_owned_exact_worktrees(self):
+        self.add_recursive_native_fixture()
+        result = self.run_gate(SUBMODULE_REQUIRED="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for repo in [self.root / "core/mihomo", self.root / "core/mihomo/dependency"]:
+            listing = subprocess.check_output(["git", "worktree", "list", "--porcelain"], cwd=repo, text=True)
+            self.assertEqual(listing.count("worktree "), 1, listing)
+        self.assertEqual((self.root / "core/mihomo/go.mod").read_text(), "module fixture\n")
+
+    def test_wrong_primary_gitlink_pin_refuses_before_any_test(self):
+        self.add_recursive_native_fixture()
+        subprocess.run(["git", "checkout", "--detach", "HEAD~1"], cwd=self.root / "core/mihomo", check=True, capture_output=True)
+        result = self.run_gate(SUBMODULE_REQUIRED="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Gitlink does not match", result.stderr)
+        self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
+
+    def test_mutated_dependency_cannot_pass_or_modify_primary_source(self):
+        self.add_recursive_native_fixture()
+        result = self.run_gate(SUBMODULE_REQUIRED="1", SUBMODULE_MUTATION="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.root / "core/mihomo/go.mod").read_text(), "module fixture\n")
+        self.assertFalse((self.root / "coverage/lcov.info").exists())
 
     def test_untracked_test_cannot_be_silently_omitted(self):
         (self.root / "test/extra_test.dart").write_text("void main() {}")
