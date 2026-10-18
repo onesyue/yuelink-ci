@@ -144,8 +144,9 @@ Real listening and closed loopback sockets verify the refusal/rebind check;
 a timeout never counts as a released port. These 17 gates bind the exact source.
 The full Flutter coverage gate inventories every tracked test (at least500 files),
 runs the two recorded teardown-crash files in a separate compiler session, then
-runs every remaining file. Each invocation uses two testers and a30-minute
-process deadline. Both machine streams must end successfully; their combined
+runs every remaining file. The isolated pair keeps its proved single tester;
+the remainder uses two testers. Each invocation has a30-minute process deadline.
+Both machine streams must end successfully; their combined
 count retains the2044 floor. Native lcov merges both reports before the unchanged
 coverage ratchet. Runs39142519080,39147868880 and39151489566 demonstrate that
 serialization and explicit test binding did not fix the full-suite crash; the

@@ -32,9 +32,10 @@ class CoverageRunnerTests(unittest.TestCase):
         self.executable("flutter", '''import json,os,sys
 from pathlib import Path
 args=sys.argv[1:]
-assert args[:5]==['test','--no-pub','--coverage','--machine','--concurrency=2']
+assert args[:4]==['test','--no-pub','--coverage','--machine']
 files=[a for a in args if a.startswith('test/')]
 assert files
+assert args[4]==('--concurrency=1' if len(files)==2 else '--concurrency=2')
 report=Path(args[args.index('--coverage-path')+1])
 if not os.environ.get('MISSING_COVERAGE'): report.write_text('SF:lib/a.dart\\nDA:1,1\\nend_of_record\\n')
 print(json.dumps({'type':'start'}))

@@ -50,7 +50,7 @@ def main() -> None:
         command = [
             "timeout", "--signal=TERM", "--kill-after=30s", "1800",
             "flutter", "test", "--no-pub", "--coverage", "--machine",
-            "--concurrency=2", "--coverage-path", str(lcov), *tests,
+            f"--concurrency={1 if index == 0 else 2}", "--coverage-path", str(lcov), *tests,
         ]
         with report.open("w") as log:
             process = subprocess.Popen(command, stdout=subprocess.PIPE,
