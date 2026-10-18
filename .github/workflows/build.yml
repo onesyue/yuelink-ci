@@ -680,9 +680,11 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           flutter build apk --release --split-per-abi \
+            --obfuscate --split-debug-info="$RUNNER_TEMP/flutter-symbols/android-split" \
             --build-name="$APP_VERSION" \
             --build-number="$BUILD_NUM"
           flutter build apk --release \
+            --obfuscate --split-debug-info="$RUNNER_TEMP/flutter-symbols/android-universal" \
             --build-name="$APP_VERSION" \
             --build-number="$BUILD_NUM"
 
@@ -764,6 +766,7 @@ jobs:
         if: matrix.platform == 'ios'
         run: |
           flutter build ios --release --no-codesign \
+            --obfuscate --split-debug-info="$RUNNER_TEMP/flutter-symbols/ios" \
             --build-name="$APP_VERSION" \
             --build-number="$BUILD_NUM"
 
@@ -872,6 +875,7 @@ jobs:
           YUELINK_REQUIRE_ROOT_PREFS=1 bash scripts/ci/test_native_network_settings.sh
           (cd service && CGO_ENABLED=1 go test -mod=readonly -race ./...)
           flutter build macos --release \
+            --obfuscate --split-debug-info="$RUNNER_TEMP/flutter-symbols/macos" \
             --build-name="$APP_VERSION" \
             --build-number="$BUILD_NUM"
 
@@ -1087,6 +1091,7 @@ jobs:
           flutter test test/services/native_proxy_settings_test.dart
           flutter config --enable-windows-desktop
           flutter build windows --release \
+            --obfuscate --split-debug-info="$RUNNER_TEMP/flutter-symbols/windows" \
             --build-name="$APP_VERSION" \
             --build-number="$BUILD_NUM"
 
@@ -1290,6 +1295,7 @@ jobs:
           curl-config --features | grep -q AsynchDNS
           flutter config --enable-linux-desktop
           flutter build linux --release \
+            --obfuscate --split-debug-info="$RUNNER_TEMP/flutter-symbols/linux" \
             --build-name="$APP_VERSION" \
             --build-number="$BUILD_NUM"
 
@@ -1544,6 +1550,45 @@ jobs:
       # this point dist/ holds exactly this platform's freshly-built binaries
       # (the .sha256 sidecars are generated inside the publish step below), so
       # each platform attests its own artifact.
+      - name: Encrypt and retain Flutter split symbols
+        shell: bash
+        env:
+          YUEOPS_KEYVAULT_BREAKGLASS_RECIPIENT: ${{ vars.YUEOPS_KEYVAULT_BREAKGLASS_RECIPIENT }}
+          YUEOPS_KEYVAULT_VERIFIER_RECIPIENT: ${{ vars.YUEOPS_KEYVAULT_VERIFIER_RECIPIENT }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_APP_KEY }}
+          R2_ENDPOINT: https://1e192a89cfaab399d211bb1dfe77a5cd.r2.cloudflarestorage.com
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          SYMBOL_PLATFORM: ${{ matrix.platform }}
+          SYMBOL_SOURCE: ${{ needs.source_binding.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          umask 077
+          # Same two public recipients and backup bucket as the existing key
+          # recovery workflow. No private identity enters this public builder.
+          GOFLAGS='' GOBIN="$RUNNER_TEMP/age-bin" go install filippo.io/age/cmd/age@v1.3.2 filippo.io/age/cmd/age-keygen@v1.3.2
+          age_tool="$RUNNER_TEMP/age-bin/age"
+          if [ "$RUNNER_OS" = Windows ]; then age_tool="$age_tool.exe"; fi
+          export PATH="$RUNNER_TEMP/age-bin:$PATH"
+          python3 -m unittest discover -s scripts/ci/tests -p test_flutter_symbols.py
+          [ "$(git rev-parse HEAD)" = "$SYMBOL_SOURCE" ]
+          archive="$RUNNER_TEMP/flutter-symbols-${SYMBOL_PLATFORM}.tar.age"
+          python3 scripts/ci/archive_flutter_symbols.py archive \
+            --symbols "$RUNNER_TEMP/flutter-symbols" --dist dist \
+            --output "$archive" --source "$SYMBOL_SOURCE" \
+            --platform "$SYMBOL_PLATFORM" --age "$age_tool" \
+            --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
+          prefix="s3://yueops-backup/yuelink-symbols/$SYMBOL_SOURCE/$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT/$SYMBOL_PLATFORM"
+          for file in "$archive" "$archive.json"; do
+            aws s3 cp "$file" "$prefix/$(basename "$file")" \
+              --endpoint-url "$R2_ENDPOINT" --no-progress --only-show-errors
+            aws s3 cp "$prefix/$(basename "$file")" "$file.readback" \
+              --endpoint-url "$R2_ENDPOINT" --no-progress --only-show-errors
+            cmp "$file" "$file.readback"
+          done
+
       - name: Attest build provenance
         if: startsWith(github.ref, 'refs/tags/')
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
