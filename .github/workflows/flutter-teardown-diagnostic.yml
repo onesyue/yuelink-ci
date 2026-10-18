@@ -9,58 +9,90 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        variant: [baseline, binding, no-coverage]
+        include:
+          - variant: current-batch
+            sdk: '3.47.7'
+          - variant: previous-sdk
+            sdk: '3.47.5'
+          - variant: no-coverage
+            sdk: '3.47.7'
+          - variant: isolated-pair
+            sdk: '3.47.7'
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: 4ee477290d77bcbbc1c5112c4d04e134b0005d49
+          ref: a1fd2be2e886e49bf05ecf7f92caa9eec8baf1ad
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.sha }}
+          path: .diagnostic-tools
+          persist-credentials: false
+          sparse-checkout: tests/fixtures/flutter-teardown-batch-20261019.json
+          sparse-checkout-cone-mode: false
       - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@25d71e2ab4d5c16695e569c6011ddbdc66ab221f # pinned installer v1
         with:
-          flutter-version: '3.47.7'
+          flutter-version: ${{ matrix.sdk }}
           cache: true
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.pub-cache
           key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
       - run: flutter pub get --enforce-lockfile
-      - name: Reproduce exact failing files in an isolated checkout
+      - name: Compare exact crash batch and retain native backtraces
         env:
           VARIANT: ${{ matrix.variant }}
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p diagnostic
+          mkdir -p diagnostic /tmp/yueto-flutter-cores
+          chmod 700 /tmp/yueto-flutter-cores
           git rev-parse HEAD > diagnostic/source.txt
           flutter --version --machine > diagnostic/sdk.json
-          if [ "$VARIANT" = binding ]; then
-            python3 - <<'PY'
+          command -v gdb >/dev/null || { sudo apt-get update -qq; sudo apt-get install -y gdb; }
+          sudo sysctl -w kernel.core_pattern=/tmp/yueto-flutter-cores/core.%p
+          ulimit -c 2097152
+          set +e
+          python3 - <<'PY' 2>&1 | tee diagnostic/tests.jsonl
+          import json,os,subprocess
           from pathlib import Path
-          for name in ('user_custom_rules_test.dart', 'subscription_parser_test.dart'):
-              path = Path('test/services') / name
-              text = path.read_text()
-              assert text.count('void main() {') == 1
-              path.write_text(text.replace('void main() {', 'void main() {\n  TestWidgetsFlutterBinding.ensureInitialized();'))
+          variant=os.environ['VARIANT']
+          files=json.loads(Path('.diagnostic-tools/tests/fixtures/flutter-teardown-batch-20261019.json').read_text())
+          assert len(files)==32 and all(Path(p).is_file() for p in files)
+          if variant=='isolated-pair':
+              files=['test/core/storage/persisted_schema_test.dart','test/core/storage/settings_service_schema_test.dart']
+          Path('diagnostic/input.json').write_text(json.dumps(files))
+          command=['timeout','--signal=TERM','--kill-after=15s','180','flutter','test','--no-pub','--machine','--concurrency=2']
+          if variant!='no-coverage': command+=['--coverage','--coverage-path','diagnostic/coverage.info']
+          result=subprocess.run([*command,*files])
+          Path('diagnostic/test-exit.txt').write_text(str(result.returncode)+'\n')
+          raise SystemExit(result.returncode)
           PY
-            git diff > diagnostic/binding.patch
-          fi
-          flags=(--coverage)
-          if [ "$VARIANT" = no-coverage ]; then flags=(); fi
-          timeout --signal=TERM --kill-after=10s 180 \
-            flutter test --no-pub "${flags[@]}" --machine --concurrency=1 \
-            test/services/user_custom_rules_test.dart \
-            test/services/subscription_parser_test.dart \
-            2>&1 | tee diagnostic/tests.jsonl
+          status=${PIPESTATUS[0]}
+          set -e
+          flutter_bin="$(readlink -f "$(command -v flutter)")"
+          tester="$(dirname "$(dirname "$flutter_bin")")/bin/cache/artifacts/engine/linux-x64/flutter_tester"
+          : > diagnostic/native-backtraces.txt
+          for core in /tmp/yueto-flutter-cores/core.*; do
+            [ -f "$core" ] || continue
+            timeout 30 gdb -batch \
+              -ex 'set print frame-arguments none' -ex 'thread apply all bt 20' \
+              -ex 'info sharedlibrary' "$tester" "$core" \
+              >> diagnostic/native-backtraces.txt 2>&1 || true
+          done
+          # Raw process memory stays inside the disposable runner.
+          exit "$status"
       - name: Preserve diagnostic evidence without publishing a release
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: flutter-teardown-${{ matrix.variant }}
+          name: flutter-storage-crash-${{ matrix.variant }}
           path: diagnostic/
           if-no-files-found: error
