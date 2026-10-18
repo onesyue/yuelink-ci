@@ -46,7 +46,7 @@ WORKFLOW_MARKERS = (
     "dart run tool/automation/manifest_guard.dart --self-check",
     "Checkout exact attestation parser",
     "ref: ${{ github.sha }}",
-    "timeout-minutes: 40",
+    "timeout-minutes: 60",
     ".source-attestation-tools/scripts/run-flutter-coverage.py",
     "Retain complete Flutter execution evidence",
     "dart run tool/automation/coverage_ratchet.dart --check",

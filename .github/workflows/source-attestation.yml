@@ -200,7 +200,7 @@ jobs:
 
       - name: Run complete Flutter suite and enforce reviewed floor
         shell: bash
-        timeout-minutes: 40
+        timeout-minutes: 60
         run: |
           set -euo pipefail
           if ! command -v lcov >/dev/null; then

@@ -1,6 +1,7 @@
 """Exercise the real coverage orchestrator with bounded executable fixtures."""
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import shutil
@@ -19,37 +20,64 @@ class CoverageRunnerTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.bin = self.root / "bin"
         self.bin.mkdir()
-        tests = self.root / "test/services"
-        tests.mkdir(parents=True)
-        names = ["user_custom_rules", "subscription_parser"] + [f"case_{i}" for i in range(498)]
+        names = [
+            "services/user_custom_rules", "services/subscription_parser",
+            "core/storage/persisted_schema", "core/storage/settings_service_schema",
+            *[f"services/case_{i}" for i in range(496)],
+        ]
         for name in names:
-            (tests / f"{name}_test.dart").write_text("void main() {}\n")
+            path = self.root / "test" / (name + "_test.dart")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("void main() {}\n")
+        (self.root / "lib").mkdir()
+        (self.root / "lib/a.dart").write_text("void fixture() {}\n")
         subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
-        subprocess.run(["git", "add", "test"], cwd=self.root, check=True)
-        # Exercise the actual subprocess path, protocol parser and coverage merge
-        # failure handling. Only the expensive external engines are replaced.
+        subprocess.run(["git", "add", "test", "lib"], cwd=self.root, check=True)
+        subprocess.run([
+            "git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+            "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
+            "commit", "-qm", "fixture",
+        ], cwd=self.root, check=True)
+        # Git worktrees, command execution, protocol parsing, source/cache
+        # isolation and failure handling are real. Only expensive engines fake.
         self.executable("timeout", 'import os,sys\nos.execvp(sys.argv[4], sys.argv[4:])\n')
         self.executable("flutter", '''import json,os,sys
 from pathlib import Path
 args=sys.argv[1:]
-assert args[:4]==['test','--no-pub','--coverage','--machine']
+if args[:2]==['pub','get']:
+    assert args==['pub','get','--offline','--enforce-lockfile']
+    sys.exit(8 if os.environ.get('PUBGET_FAILURE') else 0)
+assert args[:5]==['test','--no-pub','--coverage','--machine','--concurrency=1']
 files=[a for a in args if a.startswith('test/')]
-assert 0 < len(files) <= 32
-assert args[4]==('--concurrency=1' if len(files)==2 else '--concurrency=2')
+assert len(files)==1
+cache=Path('build/test_cache')
+assert not cache.exists(), 'prior compiler kernel was reused'
+cache.parent.mkdir(exist_ok=True)
+if os.environ.get('CACHE_ESCAPE'):
+    cache.symlink_to(os.environ['SENTINEL'])
+else:
+    cache.mkdir()
+    (cache/'kernel').write_text('previous compilation')
 report=Path(args[args.index('--coverage-path')+1])
-if not os.environ.get('MISSING_COVERAGE'): report.write_text('SF:lib/a.dart\\nDA:1,1\\nend_of_record\\n')
+if os.environ.get('TRACKED_MUTATION'):
+    Path('lib/a.dart').write_text('changed source')
+if not os.environ.get('MISSING_COVERAGE'):
+    report.write_text('SF:'+('/outside/a.dart' if os.environ.get('COVERAGE_ESCAPE') else str(Path.cwd()/'lib/a.dart'))+'\\nDA:1,1\\nend_of_record\\n')
 print(json.dumps({'type':'start'}))
-count=len(files)*(1 if os.environ.get('LOW_COUNT') else 5)
-for i in range(count): print(json.dumps({'type':'testStart','test':{'id':i}}))
+count=1 if os.environ.get('LOW_COUNT') else 5
+for i in range(count):
+    print(json.dumps({'type':'testStart','test':{'id':i,'name':files[0]},'worker':str(Path.cwd())}))
 if not os.environ.get('MISSING_DONE'): print(json.dumps({'type':'done','success':True}))
-if os.environ.get('FLUTTER_FAILURE') or os.environ.get('FAIL_GROUP') == report.stem: sys.exit(7)
+if os.environ.get('FLUTTER_FAILURE') or os.environ.get('FAIL_GROUP')==report.stem: sys.exit(7)
 ''')
         self.executable("lcov", '''import os,sys
 from pathlib import Path
-assert sys.argv.count('--add-tracefile')==17
-assert all(Path(sys.argv[i+1]).is_file() for i,a in enumerate(sys.argv) if a=='--add-tracefile')
+assert sys.argv.count('--add-tracefile')==500
+reports=[Path(sys.argv[i+1]) for i,a in enumerate(sys.argv) if a=='--add-tracefile']
+assert len(set(reports))==500 and all(p.is_file() for p in reports)
+assert all(p.read_text().startswith('SF:lib/a.dart\\n') for p in reports)
 if os.environ.get('MERGE_FAILURE'): sys.exit(9)
-Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,2\\nend_of_record\\n')
+Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
 ''')
 
     def executable(self, name, body):
@@ -60,71 +88,94 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,2\\nend_of_record\\n')
     def run_gate(self, **overrides):
         env = dict(os.environ, PATH=str(self.bin) + os.pathsep + os.environ["PATH"], **overrides)
         return subprocess.run([sys.executable, str(ROOT / "scripts/run-flutter-coverage.py")],
-                              cwd=self.root, env=env, text=True, capture_output=True, timeout=20)
+                              cwd=self.root, env=env, text=True, capture_output=True, timeout=40)
 
-    def test_all_files_execute_once_and_all_protocols_count(self):
-        import json
+    def test_complete_corpus_executes_once_with_independent_sources_and_kernels(self):
         result = self.run_gate()
         self.assertEqual(result.returncode, 0, result.stderr)
-        groups = json.loads((self.root / 'coverage/source-gate/inventory.json').read_text())
-        self.assertEqual([len(g) for g in groups], [2] + [32] * 15 + [18])
-        self.assertEqual(len(set(p for g in groups for p in g)), 500)
-        self.assertIn('Flutter tests observed: 2500', result.stdout)
-        self.assertTrue((self.root / 'coverage/lcov.info').is_file())
+        evidence = self.root / "coverage/source-gate"
+        groups = json.loads((evidence / "inventory.json").read_text())
+        self.assertEqual([len(group) for group in groups], [1] * 500)
+        actual = []
+        workers = set()
+        for report in evidence.glob("*.jsonl"):
+            rows = [json.loads(line) for line in report.read_text().splitlines()]
+            first = next(row for row in rows if row["type"] == "testStart")
+            actual.append(first["test"]["name"])
+            workers.add(first["worker"])
+        self.assertEqual(sorted(actual), sorted(group[0] for group in groups))
+        self.assertEqual(len(set(actual)), 500)
+        self.assertEqual(len(workers), 2)
+        self.assertNotIn(str(self.root), workers)
+        self.assertIn("Flutter tests observed: 2500", result.stdout)
+        self.assertTrue((self.root / "coverage/lcov.info").is_file())
+        for worker in workers:
+            self.assertFalse(Path(worker).exists())
 
-    def test_every_failed_engine_protocol_or_merge_blocks_acceptance(self):
-        for failure in ['FLUTTER_FAILURE', 'MISSING_DONE', 'MISSING_COVERAGE', 'LOW_COUNT', 'MERGE_FAILURE']:
+    def test_every_failed_engine_protocol_dependency_or_merge_blocks_acceptance(self):
+        for failure in ["FLUTTER_FAILURE", "MISSING_DONE", "MISSING_COVERAGE",
+                        "LOW_COUNT", "MERGE_FAILURE", "PUBGET_FAILURE",
+                        "COVERAGE_ESCAPE", "TRACKED_MUTATION"]:
             with self.subTest(failure=failure):
-                shutil.rmtree(self.root / 'coverage', ignore_errors=True)
-                result = self.run_gate(**{failure: '1'})
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                result = self.run_gate(**{failure: "1"})
                 self.assertNotEqual(result.returncode, 0)
-                self.assertNotIn('Flutter tests observed:', result.stdout)
+                self.assertNotIn("Flutter tests observed:", result.stdout)
 
-    def test_late_batch_failure_preserves_prior_evidence_and_never_merges(self):
-        result = self.run_gate(FAIL_GROUP='8')
+    def test_late_failure_preserves_prior_evidence_and_never_merges(self):
+        result = self.run_gate(FAIL_GROUP="8")
         self.assertNotEqual(result.returncode, 0)
-        evidence = self.root / 'coverage/source-gate'
-        self.assertTrue((evidence / '7.info').is_file())
-        self.assertTrue((evidence / '8.jsonl').is_file())
-        self.assertFalse((evidence / '9.jsonl').exists())
-        self.assertFalse((self.root / 'coverage/lcov.info').exists())
+        evidence = self.root / "coverage/source-gate"
+        self.assertTrue((evidence / "6.info").is_file())
+        self.assertTrue((evidence / "8.jsonl").is_file())
+        self.assertFalse((evidence / "499.jsonl").exists())
+        self.assertFalse((self.root / "coverage/lcov.info").exists())
+
+    def test_cache_symlink_refuses_before_touching_its_target(self):
+        sentinel = self.root / "outside"
+        sentinel.mkdir()
+        (sentinel / "keep").write_text("preserve")
+        result = self.run_gate(CACHE_ESCAPE="1", SENTINEL=str(sentinel))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cache escaped", result.stderr)
+        self.assertEqual((sentinel / "keep").read_text(), "preserve")
+        self.assertFalse((self.root / "coverage/lcov.info").exists())
 
     def test_untracked_test_cannot_be_silently_omitted(self):
-        (self.root / 'test/extra_test.dart').write_text('void main() {}')
+        (self.root / "test/extra_test.dart").write_text("void main() {}")
         result = self.run_gate()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('test inventory differs', result.stderr)
+        self.assertIn("test inventory differs", result.stderr)
 
-    def test_missing_isolated_file_cannot_reduce_the_suite(self):
-        path = self.root / 'test/services/user_custom_rules_test.dart'
-        path.unlink()
-        subprocess.run(['git', 'add', '-u'], cwd=self.root, check=True)
+    def test_missing_required_case_cannot_reduce_the_suite(self):
+        (self.root / "test/services/user_custom_rules_test.dart").unlink()
+        subprocess.run(["git", "add", "-u"], cwd=self.root, check=True)
         result = self.run_gate()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('scan floor', result.stderr)
+        self.assertIn("scan floor", result.stderr)
 
     def test_workflow_uses_exact_checked_out_runner_and_keeps_ratchet(self):
-        workflow = (ROOT / '.github/workflows/source-attestation.yml').read_text()
-        self.assertIn('ref: ${{ github.sha }}', workflow)
-        self.assertIn('python3 .source-attestation-tools/scripts/run-flutter-coverage.py', workflow)
-        self.assertIn('dart run tool/automation/coverage_ratchet.dart --check', workflow)
+        workflow = (ROOT / ".github/workflows/source-attestation.yml").read_text()
+        self.assertIn("ref: $" + "{{ github.sha }}", workflow)
+        self.assertIn("python3 .source-attestation-tools/scripts/run-flutter-coverage.py", workflow)
+        self.assertIn("dart run tool/automation/coverage_ratchet.dart --check", workflow)
 
-    def test_missing_isolated_case_fails_even_when_file_floor_is_met(self):
-        path = self.root / 'test/services/user_custom_rules_test.dart'
-        path.rename(path.with_name('replacement_test.dart'))
-        subprocess.run(['git', 'add', '-A'], cwd=self.root, check=True)
+    def test_missing_required_case_fails_even_when_file_floor_is_met(self):
+        path = self.root / "test/services/user_custom_rules_test.dart"
+        path.rename(path.with_name("replacement_test.dart"))
+        subprocess.run(["git", "add", "-A", "test"], cwd=self.root, check=True)
         result = self.run_gate()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('isolated tests missing', result.stderr)
+        self.assertIn("required crash cases missing", result.stderr)
 
     def test_symlink_cannot_substitute_for_an_independent_test_file(self):
-        path = self.root / 'test/services/case_0_test.dart'
+        path = self.root / "test/services/case_0_test.dart"
         path.unlink()
-        path.symlink_to('case_1_test.dart')
+        path.symlink_to("case_1_test.dart")
         result = self.run_gate()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('test paths are symlinks', result.stderr)
+        self.assertIn("test paths are symlinks", result.stderr)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
