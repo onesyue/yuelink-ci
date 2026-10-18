@@ -13,6 +13,7 @@ ISOLATED = {
 }
 MINIMUM_FILES = 500
 MINIMUM_TESTS = 2044
+MAX_FILES_PER_COMPILER = 32
 
 
 def partition(root: Path) -> list[list[str]]:
@@ -25,7 +26,11 @@ def partition(root: Path) -> list[list[str]]:
         raise ValueError("test inventory differs from the complete tracked corpus or scan floor")
     if not ISOLATED.issubset(tests) or any((root / p).is_symlink() for p in tests):
         raise ValueError("isolated tests missing or test paths are symlinks")
-    groups = [sorted(ISOLATED), [p for p in tests if p not in ISOLATED]]
+    remaining = [p for p in tests if p not in ISOLATED]
+    groups = [sorted(ISOLATED)] + [
+        remaining[i:i + MAX_FILES_PER_COMPILER]
+        for i in range(0, len(remaining), MAX_FILES_PER_COMPILER)
+    ]
     assert sorted(p for group in groups for p in group) == tests
     return groups
 
@@ -48,7 +53,7 @@ def main() -> None:
         lcov = out / f"{index}.info"
         print(f"Flutter coverage group {index}: {len(tests)} test files", flush=True)
         command = [
-            "timeout", "--signal=TERM", "--kill-after=30s", "1800",
+            "timeout", "--signal=TERM", "--kill-after=30s", "600",
             "flutter", "test", "--no-pub", "--coverage", "--machine",
             f"--concurrency={1 if index == 0 else 2}", "--coverage-path", str(lcov), *tests,
         ]

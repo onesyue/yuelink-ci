@@ -143,15 +143,19 @@ three complete startup/traffic/shutdown cycles with required engine leases.
 Real listening and closed loopback sockets verify the refusal/rebind check;
 a timeout never counts as a released port. These 17 gates bind the exact source.
 The full Flutter coverage gate inventories every tracked test (at least500 files),
-runs the two recorded teardown-crash files in a separate compiler session, then
-runs every remaining file. The isolated pair keeps its proved single tester;
-the remainder uses two testers. Each invocation has a30-minute process deadline.
-Both machine streams must end successfully; their combined
-count retains the2044 floor. Native lcov merges both reports before the unchanged
-coverage ratchet. Runs39142519080,39147868880 and39151489566 demonstrate that
-serialization and explicit test binding did not fix the full-suite crash; the
-two files passed in isolation in39150512097. No failing file is skipped, and a
-crash, incomplete corpus, missing coverage or failed merge still fails the gate.
+runs the original two teardown-crash files in a separate compiler session, then
+runs every remaining file in deterministic batches of at most32 files. The
+original pair retains its successful single tester; the remaining batches use
+two testers. Each invocation has a10-minute process deadline. Every machine
+stream must end successfully; the combined count retains the2044 floor. Native
+lcov merges every report before the unchanged coverage ratchet. No failing file
+is skipped or automatically retried, and any crash, incomplete corpus, missing
+coverage or failed merge fails the gate. Run39154488642 accepted the isolated
+pair but crashed during teardown of two different storage suites after120
+suites in the remaining large compiler session. Bounded compiler batches are a
+mitigation candidate; fixture success is not evidence that the native crash is
+resolved. Earlier runs39142519080,39147868880 and39151489566 also disprove full
+serialization and explicit test binding as fixes.
 The final JSON proof is uploaded under the exact source SHA and receives GitHub
 build-provenance attestation. Updater signing material is never copied into
 Git. It remains in protected repository Secrets; the protected promotion step

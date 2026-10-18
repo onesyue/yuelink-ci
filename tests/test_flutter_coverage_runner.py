@@ -34,7 +34,7 @@ from pathlib import Path
 args=sys.argv[1:]
 assert args[:4]==['test','--no-pub','--coverage','--machine']
 files=[a for a in args if a.startswith('test/')]
-assert files
+assert 0 < len(files) <= 32
 assert args[4]==('--concurrency=1' if len(files)==2 else '--concurrency=2')
 report=Path(args[args.index('--coverage-path')+1])
 if not os.environ.get('MISSING_COVERAGE'): report.write_text('SF:lib/a.dart\\nDA:1,1\\nend_of_record\\n')
@@ -42,11 +42,11 @@ print(json.dumps({'type':'start'}))
 count=len(files)*(1 if os.environ.get('LOW_COUNT') else 5)
 for i in range(count): print(json.dumps({'type':'testStart','test':{'id':i}}))
 if not os.environ.get('MISSING_DONE'): print(json.dumps({'type':'done','success':True}))
-if os.environ.get('FLUTTER_FAILURE'): sys.exit(7)
+if os.environ.get('FLUTTER_FAILURE') or os.environ.get('FAIL_GROUP') == report.stem: sys.exit(7)
 ''')
         self.executable("lcov", '''import os,sys
 from pathlib import Path
-assert sys.argv.count('--add-tracefile')==2
+assert sys.argv.count('--add-tracefile')==17
 assert all(Path(sys.argv[i+1]).is_file() for i,a in enumerate(sys.argv) if a=='--add-tracefile')
 if os.environ.get('MERGE_FAILURE'): sys.exit(9)
 Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,2\\nend_of_record\\n')
@@ -62,12 +62,12 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,2\\nend_of_record\\n')
         return subprocess.run([sys.executable, str(ROOT / "scripts/run-flutter-coverage.py")],
                               cwd=self.root, env=env, text=True, capture_output=True, timeout=20)
 
-    def test_all_files_execute_once_and_both_protocols_count(self):
+    def test_all_files_execute_once_and_all_protocols_count(self):
         import json
         result = self.run_gate()
         self.assertEqual(result.returncode, 0, result.stderr)
         groups = json.loads((self.root / 'coverage/source-gate/inventory.json').read_text())
-        self.assertEqual([len(g) for g in groups], [2, 498])
+        self.assertEqual([len(g) for g in groups], [2] + [32] * 15 + [18])
         self.assertEqual(len(set(p for g in groups for p in g)), 500)
         self.assertIn('Flutter tests observed: 2500', result.stdout)
         self.assertTrue((self.root / 'coverage/lcov.info').is_file())
@@ -79,6 +79,15 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,2\\nend_of_record\\n')
                 result = self.run_gate(**{failure: '1'})
                 self.assertNotEqual(result.returncode, 0)
                 self.assertNotIn('Flutter tests observed:', result.stdout)
+
+    def test_late_batch_failure_preserves_prior_evidence_and_never_merges(self):
+        result = self.run_gate(FAIL_GROUP='8')
+        self.assertNotEqual(result.returncode, 0)
+        evidence = self.root / 'coverage/source-gate'
+        self.assertTrue((evidence / '7.info').is_file())
+        self.assertTrue((evidence / '8.jsonl').is_file())
+        self.assertFalse((evidence / '9.jsonl').exists())
+        self.assertFalse((self.root / 'coverage/lcov.info').exists())
 
     def test_untracked_test_cannot_be_silently_omitted(self):
         (self.root / 'test/extra_test.dart').write_text('void main() {}')
