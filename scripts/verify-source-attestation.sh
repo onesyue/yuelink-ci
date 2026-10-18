@@ -13,6 +13,16 @@ TAG="${1:?usage: verify-source-attestation.sh TAG SOURCE_COMMIT BUILDER_COMMIT R
 SOURCE_COMMIT="${2:?source commit is required}"
 BUILDER_COMMIT="${3:?builder commit is required}"
 RUN_ID="${4:?source-attestation run id is required}"
+EXPORT_PROOF=""
+if (( $# > 4 )); then
+  [ "$#" -eq 6 ] && [ "$5" = --export-proof ] && [[ "$6" = /* ]] || {
+    echo "::error::invalid source proof export arguments" >&2; exit 2;
+  }
+  EXPORT_PROOF="$6"
+  [ ! -e "$EXPORT_PROOF" ] && [ ! -L "$EXPORT_PROOF" ] || {
+    echo "::error::source proof export must be a new file" >&2; exit 2;
+  }
+fi
 REPOSITORY=onesyue/yuelink-ci
 WORKFLOW_PATH=.github/workflows/source-attestation.yml
 WORKFLOW_IDENTITY=onesyue/yuelink-ci/.github/workflows/source-attestation.yml
@@ -107,11 +117,22 @@ jq -e \
   --arg run "$RUN_ID" \
   --arg attempt "$RUN_ATTEMPT" '
     type == "object" and
-    (keys | sort) == ([
+    (keys | sort) == (([
       "schemaVersion", "sourceRepository", "sourceSha", "releaseTag",
       "builderRepository", "workflowSha", "runId", "runAttempt", "gates"
-    ] | sort) and
-    .schemaVersion == 1 and
+    ] + (if .schemaVersion == 2 then ["reuse"] else [] end)) | sort) and
+    (.schemaVersion == 1 or (.schemaVersion == 2 and
+      (.reuse | keys | sort) == (["schemaVersion", "flutter", "service"] | sort) and
+      .reuse.schemaVersion == 1 and
+      ([.reuse.flutter, .reuse.service] | all(
+        .schemaVersion == 1 and .sourceSha == $source and
+        .workflowSha == $builder and .runId == $run and .runAttempt == $attempt and
+        (.toolchain | type == "object" and length > 0))) and
+      .reuse.flutter.kind == "flutter" and
+      .reuse.flutter.gates == ["flutter-analyze", "flutter-tests-coverage"] and
+      .reuse.service.kind == "service" and
+      .reuse.service.gates == ["service-go-race"]
+    )) and
     .sourceRepository == "onesyue/yuelink" and .sourceSha == $source and
     .releaseTag == $release and
     .builderRepository == "onesyue/yuelink-ci" and
@@ -142,6 +163,8 @@ jq -e \
 
 GH_PROMPT_DISABLED=1 gh_read gh attestation verify "$proof" \
   --repo "$REPOSITORY" \
+  --cert-oidc-issuer https://token.actions.githubusercontent.com \
+  --predicate-type https://slsa.dev/provenance/v1 \
   --signer-workflow "$WORKFLOW_IDENTITY" \
   --source-ref refs/heads/master \
   --source-digest "$BUILDER_COMMIT" \
@@ -150,5 +173,12 @@ GH_PROMPT_DISABLED=1 gh_read gh attestation verify "$proof" \
   echo "::error::source-attestation proof provenance verification failed" >&2
   exit 1
 }
+
+if [ -n "$EXPORT_PROOF" ]; then
+  jq -e '.schemaVersion == 2' "$proof" >/dev/null || {
+    echo "::error::legacy source proof cannot authorize gate reuse" >&2; exit 1;
+  }
+  ( set -o noclobber; cat "$proof" > "$EXPORT_PROOF" )
+fi
 
 echo "✓ exact public source attestation verified: run=$RUN_ID source=$SOURCE_COMMIT builder=$BUILDER_COMMIT"

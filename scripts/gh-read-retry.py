@@ -42,6 +42,10 @@ def validate(argv: list[str]) -> Path | None:
                 or any(target.iterdir())):
             raise ValueError("proof destination must be an empty private owned directory")
         return target
+    if (argv[:3] == ["gh", "attestation", "verify"] and
+            argv[6:10] == ["--cert-oidc-issuer", "https://token.actions.githubusercontent.com",
+                           "--predicate-type", "https://slsa.dev/provenance/v1"]):
+        return validate(argv[:6] + argv[10:])
     if (len(argv) == 17 and argv[:3] == ["gh", "attestation", "verify"]
             and not argv[3].startswith("-")
             and argv[4:10] == ["--repo", REPOSITORY, "--signer-workflow",

@@ -207,6 +207,17 @@ jobs:
             /tmp/flutter-tests.jsonl --minimum 2044
           dart run tool/automation/coverage_ratchet.dart --check
 
+      - name: Capture executed Flutter gate identities
+        run: python3 scripts/ci/attested_preflight.py capture --kind flutter --output "$RUNNER_TEMP/flutter-reuse.json"
+
+      - name: Retain executed Flutter gate receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: source-reuse-flutter-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/flutter-reuse.json
+          if-no-files-found: error
+          retention-days: 1
+
   # 2026-08-31: the four probe jobs below no longer `needs: source_contract`.
   # They only ever consumed its validated copy of `inputs.source_sha`, and
   # serializing them behind the 9-minute contract job put the 7-minute macOS
@@ -317,6 +328,21 @@ jobs:
         if: matrix.module == 'service'
         working-directory: service
         run: CGO_ENABLED=1 go test -mod=readonly -race ./...
+
+      - name: Capture executed service race identity
+        if: matrix.module == 'service'
+        env:
+          CGO_ENABLED: '1'
+        run: python3 scripts/ci/attested_preflight.py capture --kind service --output "$RUNNER_TEMP/service-reuse.json"
+
+      - name: Retain executed service race receipt
+        if: matrix.module == 'service'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: source-reuse-service-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/service-reuse.json
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Verify native Linux proxy backend before release tags
         if: matrix.module == 'service'
@@ -453,6 +479,18 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - name: Read executed Flutter gate receipt
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: source-reuse-flutter-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .reuse-receipts
+
+      - name: Read executed service race receipt
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: source-reuse-service-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .reuse-receipts
+
       - name: Write canonical source proof
         shell: bash
         env:
@@ -463,14 +501,26 @@ jobs:
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -euo pipefail
+          for kind in flutter service; do
+            jq -e --arg source "$SOURCE_SHA" --arg builder "$WORKFLOW_SHA" \
+              --arg run "$RUN_ID" --arg attempt "$RUN_ATTEMPT" --arg kind "$kind" '
+                .schemaVersion == 1 and .kind == $kind and
+                .sourceSha == $source and .workflowSha == $builder and
+                .runId == $run and .runAttempt == $attempt and
+                (.toolchain | type == "object" and length > 0)
+              ' ".reuse-receipts/$kind-reuse.json" >/dev/null
+          done
           jq -S -n \
+            --slurpfile flutter .reuse-receipts/flutter-reuse.json \
+            --slurpfile service .reuse-receipts/service-reuse.json \
             --arg sourceSha "$SOURCE_SHA" \
             --arg releaseTag "$RELEASE_TAG" \
             --arg workflowSha "$WORKFLOW_SHA" \
             --arg runId "$RUN_ID" \
             --arg runAttempt "$RUN_ATTEMPT" \
             '{
-              schemaVersion: 1,
+              schemaVersion: 2,
+              reuse: {schemaVersion: 1, flutter: $flutter[0], service: $service[0]},
               sourceRepository: "onesyue/yuelink",
               sourceSha: $sourceSha,
               releaseTag: $releaseTag,

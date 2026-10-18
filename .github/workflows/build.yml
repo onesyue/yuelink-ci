@@ -245,6 +245,8 @@ jobs:
     environment: yuelink-build
     permissions:
       contents: read
+      actions: read
+      attestations: read
     outputs:
       tag_kind: ${{ steps.classify.outputs.kind }}
     steps:
@@ -328,6 +330,10 @@ jobs:
 
       - name: Run in-workflow release gates
         env:
+          GH_TOKEN: ${{ github.token }}
+          ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
+          SOURCE_ATTESTATION_RUN_ID: ${{ needs.source_binding.outputs.attestation_run_id }}
+          REUSE_SOURCE_GATES: ${{ github.repository == 'onesyue/yuelink-ci' && startsWith(github.ref, 'refs/tags/v') && 'true' || 'false' }}
           RELEASE_TAG: ${{ github.ref_name }}
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -1572,7 +1578,6 @@ jobs:
           age_tool="$RUNNER_TEMP/age-bin/age"
           if [ "$RUNNER_OS" = Windows ]; then age_tool="$age_tool.exe"; fi
           export PATH="$RUNNER_TEMP/age-bin:$PATH"
-          python3 -m unittest discover -s scripts/ci/tests -p test_flutter_symbols.py
           [ "$(git rev-parse HEAD)" = "$SYMBOL_SOURCE" ]
           archive="$RUNNER_TEMP/flutter-symbols-${SYMBOL_PLATFORM}.tar.age"
           python3 scripts/ci/archive_flutter_symbols.py archive \

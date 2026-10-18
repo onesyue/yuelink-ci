@@ -151,6 +151,20 @@ Secrets, verifies both public signing identities, and emits only a
 two-recipient age ciphertext to the recovery bucket plus a one-day encrypted
 artifact. It has no pull-request trigger and no plaintext upload path.
 
+The schema2 proof also signs executed Flutter and service race receipts, captured
+only after those gates pass. Receipts bind the exact source, builder, run/attempt,
+SDK/compiler identities and dependency lock hashes. Stable tag preflight invokes
+the same shared verifier again with an explicit GitHub OIDC issuer, provenance
+predicate and exact workflow/builder policy, then compares the installed Linux
+x64 toolchains. Only Flutter analysis, full Flutter tests with coverage ratchet,
+and service Go race may be reused. Old proofs, changed runtimes, failed runs or
+signature failures cannot authorize a skip; a requested reuse failure aborts.
+Core full Go race, fresh vulnerability scans, release credentials/tag/environment
+checks and every native artifact and promotion gate remain mandatory. Branch
+workflow dispatch keeps the full preflight. Local fixture tests exercise real
+consumer control flow but never substitute for the next normal signed workflow
+and release as end-to-end acceptance.
+
 Every external `uses:` reference in all public workflows is pinned to a full
 40-character commit SHA. The repository-level Actions policy enforces that
 pinning, and `.github/dependabot.yml` maintains those
