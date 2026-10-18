@@ -152,6 +152,32 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
         self.assertEqual((sentinel / "keep").read_text(), "preserve")
         self.assertFalse((self.root / "coverage/lcov.info").exists())
 
+    def test_macos_file_is_assigned_to_required_native_job_without_counting_as_linux_pass(self):
+        name = "test/core/storage/secure_storage_macos_keychain_test.dart"
+        (self.root / name).write_text("@TestOn('mac-os')\nlibrary;\nvoid main() {}\n")
+        subprocess.run(["git", "add", name], cwd=self.root, check=True)
+        subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                        "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
+                        "commit", "-qm", "native macOS assignment"], cwd=self.root, check=True)
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        evidence = self.root / "coverage/source-gate"
+        self.assertEqual(len(json.loads((evidence / "inventory.json").read_text())), 501)
+        self.assertEqual(json.loads((evidence / "platform-assignments.json").read_text())[name], "macos_integration")
+        self.assertEqual(len(list(evidence.glob("*.jsonl"))), 500)
+        self.assertIn("Flutter tests observed: 2500", result.stdout)
+        workflow = (ROOT / ".github/workflows/source-attestation.yml").read_text()
+        native = workflow.split("  macos_integration:", 1)[1].split("  windows_durability:", 1)[0]
+        self.assertIn("flutter test --no-pub --machine " + name, native)
+        self.assertIn("macos-keychain.jsonl --minimum 4", native)
+        self.assertIn("set -euo pipefail", native)
+
+    def test_unassigned_platform_annotation_refuses(self):
+        (self.root / "test/services/case_0_test.dart").write_text("@TestOn('windows')\nvoid main() {}\n")
+        result = self.run_gate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unassigned platform-specific test", result.stderr)
+
     def test_untracked_test_cannot_be_silently_omitted(self):
         (self.root / "test/extra_test.dart").write_text("void main() {}")
         result = self.run_gate()

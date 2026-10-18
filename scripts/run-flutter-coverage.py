@@ -5,6 +5,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import importlib.util
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -20,6 +21,7 @@ REQUIRED_TESTS = {
 MINIMUM_FILES = 500
 MINIMUM_TESTS = 2044
 WORKERS = 4
+MACOS_TEST = "test/core/storage/secure_storage_macos_keychain_test.dart"
 
 
 def partition(root: Path) -> list[list[str]]:
@@ -32,6 +34,12 @@ def partition(root: Path) -> list[list[str]]:
         raise ValueError("test inventory differs from the complete tracked corpus or scan floor")
     if not REQUIRED_TESTS.issubset(tests) or any((root / p).is_symlink() for p in tests):
         raise ValueError("required crash cases missing or test paths are symlinks")
+    for path in tests:
+        annotations = re.findall(r"@TestOn\s*\(([^)]*)\)", (root / path).read_text())
+        if annotations and (path != MACOS_TEST or annotations != ["'mac-os'"]):
+            raise ValueError("unassigned platform-specific test")
+        if path == MACOS_TEST and annotations != ["'mac-os'"]:
+            raise ValueError("macOS assignment no longer matches its annotation")
     return [[p] for p in tests]
 
 
@@ -41,6 +49,10 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=False)
     groups = partition(root)
     (out / "inventory.json").write_text(json.dumps(groups, indent=2) + "\n")
+    assignments = {group[0]: ("macos_integration" if group == [MACOS_TEST]
+                             else "source_contract") for group in groups}
+    (out / "platform-assignments.json").write_text(json.dumps(assignments, indent=2) + "\n")
+    groups = [group for group in groups if group != [MACOS_TEST]]
     source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root).decode().strip()
     subprocess.run(["git", "diff", "--exit-code", "HEAD", "--", "test"], cwd=root, check=True)
     spec = importlib.util.spec_from_file_location(

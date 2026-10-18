@@ -316,6 +316,11 @@ def contract_issues(
             "SOURCE_SHA validation must appear in exactly 5 jobs "
             f"(source_contract + 4 probes), found {validation_count}"
         )
+    for job in ("source_contract", "macos_integration"):
+        match = re.search(rf"(?ms)^  {job}:\n(.*?)(?=^  [a-z_]+:|\Z)", workflow)
+        block = match.group(1) if match else ""
+        if block.count("ref: ${{ github.sha }}") != 1:
+            issues.append(f"{job} must checkout exactly one current attestation tool revision")
     for marker in RELEASE_MARKERS:
         if marker not in release:
             issues.append(f"release gate missing {marker!r}")

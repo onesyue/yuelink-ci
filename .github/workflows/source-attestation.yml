@@ -411,6 +411,19 @@ jobs:
           key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
       - run: flutter config --enable-macos-desktop
       - run: flutter pub get --enforce-lockfile
+      - name: Checkout exact attestation tools
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.sha }}
+          path: .source-attestation-tools
+          persist-credentials: false
+      - name: Run macOS-only keychain unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter test --no-pub --machine test/core/storage/secure_storage_macos_keychain_test.dart | tee "$RUNNER_TEMP/macos-keychain.jsonl"
+          python3 .source-attestation-tools/scripts/count-flutter-machine-tests.py "$RUNNER_TEMP"/macos-keychain.jsonl --minimum 4
       - name: Run integration tests on macOS host
         run: flutter test integration_test/ -d macos --reporter expanded
       - name: Verify native proxy transport and privileged isolated preferences
