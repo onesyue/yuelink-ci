@@ -63,6 +63,8 @@ if os.environ.get('TRACKED_MUTATION'):
     Path('lib/a.dart').write_text('changed source')
 if not os.environ.get('MISSING_COVERAGE'):
     report.write_text('SF:'+('/outside/a.dart' if os.environ.get('COVERAGE_ESCAPE') else str(Path.cwd()/'lib/a.dart'))+'\\nDA:1,1\\nend_of_record\\n')
+if os.environ.get('ALL_EMPTY_COVERAGE') or (os.environ.get('EMPTY_COVERAGE') and report.stem=='7'):
+    report.write_text('')
 print(json.dumps({'type':'start'}))
 count=1 if os.environ.get('LOW_COUNT') else 5
 for i in range(count):
@@ -72,9 +74,10 @@ if os.environ.get('FLUTTER_FAILURE') or os.environ.get('FAIL_GROUP')==report.ste
 ''')
         self.executable("lcov", '''import os,sys
 from pathlib import Path
-assert sys.argv.count('--add-tracefile')==500
+expected=499 if os.environ.get('EMPTY_COVERAGE') else 500
+assert sys.argv.count('--add-tracefile')==expected
 reports=[Path(sys.argv[i+1]) for i,a in enumerate(sys.argv) if a=='--add-tracefile']
-assert len(set(reports))==500 and all(p.is_file() for p in reports)
+assert len(set(reports))==expected and all(p.is_file() for p in reports)
 assert all(p.read_text().startswith('SF:lib/a.dart\\n') for p in reports)
 if os.environ.get('MERGE_FAILURE'): sys.exit(9)
 Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
@@ -105,7 +108,7 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
             workers.add(first["worker"])
         self.assertEqual(sorted(actual), sorted(group[0] for group in groups))
         self.assertEqual(len(set(actual)), 500)
-        self.assertEqual(len(workers), 2)
+        self.assertEqual(len(workers), 4)
         self.assertNotIn(str(self.root), workers)
         self.assertIn("Flutter tests observed: 2500", result.stdout)
         self.assertTrue((self.root / "coverage/lcov.info").is_file())
@@ -115,18 +118,26 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
     def test_every_failed_engine_protocol_dependency_or_merge_blocks_acceptance(self):
         for failure in ["FLUTTER_FAILURE", "MISSING_DONE", "MISSING_COVERAGE",
                         "LOW_COUNT", "MERGE_FAILURE", "PUBGET_FAILURE",
-                        "COVERAGE_ESCAPE", "TRACKED_MUTATION"]:
+                        "COVERAGE_ESCAPE", "TRACKED_MUTATION", "ALL_EMPTY_COVERAGE"]:
             with self.subTest(failure=failure):
                 shutil.rmtree(self.root / "coverage", ignore_errors=True)
                 result = self.run_gate(**{failure: "1"})
                 self.assertNotEqual(result.returncode, 0)
                 self.assertNotIn("Flutter tests observed:", result.stdout)
 
+    def test_source_only_contract_keeps_empty_report_and_merges_all_executed_lines(self):
+        result = self.run_gate(EMPTY_COVERAGE="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        evidence = self.root / "coverage/source-gate"
+        self.assertEqual((evidence / "7.info").read_text(), "")
+        self.assertEqual(len(list(evidence.glob("*.jsonl"))), 500)
+        self.assertTrue((self.root / "coverage/lcov.info").is_file())
+
     def test_late_failure_preserves_prior_evidence_and_never_merges(self):
         result = self.run_gate(FAIL_GROUP="8")
         self.assertNotEqual(result.returncode, 0)
         evidence = self.root / "coverage/source-gate"
-        self.assertTrue((evidence / "6.info").is_file())
+        self.assertTrue((evidence / "4.info").is_file())
         self.assertTrue((evidence / "8.jsonl").is_file())
         self.assertFalse((evidence / "499.jsonl").exists())
         self.assertFalse((self.root / "coverage/lcov.info").exists())

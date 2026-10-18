@@ -19,7 +19,7 @@ REQUIRED_TESTS = {
 }
 MINIMUM_FILES = 500
 MINIMUM_TESTS = 2044
-WORKERS = 2
+WORKERS = 4
 
 
 def partition(root: Path) -> list[list[str]]:
@@ -78,7 +78,7 @@ def main() -> None:
                     raise subprocess.CalledProcessError(result.returncode, command)
                 with report.open() as log:
                     observed = counter.count_test_starts(log)
-                if not lcov.is_file() or not lcov.stat().st_size:
+                if not lcov.is_file():
                     raise ValueError(f"coverage report missing for file {index}")
                 lines = lcov.read_text().splitlines(keepends=True)
                 for i, line in enumerate(lines):
@@ -119,7 +119,12 @@ def main() -> None:
                 raise ValueError("complete test corpus did not execute")
             observed = sum(count for _, count, _ in completed)
             counter.enforce_floor(observed, MINIMUM_TESTS)
-            coverage = [argument for _, _, path in sorted(completed)
+            # Source-contract tests may execute no application library lines.
+            # Flutter still emits their empty LCOV file; absent output refuses.
+            nonempty = [path for _, _, path in sorted(completed) if path.stat().st_size]
+            if not nonempty:
+                raise ValueError("no application coverage collected from the complete corpus")
+            coverage = [argument for path in nonempty
                         for argument in ("--add-tracefile", str(path))]
             subprocess.run(["lcov", *coverage, "--output-file", "coverage/lcov.info"],
                            cwd=root, check=True)

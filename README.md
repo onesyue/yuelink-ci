@@ -143,12 +143,12 @@ three complete startup/traffic/shutdown cycles with required engine leases.
 Real listening and closed loopback sockets verify the refusal/rebind check;
 a timeout never counts as a released port. These 17 gates bind the exact source.
 The full Flutter coverage gate inventories every tracked test (at least500 files),
-runs each test file in its own compiler process, with two bounded workers in
+runs each test file in its own compiler process, with four bounded workers in
 independent Git worktrees of the exact source. Each worker clears only its own
 temporary kernel cache before the next file; a fresh command alone can reuse
 that kernel. Locked dependencies come from the already populated offline cache.
 Every file has a five-minute process deadline and must produce a successful
-terminal machine event and nonempty coverage. Every tracked test executes once;
+terminal machine event and an LCOV report. Every tracked test executes once;
 the combined count retains the2044 floor. Native lcov merges every normalized
 application report before the unchanged coverage ratchet. Any engine error,
 missing file/report, tracked source mutation or failed merge fails the gate.
@@ -225,3 +225,10 @@ macOS producer reads its floor from the exact Runner deployment target; a
 release-history link or retained old installer is not a supported OS fallback.
 The isolated producer fixture under `tests/fixtures/macos-system-floor-20261008`
 uses an ephemeral test public key, never the production trust anchor.
+
+Source-only contract tests can legitimately produce an empty LCOV file. Each
+file must still finish with a successful machine protocol and create its own
+report; missing reports refuse. Only empty records are omitted from the LCOV
+merge, and the complete corpus must yield application coverage before the
+unchanged coverage ratchet runs. Native run39160526576 established this case
+for `deeplink_platform_registration_test.dart`; it did not pass the full gate.
