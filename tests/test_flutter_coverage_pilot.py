@@ -267,7 +267,7 @@ if os.environ.get('PILOT_FAULT')!='coverage':
                 str(self.root / "actual-cli"),
             ]
             executed = subprocess.run(
-                command, capture_output=True, text=True, timeout=30
+                command, capture_output=True, text=True, timeout=30, check=False
             )
             self.assertEqual(executed.returncode, 0, executed.stderr)
             receipt = json.loads((self.root / "actual-cli/comparison.json").read_text())
@@ -275,7 +275,7 @@ if os.environ.get('PILOT_FAULT')!='coverage':
             self.assertFalse(receipt["release_acceptance"])
             with patch.dict(os.environ, {"PILOT_SDK": "{}"}):
                 invalid = subprocess.run(
-                    command, capture_output=True, text=True, timeout=10
+                    command, capture_output=True, text=True, timeout=10, check=False
                 )
                 self.assertNotEqual(invalid.returncode, 0)
                 self.assertIn("SDK", invalid.stderr)
@@ -283,18 +283,18 @@ if os.environ.get('PILOT_FAULT')!='coverage':
                 with (
                     self.subTest(fault=fault),
                     patch.dict(os.environ, {"PILOT_FAULT": fault}),
-                ):
-                    with self.assertRaises(
+                    self.assertRaises(
                         (
                             ValueError,
                             FileNotFoundError,
                             subprocess.CalledProcessError,
                             RuntimeError,
                         )
-                    ):
-                        pilot.run_variant(
-                            source, self.root / fault, self.data, "B", RUNNER, COUNTER
-                        )
+                    ),
+                ):
+                    pilot.run_variant(
+                        source, self.root / fault, self.data, "B", RUNNER, COUNTER
+                    )
         worktrees = subprocess.check_output(
             ["git", "worktree", "list", "--porcelain"], cwd=source, text=True
         )
