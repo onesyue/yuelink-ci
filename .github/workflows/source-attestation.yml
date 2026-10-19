@@ -200,7 +200,9 @@ jobs:
 
       - name: Run complete Flutter suite and enforce reviewed floor
         shell: bash
-        timeout-minutes: 60
+        # Run 39165220054 reached ~390/507 isolated files in 60 minutes.
+        # Allow the complete corpus plus headroom; each file still has a 5m cap.
+        timeout-minutes: 100
         run: |
           set -euo pipefail
           if ! command -v lcov >/dev/null; then

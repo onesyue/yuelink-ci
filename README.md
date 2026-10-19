@@ -154,6 +154,11 @@ application report before the unchanged coverage ratchet. Any engine error,
 missing file/report, tracked source mutation or failed merge fails the gate.
 No failing file is automatically retried. The four observed crash cases remain
 mandatory members of the inventory.
+The complete step has a 100-minute deadline. Run 39165220054 was still making
+progress at approximately 390 of 507 files when its former 60-minute limit
+terminated it. The measured rate projects about 78 minutes for the full corpus;
+the total budget includes bounded headroom while retaining each file's existing
+five-minute deadline, mandatory terminal events and complete coverage checks.
 Runs39154488642 and39157297712 disproved large and32-file compiler batches.
 Diagnostic39158934095 reproduced the storage batch crash with coverage on both
 Flutter3.47.7 and3.47.5; the same32 files passed without coverage and the two
