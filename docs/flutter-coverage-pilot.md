@@ -113,7 +113,7 @@ GitHub-hosted Ubuntu 24.04 x64 job. There is no repeated-trial loop or matrix.
 
 The workflow freezes source `473af71077c61db9e42170b304bce1fc446c9077`, baseline
 builder `113c864b869d6b206a06d6ed5fe138a6f657bd69`. ABBA selects schema2 pilot
-`33f897007b144b411a6b0f0137276da2e27be8b3`; group7 retains historical
+`d91bc95ffc8b057e7301a6eeced080f6b3da4a7c`; group7 retains historical
 `9965321062a98a273fb92d8cd00cdc004f165866`. The workflow itself has a newer commit,
 recorded separately in `execution.json`; do not describe that as a run of the
 old builder workflow. The pilot verifies unchanged baseline helper hashes and
@@ -290,7 +290,7 @@ or performance claim.
 
 
 The exact schema2 pilot candidate P is
-`33f897007b144b411a6b0f0137276da2e27be8b3`. Its workflow successor selects this immutable
+`d91bc95ffc8b057e7301a6eeced080f6b3da4a7c`. Its workflow successor selects this immutable
 revision only when diagnostic_scope=abba. Group7 still selects original
 `9965321062a98a273fb92d8cd00cdc004f165866`; its schema1 reference is not
 reinterpreted. Offline workflow fixtures reconstruct the exact original996

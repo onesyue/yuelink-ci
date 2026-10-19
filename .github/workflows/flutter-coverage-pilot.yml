@@ -21,7 +21,7 @@ concurrency:
 
 env:
   SOURCE_SHA: 473af71077c61db9e42170b304bce1fc446c9077
-  PILOT_SHA: ${{ inputs.diagnostic_scope == 'abba' && '33f897007b144b411a6b0f0137276da2e27be8b3' || '9965321062a98a273fb92d8cd00cdc004f165866' }}
+  PILOT_SHA: ${{ inputs.diagnostic_scope == 'abba' && 'd91bc95ffc8b057e7301a6eeced080f6b3da4a7c' || '9965321062a98a273fb92d8cd00cdc004f165866' }}
   BUILDER_BASE: 113c864b869d6b206a06d6ed5fe138a6f657bd69
   FLUTTER_VERSION: '3.47.7'
   TZ: UTC
