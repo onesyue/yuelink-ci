@@ -1,52 +1,52 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.140",
+  "version": "1.3.141",
   "channel": "stable",
-  "publishedAt": "2026-10-19T01:55:43Z",
-  "expiresAt": "2026-11-23T01:55:43Z",
+  "publishedAt": "2026-10-19T05:22:36Z",
+  "expiresAt": "2026-11-23T05:22:36Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "改善 iOS 连接、订阅配置恢复和到期提醒。\n\n- 修复部分重新签名安装后无法识别 VPN 扩展的问题，并明确不同签名方式的 VPN 权限要求。\n- 刷新订阅时重新下载已损坏的缓存配置，拒绝用无效内容覆盖原有可用配置。\n- 补全桌面连接失败的诊断日志，便于定位底层连接问题。\n- 统一到期提醒，在应用重启后继续记住已处理的提醒。\n- 流量提醒按账号和当前流量周期判断，减少重复提醒；请求结果不明确时不会重复发送。\n- 切换账号、退出登录或更新流量周期后，取消过期提醒。\n- 继续遵循你的提醒开关和系统通知权限；无法确认权限时不会擅自开启通知。\n",
-  "notesEn": "Improve iOS connections, subscription recovery and reminders.\n\n- Recognize the installed VPN extension after re-signing and clarify the VPN permissions required by different signing methods.\n- Re-download damaged subscription caches on refresh and keep usable configurations when a response contains invalid content.\n- Include the correct desktop connection logs for more useful failure diagnostics.\n- Unify expiry reminders and remember handled events across app restarts.\n- Match quota reminders to the account and current allowance cycle, reducing duplicate attempts when a request has an uncertain result.\n- Cancel outdated reminders after switching accounts, signing out or starting a new allowance cycle.\n- Respect your reminder preference and system notification permission. An unknown permission state never enables notifications automatically.\n",
-  "sourceCommit": "473af71077c61db9e42170b304bce1fc446c9077",
-  "sha256SumsSha256": "1e47210704fc41956067c6b092310093da8cb958921abb55036bbfbb5b03e8d7",
+  "notes": "改善应用在前台时对连接异常的检测。\n\n- 更及时地发现本地连接核心无响应的情况，Wi-Fi 和移动网络使用相同的本地检查频率。\n- 系统代理检查耗时较长时，不再拖慢连接核心的存活检测。\n- 恢复连接时，等待已有的系统代理操作完成，避免相互覆盖。\n- 保持原有的后台检查频率，清除连接状态前继续核实实际流量情况。\n",
+  "notesEn": "Improve connection failure detection while the app is in the foreground.\n\n- Detect an unresponsive local connection core sooner, with the same local check frequency on Wi-Fi and cellular networks.\n- Keep slow system proxy checks from delaying core liveness detection.\n- Wait for an existing system proxy operation to finish before recovery replaces its settings.\n- Keep the existing background check frequency and verify actual traffic before clearing the connection state.\n",
+  "sourceCommit": "f9593a8f9707e90ec51d9d41db8d124673c3b319",
+  "sha256SumsSha256": "5fcc512b4d02c1573d462eb98718c3915161f564c320f0c15313cc4cdaefb3e9",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-android-arm64-v8a.apk",
-      "sha256": "755c3e8b0fd229a22b07e0a91b20c2266617313ecf7c15bebb169eabe583846d"
+      "url": "https://yuetong.app/v1.3.141/YueLink-1.3.141-android-arm64-v8a.apk",
+      "sha256": "879a8ed615e9b46eaed5954c844cb2ca200cc4feebd3c8d31ddf439145307eec"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-android-armeabi-v7a.apk",
-      "sha256": "3f478ec0d08ae70914641f63138435b763d8d84c0e8fb802ffac5ef2d8279a7f"
+      "url": "https://yuetong.app/v1.3.141/YueLink-1.3.141-android-armeabi-v7a.apk",
+      "sha256": "5e08a23c9858db9f7864f184ab856d307faa29df549eda283c6e39dfd77735eb"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-android-x86_64.apk",
-      "sha256": "42e4a4f281edc4baaa2299e75c12eb3561bcc25557bb5c57f20b2e08da42a5b9"
+      "url": "https://yuetong.app/v1.3.141/YueLink-1.3.141-android-x86_64.apk",
+      "sha256": "d5368ee46306b53dd00ab30dc38d75933a20f5a4239bcbe8d98889b4b0810169"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-android-universal.apk",
-      "sha256": "c97b94b416ee51674f0f5aee308d290146aaf801540a4fa13fb6c68eac0a751e"
+      "url": "https://yuetong.app/v1.3.141/YueLink-1.3.141-android-universal.apk",
+      "sha256": "09444695d471c2d75b1c8dabeadeb255ff7fb7c162475309d79b24b8a59eaf21"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-ios.ipa",
-      "sha256": "4fe3a76bc6b83e539ea0107f75ed0d75529f57fddc6caaf2a18729f296743108"
+      "url": "https://yuetong.app/v1.3.141/YueLink-1.3.141-ios.ipa",
+      "sha256": "9fbb067042a9bf87fecec1868c759a8ae7b83d0ef4ea3e1ec5136fc74be630d9"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-macos-universal.dmg",
-      "sha256": "b0b156f1bebb7d14fdf8a368bd24748712d02dd137b89c8b9c989bf842cc44ce",
+      "url": "https://yuetong.app/v1.3.141/YueLink-1.3.141-macos-universal.dmg",
+      "sha256": "fbb1bf6c2c44c6bcfb5b2e28b68ac768fd011c662fa5eaea4b7deb2d61502cc7",
       "minimumSystemVersion": "13.0"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-windows-amd64-setup.exe",
-      "sha256": "637d3ddd111d0b8e4ad219f58973c4710164eef5707a0aa6b34a3f24cb6d75d0"
+      "url": "https://yuetong.app/v1.3.141/YueLink-1.3.141-windows-amd64-setup.exe",
+      "sha256": "26ddafa7625cd3219a5e42f867f3c931b4aba30998f88b48e7a787f2c2e2a3a1"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-windows-amd64-portable.zip",
-      "sha256": "1197964eb20560be913825bc2ffef377238f0bf9539df36764adb541e1fee0f7"
+      "url": "https://yuetong.app/v1.3.141/YueLink-1.3.141-windows-amd64-portable.zip",
+      "sha256": "dc41f5f8e473e90913eeb174e67f7ad1c482ad0191acc64c6ad7bb4a24867772"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-linux-amd64.AppImage",
-      "sha256": "3c253e3dfaa5f9ac213d3f009b8927cb6e6f89d891b731547ffa474a043f9d3d"
+      "url": "https://yuetong.app/v1.3.141/YueLink-1.3.141-linux-amd64.AppImage",
+      "sha256": "32dcb83c2efdf5e539ccbaf97bc91fca3d89df5e4adabd46e53c6fc2e1bd36a2"
     }
   },
   "compatibility": {
@@ -84,10 +84,10 @@
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "eba7217901b308cbff54fff1fd7e3e5b4eb608ff01ecfe200e1dd124caf61d66",
-    "sha256SumsSha256": "1e47210704fc41956067c6b092310093da8cb958921abb55036bbfbb5b03e8d7",
-    "payloadBundleSha256": "713ad8fff6e312a4a4a01659dbb3ed7cd87cce5269639e260f6412fae5e857cc",
+    "candidateSha256": "4a5f74d5d5bd0fda42b197dd3b72a65679b49d2a076411194e1f923c4478ffbd",
+    "sha256SumsSha256": "5fcc512b4d02c1573d462eb98718c3915161f564c320f0c15313cc4cdaefb3e9",
+    "payloadBundleSha256": "7c0c94a1dda9378968517c77e614f663b5380db8db0ab1effd971868f2322b03",
     "payloadCount": 19
   },
-  "sig": "ed25519:Wz8QCoj+LcIMUHZkl6puSNwJjzC1PKWUv4UmznJfXetMl1FSv5i32fLK1D8upX5M3TQzOjKh3oi5IdSOHEawCQ=="
+  "sig": "ed25519:+e/Qa+AFZ/ObT1pGNLjCF3iHcjCq2NL4K5mecfd+mdFU5TVfMmtGbPFpAiJWx7Vl1zNiqCEC39z/difDLaNuAA=="
 }
