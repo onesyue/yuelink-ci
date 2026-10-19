@@ -27,8 +27,10 @@ machine-protocol parser, a 300-second group limit and a 30-second kill grace.
 Each process starts after removal of its disposable worker's compiler cache.
 
 - A: 36 single-file processes.
-- B: five singleton isolation boundaries (storage schema pair, custom rules,
-  subscription parser and fork ledger), plus four groups of at most eight files.
+- B: the five existing early singleton boundaries (storage schema pair, custom
+  rules, subscription parser and fork ledger), followed by the original four
+  batches with old group7 split in place into prefix6/file7/file8:11 commands.
+  Historical pilot996 has the original nine-command B shape.
   Eight is an experimental upper bound, not a production recommendation.
 
 A and B must execute every selected file and have identical visible test-name /
@@ -110,7 +112,8 @@ active run. An explicit `diagnostic_scope=abba` invocation performs **A, B, B, A
 GitHub-hosted Ubuntu 24.04 x64 job. There is no repeated-trial loop or matrix.
 
 The workflow freezes source `473af71077c61db9e42170b304bce1fc446c9077`, baseline
-builder `113c864b869d6b206a06d6ed5fe138a6f657bd69` and pilot implementation
+builder `113c864b869d6b206a06d6ed5fe138a6f657bd69`. ABBA selects schema2 pilot
+`33f897007b144b411a6b0f0137276da2e27be8b3`; group7 retains historical
 `9965321062a98a273fb92d8cd00cdc004f165866`. The workflow itself has a newer commit,
 recorded separately in `execution.json`; do not describe that as a run of the
 old builder workflow. The pilot verifies unchanged baseline helper hashes and
@@ -190,10 +193,10 @@ exists. Individual A/21–28 commands completed with74 successes and2 existing s
 These facts reject the current grouping, but do not establish an engine cause,
 isolation fix, speedup or whole-suite result.
 
-The manual selector defaults to `group7`; choose `abba` explicitly for the historical
-four-variant experiment. No source, SDK or file-list override is accepted. Both modes
-retain the same fixed source473/baseline113c/pilot996/SDK3.47.7 identity and read-only
-authority. The production build/source-attestation workflows are unchanged.
+The manual selector defaults to `group7`; choose `abba` explicitly for the schema2
+four-variant candidate. No source, SDK or file-list override is accepted. Both modes
+retain source473/baseline113c/SDK3.47.7 and read-only authority, with mode-specific
+immutable pilot revisions: group7 retains996 and ABBA uses the signed schema2 P. The production build/source-attestation workflows are unchanged.
 
 Group7 runs precisely the existing eight-file B group7 once, serially, in one fresh
 worker. It preserves coverage, --machine, --concurrency=1, compiler-cache reset and
