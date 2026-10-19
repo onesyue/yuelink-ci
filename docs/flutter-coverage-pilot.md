@@ -284,3 +284,18 @@ limits or shrink the corpus. Even a successful diagnostic remains
 release_acceptance=false and says nothing about sourcef959/release141 or the
 full client suite without their separate gates. This candidate has no timing
 or performance claim.
+
+
+The exact schema2 pilot candidate P is
+`33f897007b144b411a6b0f0137276da2e27be8b3`. Its workflow successor selects this immutable
+revision only when diagnostic_scope=abba. Group7 still selects original
+`9965321062a98a273fb92d8cd00cdc004f165866`; its schema1 reference is not
+reinterpreted. Offline workflow fixtures reconstruct the exact original996
+module and manifest bytes with pinned SHA256 checks before replacing expensive
+CLI execution. This keeps historical consumer tests valid even in a shallow
+policy checkout, with no Git history fetch or added fixture/helper file.
+
+P and its workflow successor are CODE_READY only until the separately scheduled
+native/Linux validation succeeds. No full36-file ABBA or performance result has
+been obtained for schema2. The completed group7 observation remains attributed
+to workflow022/original996.

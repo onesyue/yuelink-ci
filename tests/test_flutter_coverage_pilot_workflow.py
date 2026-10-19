@@ -1,5 +1,6 @@
 """Execute the workflow shell and real report comparators without Flutter/network."""
 
+import hashlib
 import json
 import os
 import re
@@ -14,7 +15,10 @@ WORKFLOW = ROOT / ".github/workflows/flutter-coverage-pilot.yml"
 EXECUTE = "Run one AB pair then one BA pair and compare all four variants"
 SOURCE = "473af71077c61db9e42170b304bce1fc446c9077"
 BASE = "113c864b869d6b206a06d6ed5fe138a6f657bd69"
-PILOT = "9965321062a98a273fb92d8cd00cdc004f165866"
+PILOT = "33f897007b144b411a6b0f0137276da2e27be8b3"
+HISTORICAL_PILOT = "9965321062a98a273fb92d8cd00cdc004f165866"
+HISTORICAL_SOURCE_SHA256 = "c38cc2f6139471734cd33da2b7a697656130531337c09d2f487ab031aa017ccf"
+HISTORICAL_MANIFEST_SHA256 = "cbf0c7a57f6f2cc5f5f107df6c17c2c80605269819120fb6d9fcd4c40eb3bf3e"
 
 
 def step(text, name):
@@ -87,6 +91,71 @@ if __name__ == "__main__":
 '''
 
 
+# Exact schema1 manifest/grouping functions from immutable pilot996. The fixture
+# reconstructs and hashes its complete original module before substituting only
+# expensive CLI execution; a shallow policy checkout needs no historical fetch.
+HISTORICAL_MANIFEST_AND_GROUPS = r'''
+def manifest(path: Path) -> dict:
+    data = json.loads(path.read_text())
+    files = data["files"]
+    digest = hashlib.sha256(("\n".join(files) + "\n").encode()).hexdigest()
+    if (
+        data["schema"] != 1
+        or len(files) != 36
+        or files != sorted(set(files))
+        or digest != data["inventory_sha256"]
+        or data["workers"] != 4
+        or data["group_size"] != 8
+        or data["timeout_seconds"] != 300
+    ):
+        raise ValueError("pilot inventory or execution contract changed")
+    if any(
+        not p.startswith("test/")
+        or ".." in Path(p).parts
+        or not p.endswith("_test.dart")
+        for p in files
+    ):
+        raise ValueError("pilot path escaped the test corpus")
+    expected_isolated = {
+        "test/services/user_custom_rules_test.dart",
+        "test/services/subscription_parser_test.dart",
+        "test/core/storage/persisted_schema_test.dart",
+        "test/core/storage/settings_service_schema_test.dart",
+        "test/governance/mihomo_fork_ledger_test.dart",
+    }
+    if set(data["isolated"]) != expected_isolated or not expected_isolated.issubset(
+        files
+    ):
+        raise ValueError("required compiler isolation boundary missing")
+    for filename, digest in data["helper_sha256"].items():
+        if filename not in {
+            "run-flutter-coverage.py",
+            "count-flutter-machine-tests.py",
+        }:
+            raise ValueError("unknown pilot helper")
+        if (
+            hashlib.sha256((ROOT / "scripts" / filename).read_bytes()).hexdigest()
+            != digest
+        ):
+            raise ValueError("pilot helper differs from the frozen builder")
+    if set(data["helper_sha256"]) != {
+        "run-flutter-coverage.py",
+        "count-flutter-machine-tests.py",
+    }:
+        raise ValueError("missing frozen builder helper")
+    return data
+
+
+def groups(data: dict, variant: str) -> list[list[str]]:
+    early = [[p] for p in data["isolated"]]
+    rest = [p for p in data["files"] if p not in data["isolated"]]
+    size = 1 if variant == "A" else data["group_size"]
+    return early + [rest[i : i + size] for i in range(0, len(rest), size)]
+
+
+'''
+
+
 class PilotWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -100,14 +169,24 @@ class PilotWorkflowTests(unittest.TestCase):
         for name in ("run-flutter-coverage.py", "count-flutter-machine-tests.py"):
             shutil.copyfile(ROOT / "scripts" / name, self.tools / "scripts" / name)
         original = (ROOT / "scripts/flutter-coverage-pilot.py").read_text()
+        manifest_text = (ROOT / "tests/fixtures/flutter-coverage-pilot-20261019.json").read_text()
+        if getattr(self, "historical", False):
+            original = (original[:original.index("def manifest(")] +
+                        HISTORICAL_MANIFEST_AND_GROUPS.lstrip("\n") +
+                        original[original.index("def relative("):])
+            self.assertEqual(hashlib.sha256(original.encode()).hexdigest(), HISTORICAL_SOURCE_SHA256)
+            historical = json.loads(manifest_text)
+            historical["schema"] = 1
+            del historical["in_place_isolated"]
+            manifest_text = json.dumps(historical, indent=2) + "\n"
+            self.assertEqual(hashlib.sha256(manifest_text.encode()).hexdigest(), HISTORICAL_MANIFEST_SHA256)
         main = '\nif __name__ == "__main__":\n    main()\n'
         self.assertIn(main, original)
         (self.tools / "scripts/flutter-coverage-pilot.py").write_text(original.replace(main, STUB))
-        shutil.copyfile(ROOT / "tests/fixtures/flutter-coverage-pilot-20261019.json",
-                        self.tools / "tests/fixtures/flutter-coverage-pilot-20261019.json")
+        (self.tools / "tests/fixtures/flutter-coverage-pilot-20261019.json").write_text(manifest_text)
         self.env = dict(os.environ, GITHUB_WORKSPACE=str(self.workspace),
                         RUNNER_TEMP=str(self.root / "runner"), SOURCE_SHA=SOURCE,
-                        BUILDER_BASE=BASE, PILOT_SHA=PILOT,
+                        BUILDER_BASE=BASE, PILOT_SHA=HISTORICAL_PILOT if getattr(self, "historical", False) else PILOT,
                         PILOT_CALLS=str(self.root / "calls"), PILOT_FIXTURE_FAULT="")
 
     def execute(self, text=None):
@@ -147,6 +226,16 @@ class PilotWorkflowTests(unittest.TestCase):
         self.assertIn("if: always()", upload)
         self.assertIn("if-no-files-found: error", upload)
         self.assertIn("path: ${{ runner.temp }}/flutter-coverage-pilot/", upload)
+
+    def test_modes_pin_new_abba_pilot_and_exact_historical_group7_separately(self):
+        text = WORKFLOW.read_text()
+        expected = ("  PILOT_SHA: ${{ inputs.diagnostic_scope == 'abba' && '" + PILOT +
+                    "' || '" + HISTORICAL_PILOT + "' }}")
+        self.assertIn(expected, text)
+        self.assertNotEqual(PILOT, HISTORICAL_PILOT)
+        manifest = json.loads((self.tools / "tests/fixtures/flutter-coverage-pilot-20261019.json").read_text())
+        self.assertEqual(manifest["schema"], 2)
+        self.assertEqual(len(manifest["in_place_isolated"]), 2)
 
     def test_real_workflow_shell_invokes_exact_AB_then_BA_and_parses_all_reports(self):
         result = self.execute()
@@ -218,6 +307,8 @@ GROUP7 = "Run bounded group7 reproduction and conditional isolation control"
 
 
 class Group7WorkflowTests(unittest.TestCase):
+    historical = True
+
     def setUp(self):
         import importlib.util
         from collections import Counter
@@ -225,7 +316,7 @@ class Group7WorkflowTests(unittest.TestCase):
         code = shell(WORKFLOW.read_text(), GROUP7).split("python3 - <<'PY'\n", 1)[1].rsplit("\nPY\n", 1)[0]
         self.ns = {"__name__": "group7_consumer"}
         exec(compile(code, str(WORKFLOW), "exec"), self.ns)  # noqa: S102 — execute the reviewed workflow consumer
-        spec = importlib.util.spec_from_file_location("group7_pilot", ROOT / "scripts/flutter-coverage-pilot.py")
+        spec = importlib.util.spec_from_file_location("group7_pilot", self.tools / "scripts/flutter-coverage-pilot.py")
         self.pilot = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.pilot)
         self.data = self.pilot.manifest(self.pilot.DEFAULT_MANIFEST)
@@ -340,6 +431,14 @@ class Group7WorkflowTests(unittest.TestCase):
                 return self.ns["main"]()
             return self.ns["experiment"](self.workspace / "source", self.output, self.data,
                                          self.files, self.pilot, self.counter, None)
+
+    def test_historical_group7_keeps_exact_schema1_and_original_grouping(self):
+        self.assertEqual(self.env["PILOT_SHA"], HISTORICAL_PILOT)
+        self.assertEqual(self.data["schema"], 1)
+        self.assertNotIn("in_place_isolated", self.data)
+        self.assertEqual(len(self.pilot.groups(self.data, "B")), 9)
+        self.assertEqual(self.files, self.ns["REFERENCE"]["files"])
+        self.assertEqual(len(self.files), 8)
 
     def test_group7_dispatch_is_explicit_bounded_and_abba_is_preserved(self):
         text = WORKFLOW.read_text()
