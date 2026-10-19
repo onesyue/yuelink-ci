@@ -35,7 +35,7 @@ def manifest(path: Path) -> dict:
     files = data["files"]
     digest = hashlib.sha256(("\n".join(files) + "\n").encode()).hexdigest()
     if (
-        data["schema"] != 1
+        data["schema"] != 2
         or len(files) != 36
         or files != sorted(set(files))
         or digest != data["inventory_sha256"]
@@ -62,6 +62,11 @@ def manifest(path: Path) -> dict:
         files
     ):
         raise ValueError("required compiler isolation boundary missing")
+    if data.get("in_place_isolated") != [
+        "test/core/storage/subscription_reset_operation_store_test.dart",
+        "test/core/storage/tun_datapath_accel_latch_test.dart",
+    ]:
+        raise ValueError("required in-place isolation boundaries changed")
     for filename, digest in data["helper_sha256"].items():
         if filename not in {
             "run-flutter-coverage.py",
@@ -85,7 +90,23 @@ def groups(data: dict, variant: str) -> list[list[str]]:
     early = [[p] for p in data["isolated"]]
     rest = [p for p in data["files"] if p not in data["isolated"]]
     size = 1 if variant == "A" else data["group_size"]
-    return early + [rest[i : i + size] for i in range(0, len(rest), size)]
+    batches = early + [rest[i : i + size] for i in range(0, len(rest), size)]
+    if variant == "A":
+        return batches
+    result = []
+    for batch in batches:
+        pending = []
+        for path in batch:
+            if path in data["in_place_isolated"]:
+                if pending:
+                    result.append(pending)
+                    pending = []
+                result.append([path])
+            else:
+                pending.append(path)
+        if pending:
+            result.append(pending)
+    return result
 
 
 def relative(path: str, worker: Path, prefix: str) -> str:

@@ -75,7 +75,7 @@ class PilotTests(unittest.TestCase):
         description = json.loads(result.stdout)
         self.assertEqual(description["acceptance"], "NOT_EXECUTED; diagnostic only")
         self.assertEqual(len(description["A"]), 36)
-        self.assertEqual(len(description["B"]), 9)
+        self.assertEqual(len(description["B"]), 11)
         for variant in ("A", "B"):
             self.assertEqual(
                 sorted(p for group in description[variant] for p in group),
@@ -83,6 +83,40 @@ class PilotTests(unittest.TestCase):
             )
             for path in self.data["isolated"]:
                 self.assertIn([path], description[variant])
+
+    def test_only_original_group7_splits_in_place_and_worker_history_is_explicit(self):
+        early = [[path] for path in self.data["isolated"]]
+        rest = [path for path in self.data["files"] if path not in self.data["isolated"]]
+        original = early + [rest[i:i + 8] for i in range(0, len(rest), 8)]
+        expected = original[:7] + [original[7][:6], original[7][6:7], original[7][7:]] + original[8:]
+        self.assertEqual(pilot.groups(self.data, "B"), expected)
+        self.assertEqual(pilot.groups(self.data, "A"), early + [[path] for path in rest])
+        self.assertEqual([path for batch in expected for path in batch],
+                         [path for batch in original for path in batch])
+        self.assertEqual(len({path for batch in expected for path in batch}), 36)
+        self.assertEqual([number % self.data["workers"] for number in (7, 8, 9, 10)],
+                         [3, 0, 1, 2])
+        for path in self.data["in_place_isolated"]:
+            self.assertEqual([batch for batch in expected if path in batch], [[path]])
+
+    def test_schema1_and_missing_changed_or_duplicate_in_place_boundaries_fail_closed(self):
+        for fault in ("schema1", "missing", "wrong", "duplicate", "reordered"):
+            with self.subTest(fault=fault):
+                data = copy.deepcopy(self.data)
+                if fault == "schema1":
+                    data["schema"] = 1
+                elif fault == "missing":
+                    del data["in_place_isolated"]
+                elif fault == "wrong":
+                    data["in_place_isolated"][0] = self.data["files"][0]
+                elif fault == "duplicate":
+                    data["in_place_isolated"].append(data["in_place_isolated"][0])
+                else:
+                    data["in_place_isolated"].reverse()
+                path = self.root / "bad-boundaries.json"
+                path.write_text(json.dumps(data))
+                with self.assertRaises(ValueError):
+                    pilot.manifest(path)
 
     def test_manifest_mutations_refuse_lost_inventory_isolation_and_helpers(self):
         for mutation in ("file", "isolation", "helper", "workers", "group_size"):

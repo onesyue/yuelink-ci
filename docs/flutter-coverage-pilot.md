@@ -245,3 +245,42 @@ not authorize dispatch, downloading a local SDK, raising resource/time limits or
 rerunning the whole ABBA experiment. Offline tests execute the extracted consumer,
 real machine/coverage parsers and real main receipt handling with only expensive
 Flutter/worktree setup substituted; they are not a native Flutter measurement.
+
+
+## Candidate schema2 in-place isolation (not yet full-ABBA qualified)
+
+Run39206971980 at workflow022da403 reproduced the original eight-file group7
+finalization fault, then passed exactly prefix6/file7/file8 with the prior
+identity/skip/coverage union. That supports a bounded grouping candidate only.
+The schema2 pilot manifest adds two in-place boundaries: reset-operation store
+and TUN latch. Its36-file inventory, source473, baseline113c, SDK3.47.7, previous
+five early-isolated files, four workers and command deadlines are unchanged.
+Schema1 is not interpreted as this new experiment; historical996 keeps its own
+original manifest and behavior.
+
+A still has36 single-file commands. B now has11 commands: only old B7 is split
+into its first six files, its seventh alone and eighth alone. No file is moved
+to the early-isolated list and no batch is repacked across the old boundary.
+The flattened declared order and each file's single occurrence stay identical.
+The unchanged modulo-four scheduler assigns those three new batches to workers
+3/0/1; the former last batch now has index10 on worker2 instead of index8 on
+worker0. This changes worker history/load compared with the successful serial
+eight-file experiment; the grouping is not fully qualified until actual ABBA.
+
+Freeze/sign this pilot commit P before a separate workflow successor W pins its
+exact full SHA for explicit ABBA. Group7 remains bound to original996 and the
+old raw reference. Do not use a floating pilot ref, retarget group7 or infer a
+new pilot identity from the historical builder baseline. No release workflow,
+source attestation, SDK pin, command interface or automatic trigger changes.
+
+After independent source validation and a separate coordinator approval, the
+admission is one manual full36-file A/B/B/A run with the existing105-minute
+step/120-minute job, unchanged300s+30s command limit and four workers. Require
+both successful pair receipts and the cross-pair DIAGNOSTIC_ABBA_PASSED result,
+all466 visible cases (464 successes and2 existing skips), complete terminals,
+nonempty equal LCOV instrumentation/hit unions and identical SDK/resources.
+Preserve failed/partial raw evidence; do not retry automatically, enlarge
+limits or shrink the corpus. Even a successful diagnostic remains
+release_acceptance=false and says nothing about sourcef959/release141 or the
+full client suite without their separate gates. This candidate has no timing
+or performance claim.

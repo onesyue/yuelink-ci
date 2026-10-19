@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "purpose": "Bounded diagnostic only; never a full-suite or release receipt",
   "source_sha": "473af71077c61db9e42170b304bce1fc446c9077",
   "builder_base": "113c864b869d6b206a06d6ed5fe138a6f657bd69",
@@ -56,6 +56,10 @@
     "test/governance/mihomo_fork_ledger_test.dart",
     "test/services/subscription_parser_test.dart",
     "test/services/user_custom_rules_test.dart"
+  ],
+  "in_place_isolated": [
+    "test/core/storage/subscription_reset_operation_store_test.dart",
+    "test/core/storage/tun_datapath_accel_latch_test.dart"
   ],
   "inventory_sha256": "45efd35b18d868b7aa4ea14d380c2834e6c6d7957c70cc8fc3b358fa0e1187f6",
   "helper_sha256": {
