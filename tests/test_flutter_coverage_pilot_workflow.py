@@ -120,11 +120,13 @@ class PilotWorkflowTests(unittest.TestCase):
     def test_manual_single_native_job_has_frozen_inputs_and_read_only_authority(self):
         text = WORKFLOW.read_text()
         trigger = text.split("on:\n", 1)[1].split("\npermissions:", 1)[0].strip()
-        self.assertEqual(trigger, "workflow_dispatch:")
+        self.assertTrue(trigger.startswith("workflow_dispatch:"))
+        self.assertNotIn("schedule:", trigger)
+        self.assertNotIn("push:", trigger)
         self.assertIn("permissions:\n  contents: read", text)
         self.assertEqual(text.count("permissions:"), 1)
         self.assertIn("runs-on: ubuntu-24.04", text)
-        self.assertIn("timeout-minutes: 120", text)
+        self.assertIn("inputs.diagnostic_scope == 'group7' && 40 || 120", text)
         self.assertIn("timeout-minutes: 105", step(text, EXECUTE))
         self.assertIn("cancel-in-progress: false", text)
         self.assertNotIn("strategy:", text)
@@ -211,6 +213,281 @@ class PilotWorkflowTests(unittest.TestCase):
         self.assertNotEqual(negative.returncode, 0)
         self.assertIn("checkout credentials must be removed", negative.stdout)
         self.assertNotIn("fixture source verification reached", negative.stdout)
+
+GROUP7 = "Run bounded group7 reproduction and conditional isolation control"
+
+
+class Group7WorkflowTests(unittest.TestCase):
+    def setUp(self):
+        import importlib.util
+        from collections import Counter
+        PilotWorkflowTests.setUp(self)
+        code = shell(WORKFLOW.read_text(), GROUP7).split("python3 - <<'PY'\n", 1)[1].rsplit("\nPY\n", 1)[0]
+        self.ns = {"__name__": "group7_consumer"}
+        exec(compile(code, str(WORKFLOW), "exec"), self.ns)  # noqa: S102 — execute the reviewed workflow consumer
+        spec = importlib.util.spec_from_file_location("group7_pilot", ROOT / "scripts/flutter-coverage-pilot.py")
+        self.pilot = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.pilot)
+        self.data = self.pilot.manifest(self.pilot.DEFAULT_MANIFEST)
+        self.files = self.pilot.groups(self.data, "B")[7]
+        self.counter = self.pilot.module("group7_counter", ROOT / "scripts/count-flutter-machine-tests.py")
+        self.worker = self.root / "worker"
+        self.worker.mkdir()
+        self.output = self.root / "group7"
+        self.output.mkdir()
+        self.env["DIAGNOSTIC_SCOPE"] = "group7"
+        self.calls, self.fault, self.original = [], "", "matching"
+        self.case_counts = [9, 3, 25, 9, 3, 9, 12, 6]
+        cases = Counter()
+        for i, file in enumerate(self.files):
+            for number in range(self.case_counts[i]):
+                cases[(file, f"case {number}", i == 3 and number < 2)] += 1
+        reference = dict(self.ns["REFERENCE"])
+        reference.update(cases_sha256=self.ns["case_hash"](cases),
+                         prefix_cases_sha256=self.ns["case_hash"](Counter({
+                             k: v for k, v in cases.items() if k[0] != self.files[7]})),
+                         coverage_sha256=self.ns["canonical"]([
+                             ["lib/fixture.dart", "DA", "1", False],
+                             ["lib/fixture.dart", "DA", "1", True]]), coverage_rows=2)
+        self.fixture_reference = reference
+
+    def bind_fixture(self):
+        # Only the expensive execution and prior corpus are synthetic, not the consumers.
+        self.ns["REFERENCE"] = self.fixture_reference
+        self.ns["REFERENCE_SHA256"] = self.ns["canonical"](self.fixture_reference)
+
+    def fake_run(self, command, **kwargs):
+        if command[0] != "/usr/bin/time":
+            return subprocess.CompletedProcess(command, 0)
+        self.calls.append(command)
+        self.assertEqual(kwargs["timeout"], 350)
+        self.assertEqual(kwargs["env"]["TZ"], "UTC")
+        self.assertEqual(command[4:8], ["timeout", "--signal=TERM", "--kill-after=30s", "300"])
+        for flag in ("--no-pub", "--coverage", "--machine", "--concurrency=1"):
+            self.assertIn(flag, command)
+        index = command.index("--coverage-path") + 1
+        lcov, selected = Path(command[index]), command[index + 1:]
+        original = lcov.stem == "original"
+        failed = original and self.original != "success"
+        worker = Path(kwargs["cwd"])
+        self.assertFalse((worker / "build/test_cache").exists())
+        events, identity, loading = [{"type": "start"}], 0, None
+        for suite_id, file in enumerate(selected[:7] if failed else selected):
+            events.append({"type": "suite", "suite": {"id": suite_id, "path": str(worker / file)}})
+            loading = identity
+            events += [{"type": "testStart", "test": {
+                "id": identity, "suiteID": suite_id, "name": "loading " + str(worker / file)}},
+                {"type": "testDone", "testID": identity, "result": "success", "hidden": True, "skipped": False}]
+            identity += 1
+            i = self.files.index(file)
+            for number in range(self.case_counts[i]):
+                name, skip = f"case {number}", i == 3 and number < 2
+                if not original and self.fault == "case":
+                    name += " drift"
+                if not original and self.fault == "skip":
+                    skip = not skip
+                events += [{"type": "testStart", "test": {
+                    "id": identity, "suiteID": suite_id, "name": name}},
+                    {"type": "testDone", "testID": identity, "result": "success", "hidden": False, "skipped": skip}]
+                identity += 1
+            events += [{"type": "testStart", "test": {
+                "id": identity, "suiteID": suite_id, "name": "(tearDownAll)"}},
+                {"type": "testDone", "testID": identity, "result": "success", "hidden": True, "skipped": False}]
+            identity += 1
+        if failed:
+            events.append({"type": "error", "testID": loading,
+                           "error": "Different timeout" if self.original == "different" else "Shell subprocess crashed with segmentation fault.",
+                           "isFailure": False, "stackTrace": "FlutterTesterTestDevice.finished"})
+        elif self.fault != "terminal":
+            events.append({"type": "done", "success": True})
+        kwargs["stdout"].write("\n".join(json.dumps(e) for e in events) + "\n")
+        if failed:
+            kwargs["stdout"].write("unhandled error during finalization of test:\n")
+        if not failed and self.fault != "missing_lcov":
+            hit = 0 if self.fault == "coverage" else 1
+            lcov.write_text(f"SF:lib/fixture.dart\nDA:1,{hit}\nend_of_record\n")
+        if self.fault == "outer_timeout":
+            raise subprocess.TimeoutExpired(command, 350)
+        return subprocess.CompletedProcess(command, 124 if failed else (23 if self.fault == "control_exit" else 0))
+
+    def invoke(self, main=False):
+        from contextlib import contextmanager
+        from unittest.mock import patch
+
+        @contextmanager
+        def worker(*_args):
+            yield self.worker
+
+        def output(command, **_kwargs):
+            if command == ["git", "rev-parse", "HEAD"]:
+                return SOURCE + "\n"
+            if command[:2] == ["git", "ls-files"]:
+                return "\n".join(self.files)
+            if command == ["flutter", "--version", "--machine"]:
+                return json.dumps(self.data["sdk"] if self.fault != "sdk" else {})
+            raise AssertionError(command)
+
+        self.bind_fixture()
+        cache = self.worker / "build/test_cache"
+        cache.mkdir(parents=True, exist_ok=True)
+        (cache / "stale").write_text("compiler cache")
+        with patch.dict(os.environ, self.env), patch.dict(self.ns, prepared_worker=worker), \
+                patch.object(subprocess, "run", side_effect=self.fake_run), \
+                patch.object(subprocess, "check_output", side_effect=output), \
+                patch("platform.system", return_value="Linux"), patch("platform.machine", return_value="x86_64"), \
+                patch("platform.platform", return_value="Linux-x64-fixture"):
+            if main:
+                return self.ns["main"]()
+            return self.ns["experiment"](self.workspace / "source", self.output, self.data,
+                                         self.files, self.pilot, self.counter, None)
+
+    def test_group7_dispatch_is_explicit_bounded_and_abba_is_preserved(self):
+        text = WORKFLOW.read_text()
+        self.assertIn("default: group7", text)
+        self.assertIn("options: [group7, abba]", text)
+        self.assertIn("if: inputs.diagnostic_scope == 'group7'", step(text, GROUP7))
+        self.assertIn("timeout-minutes: 25", step(text, GROUP7))
+        self.assertIn("if: inputs.diagnostic_scope == 'abba'", step(text, EXECUTE))
+        self.assertIn("inputs.diagnostic_scope == 'group7' && 40 || 120", text)
+        self.assertNotIn("actions: read", text)
+        self.assertNotIn("--manifest", shell(text, GROUP7))
+
+    def test_actual_prior_reference_binds_raw_reports_and_canonical_expectations(self):
+        from unittest.mock import patch
+        reference = self.ns["REFERENCE"]
+        self.assertEqual(self.ns["canonical"](reference), self.ns["REFERENCE_SHA256"])
+        self.assertEqual(reference["cases_sha256"], "60f97696b06dbea7c8fd401300525a68e5f3002074773cbde2ddfaf9c1054474")
+        self.assertEqual(reference["coverage_sha256"], "bf27a06a11049742d6cd6005eff8891e843cef9de8700eb571eb10237ed6e862")
+        self.assertEqual((reference["visible_cases"], reference["skipped_cases"], reference["coverage_rows"]), (76, 2, 17654))
+        self.assertEqual(set(reference["raw_sha256"]), {
+            *[f"AB/A/{i}.{suffix}" for i in range(21, 29) for suffix in ("jsonl", "info")],
+            "execution.json", "AB/input.json", "AB/A/groups.json", "AB/B/groups.json"})
+        with patch.dict(os.environ, self.env):
+            self.assertEqual(self.ns["validate_reference"](self.data, self.pilot), self.files)
+            reference["raw_sha256"]["AB/A/27.jsonl"] = "0" * 64
+            with self.assertRaisesRegex(ValueError, "binding changed"):
+                self.ns["validate_reference"](self.data, self.pilot)
+
+    def test_matching_failure_runs_only_original_prefix6_single7_single8(self):
+        self.assertEqual(self.invoke(), "REPRODUCED_WITH_ISOLATION_CONTROL_PASS")
+        self.assertEqual([cmd[cmd.index("--coverage-path") + 2:] for cmd in self.calls],
+                         [self.files, self.files[:6], self.files[6:7], self.files[7:]])
+        self.assertEqual(len(list(self.output.glob("*.timing.json"))), 4)
+
+    def test_original_success_stops_without_isolation_or_retry(self):
+        self.original = "success"
+        self.assertEqual(self.invoke(), "NOT_REPRODUCED")
+        self.assertEqual(len(self.calls), 1)
+
+    def test_different_original_failure_stops_without_control(self):
+        self.original = "different"
+        with self.assertRaisesRegex(ValueError, "different or incomplete signature"):
+            self.invoke()
+        self.assertEqual(len(self.calls), 1)
+
+    def test_control_case_skip_coverage_terminal_exit_and_missing_lcov_fail(self):
+        for fault in ("case", "skip", "coverage", "terminal", "missing_lcov", "control_exit"):
+            with self.subTest(fault=fault):
+                self.fault = fault
+                self.calls.clear()
+                for f in self.output.iterdir():
+                    f.unlink()
+                with self.assertRaises((ValueError, FileNotFoundError)):
+                    self.invoke()
+                self.assertLessEqual(len(self.calls), 4)
+
+    def test_outer_timeout_is_preserved_and_never_retried(self):
+        self.fault = "outer_timeout"
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.invoke()
+        self.assertEqual(len(self.calls), 1)
+        self.assertIsNone(json.loads((self.output / "original.timing.json").read_text())["exit_code"])
+
+    def test_missing_reference_and_changed_group_order_fail_closed(self):
+        from unittest.mock import patch
+        with patch.dict(os.environ, self.env):
+            broken = dict(self.data, files=list(reversed(self.data["files"])))
+            with self.assertRaisesRegex(ValueError, "group7 input differs"):
+                self.ns["validate_reference"](broken, self.pilot)
+            self.ns["REFERENCE"].pop("cases_sha256")
+            with self.assertRaisesRegex(ValueError, "binding changed"):
+                self.ns["validate_reference"](self.data, self.pilot)
+
+    def test_wrong_finalization_boundary_cannot_enable_control(self):
+        from unittest.mock import patch
+        self.bind_fixture()
+        with patch.object(subprocess, "run", side_effect=self.fake_run):
+            result = self.ns["execute"](self.worker, self.output, "original", self.files)
+        original = result["report"].read_text()
+        for changed in (original.replace("(tearDownAll)", "ordinary"),
+                        original + '{"type":"done","success":true}\n',
+                        original.replace("FlutterTesterTestDevice.finished", "unrelated")):
+            result["report"].write_text(changed)
+            self.assertFalse(self.ns["matching_failure"](result, self.worker, self.files, self.pilot))
+
+    def test_actual_main_nonrelease_receipt_and_sdk_rejection(self):
+        self.invoke(main=True)
+        receipt = Path(self.env["RUNNER_TEMP"]) / "flutter-coverage-pilot/group7/comparison.json"
+        result = json.loads(receipt.read_text())
+        self.assertEqual(result["status"], "REPRODUCED_WITH_ISOLATION_CONTROL_PASS")
+        self.assertFalse(result["release_acceptance"])
+        self.fault = "sdk"
+        with self.assertRaisesRegex(ValueError, "SDK differs"):
+            self.invoke(main=True)
+
+    def test_actual_shell_reaches_main_and_rejects_unselected_mode(self):
+        self.env["DIAGNOSTIC_SCOPE"] = "invalid"
+        result = subprocess.run(["bash", "-c", shell(WORKFLOW.read_text(), GROUP7)],
+                                env=self.env, capture_output=True, text=True, timeout=20, check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires explicit native Linux x64", result.stderr)
+
+    def test_real_worktree_cleanup_and_dirty_source_rejection(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        source = self.workspace / "source"
+        subprocess.run(["git", "init", "-q"], cwd=source, check=True)
+        (source / "tracked").write_text("clean")
+        subprocess.run(["git", "add", "tracked"], cwd=source, check=True)
+        subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                        "commit", "-qm", "fixture"], cwd=source, check=True)
+        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
+        real_run = subprocess.run
+        offline = []
+
+        def run(command, **kwargs):
+            if command[0] == "flutter":
+                offline.append(command)
+                return subprocess.CompletedProcess(command, 0)
+            return real_run(command, **kwargs)
+
+        runner = SimpleNamespace(add_gitlinks=lambda *_args: None)
+        with patch.object(subprocess, "run", side_effect=run), \
+                self.assertRaises(subprocess.CalledProcessError), \
+                self.ns["prepared_worker"](source, self.output, {"source_sha": sha}, runner) as worker:
+            self.assertEqual((worker / "tracked").read_text(), "clean")
+            (worker / "tracked").write_text("changed")
+        self.assertEqual(offline, [["flutter", "pub", "get", "--offline", "--enforce-lockfile"]])
+        listed = subprocess.check_output(["git", "worktree", "list", "--porcelain"], cwd=source, text=True)
+        self.assertEqual(listed.count("worktree "), 1)
+        self.assertEqual((source / "tracked").read_text(), "clean")
+
+    def test_cache_symlink_fails_before_command(self):
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "preserve").write_text("unchanged")
+        (self.worker / "build").symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "cache escaped"):
+            self.ns["execute"](self.worker, self.output, "original", self.files)
+        self.assertEqual((outside / "preserve").read_text(), "unchanged")
+
+    def test_actual_main_failure_retains_explicit_nonrelease_receipt(self):
+        self.fault = "control_exit"
+        with self.assertRaisesRegex(ValueError, "command failed"):
+            self.invoke(main=True)
+        receipt = Path(self.env["RUNNER_TEMP"]) / "flutter-coverage-pilot/group7/comparison.json"
+        self.assertEqual(json.loads(receipt.read_text())["status"], "DIAGNOSTIC_FAILED")
+        self.assertFalse(json.loads(receipt.read_text())["release_acceptance"])
 
 
 if __name__ == "__main__":

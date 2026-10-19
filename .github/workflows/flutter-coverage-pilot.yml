@@ -1,9 +1,16 @@
 name: Flutter coverage pilot
-run-name: Flutter coverage pilot 473af710 ABBA
+run-name: Flutter coverage pilot 473af710 ${{ inputs.diagnostic_scope }}
 
 # Diagnostic only. No release, source attestation or production runner changes.
 on:
   workflow_dispatch:
+    inputs:
+      diagnostic_scope:
+        description: Bounded group7 follow-up or explicit historical ABBA
+        type: choice
+        required: true
+        default: group7
+        options: [group7, abba]
 
 permissions:
   contents: read
@@ -18,16 +25,18 @@ env:
   BUILDER_BASE: 113c864b869d6b206a06d6ed5fe138a6f657bd69
   FLUTTER_VERSION: '3.47.7'
   TZ: UTC
+  DIAGNOSTIC_SCOPE: ${{ inputs.diagnostic_scope }}
 
 jobs:
   compare:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: ${{ inputs.diagnostic_scope == 'group7' && 40 || 120 }}
     steps:
       - name: Record diagnostic identity and require native Linux x64
         shell: bash
         run: |
           set -euo pipefail
+          case "$DIAGNOSTIC_SCOPE" in group7|abba) ;; *) exit 2 ;; esac
           test "$RUNNER_OS" = Linux
           test "$RUNNER_ARCH" = X64
           test "$(uname -m)" = x86_64
@@ -36,7 +45,7 @@ jobs:
           import json, os
           from pathlib import Path
           keys = ("SOURCE_SHA", "PILOT_SHA", "BUILDER_BASE", "FLUTTER_VERSION",
-                  "GITHUB_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "RUNNER_ARCH")
+                  "GITHUB_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "RUNNER_ARCH", "DIAGNOSTIC_SCOPE")
           path = Path(os.environ["RUNNER_TEMP"]) / "flutter-coverage-pilot/execution.json"
           path.write_text(json.dumps({key: os.environ[key] for key in keys}, indent=2) + "\n")
           PY
@@ -113,6 +122,7 @@ jobs:
           } > "$RUNNER_TEMP/flutter-coverage-pilot/host.txt"
 
       - name: Run one AB pair then one BA pair and compare all four variants
+        if: inputs.diagnostic_scope == 'abba'
         # This leaves 15 minutes of the job budget for setup and evidence upload.
         # Existing per-group 300s + 30s grace remains unchanged and fail-closed.
         timeout-minutes: 105
@@ -184,6 +194,274 @@ jobs:
               "visible_cases": sum(combined[0]["cases"].values()),
               "source_sha": data["source_sha"], "builder_base": data["builder_base"],
           }, indent=2) + "\n")
+          PY
+
+      - name: Run bounded group7 reproduction and conditional isolation control
+        if: inputs.diagnostic_scope == 'group7'
+        timeout-minutes: 25
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, importlib.util, json, os, platform, shutil, subprocess, tempfile, time
+          from collections import Counter
+          from contextlib import contextmanager
+          from pathlib import Path
+
+          REFERENCE = {
+              "run_id": 39203863860,
+              "artifact_id": 12165665386,
+              "workflow_sha": "65be2c0afda6fc538f8e86baf2a6737aaa52fc6c",
+              "source_sha": "473af71077c61db9e42170b304bce1fc446c9077",
+              "pilot_sha": "9965321062a98a273fb92d8cd00cdc004f165866",
+              "files": [
+                  "test/core/profile/subscription_reset_service_test.dart",
+                  "test/core/providers/close_connections_on_switch_test.dart",
+                  "test/core/quota_reminder_owner_test.dart",
+                  "test/core/storage/auth_token_service_emby_subject_test.dart",
+                  "test/core/storage/durable_file_system_contract_test.dart",
+                  "test/core/storage/settings_corrupt_reset_test.dart",
+                  "test/core/storage/subscription_reset_operation_store_test.dart",
+                  "test/core/storage/tun_datapath_accel_latch_test.dart"
+              ],
+              "raw_sha256": {
+                  "AB/A/21.jsonl": "35b9a0149e7600765754cf9c7f4a33d12a95ab3d0735abe4e26416b7353cdb8e",
+                  "AB/A/21.info": "beb337485c4d03c5a93e41ddf044693e650e56753210275c0ce7d4f4753a0d37",
+                  "AB/A/22.jsonl": "440342445f453859bc9f619c14af945f59bb80728d3c6ee1a0e301cf050c75e9",
+                  "AB/A/22.info": "3b7a640a4e4558ef4ad0c44bb0e83953d198ed576fd0c8055f5999dc432b832d",
+                  "AB/A/23.jsonl": "2978c37c651adc8999e754556da24c30d7c8cd3465cc54ad924cfe97f5c47af5",
+                  "AB/A/23.info": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "AB/A/24.jsonl": "355ceb609ca2bbfb48c7d65cd97cb0084bee0f587ea5e503c3f8ccfb55e659b8",
+                  "AB/A/24.info": "fac3e9ecaa3cfa84ed92a53edb6f46fc94a601be5ec1333fdb999211a59e47fb",
+                  "AB/A/25.jsonl": "5a4c6cfb69a1aef75df29b674808cfde19fc03a019dbbe8f7008d73d9db87336",
+                  "AB/A/25.info": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "AB/A/26.jsonl": "9be974508e17155b16ad8bf32db9c371a644d0db31f665481774d44874bc5963",
+                  "AB/A/26.info": "64d1092823a3f6d9d87ea1417c8a174b9782de3b07abd0f9c74f4d8133fce6fd",
+                  "AB/A/27.jsonl": "1da423e16529246d43d32d3735a346c53f733e58a4f9b2104163ba8309d91737",
+                  "AB/A/27.info": "c7f0e84321cad0aab05f182907ccb7a76ef87e113daa0d5366dca2c6d235a769",
+                  "AB/A/28.jsonl": "5ce4c41e240a6b6a84e83deead1de8b479f6c1743aa6c8a49710a22d6d2ec018",
+                  "AB/A/28.info": "55e6ccabb0194f26c00d72e6fa52a0fe57b989c8b596404499d3ba6b9017abff",
+                  "execution.json": "d83582de2be68df88cc660b339fa7f72cb4f9fde2309202361cf24fe85c66e0b",
+                  "AB/input.json": "3cbf48914614baeeccfe43bb3fdc0cbaa396d2b4b5962226a7fc5b3d3a3219b9",
+                  "AB/A/groups.json": "2109f1e69f285251bfa77fcd38c64177fe6d112b1e208a47708ba92d6a6e5834",
+                  "AB/B/groups.json": "d8444b7201b673776a7f8b34771e679317af36bfe333a2fe8f9ec075e74c8793"
+              },
+              "cases_sha256": "60f97696b06dbea7c8fd401300525a68e5f3002074773cbde2ddfaf9c1054474",
+              "coverage_sha256": "bf27a06a11049742d6cd6005eff8891e843cef9de8700eb571eb10237ed6e862",
+              "visible_cases": 76,
+              "skipped_cases": 2,
+              "coverage_rows": 17654,
+              "prefix_cases_sha256": "a518de4f2932b2d9399ce30ce6544d10b45ba4e0867a0ecd0eb4b413d804f4dc"
+          }
+          REFERENCE_SHA256 = '087c0e35e0b99e2fd2030ddf1c03f173395acfad7c08dd66b17a41d7b153778d'
+
+          def canonical(value):
+              return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
+                                              ensure_ascii=True).encode()).hexdigest()
+
+          def case_hash(cases):
+              return canonical([list(key) + [count] for key, count in sorted(cases.items())])
+
+          def validate_reference(data, pilot):
+              if canonical(REFERENCE) != REFERENCE_SHA256:
+                  raise ValueError("prior A evidence binding changed")
+              files = pilot.groups(data, "B")[7]
+              if (files != REFERENCE["files"] or len(files) != 8 or
+                      data["source_sha"] != REFERENCE["source_sha"] or
+                      data["source_sha"] != os.environ["SOURCE_SHA"] or
+                      data["builder_base"] != os.environ["BUILDER_BASE"] or
+                      os.environ["PILOT_SHA"] != REFERENCE["pilot_sha"]):
+                  raise ValueError("frozen group7 input differs")
+              return files
+
+          def parsed_events(report):
+              events = []
+              for line in report.read_text().splitlines():
+                  try:
+                      value = json.loads(line)
+                  except json.JSONDecodeError:
+                      continue
+                  if isinstance(value, dict):
+                      events.append(value)
+              return events
+
+          def matching_failure(result, worker, files, pilot):
+              # This recognizes one failed observation; it never accepts a test result.
+              if result["exit_code"] != 124 or result["lcov"].exists():
+                  return False
+              events = parsed_events(result["report"])
+              if any(e.get("type") == "done" for e in events):
+                  return False
+              suites, tests, finished, cases, errors = {}, {}, set(), Counter(), []
+              teardown_at = None
+              try:
+                  for position, event in enumerate(events):
+                      kind = event.get("type")
+                      if kind == "suite":
+                          suite = event["suite"]
+                          if suite["id"] in suites:
+                              return False
+                          suites[suite["id"]] = pilot.relative(suite["path"], worker, "test/")
+                      elif kind == "testStart":
+                          test = event["test"]
+                          if test["id"] in tests:
+                              return False
+                          tests[test["id"]] = test
+                      elif kind == "testDone":
+                          identity = event["testID"]
+                          if identity not in tests or identity in finished or event["result"] != "success":
+                              return False
+                          finished.add(identity)
+                          test = tests[identity]
+                          path = suites[test["suiteID"]]
+                          if path == files[6] and test["name"] == "(tearDownAll)" and event["hidden"]:
+                              teardown_at = position
+                          if not event["hidden"]:
+                              cases[(path, test["name"].replace(str(worker), "<source>"),
+                                     bool(event["skipped"]))] += 1
+                      elif kind == "error":
+                          errors.append((position, event))
+                  if (list(suites.values()) != files[:7] or finished != set(tests) or
+                          case_hash(cases) != REFERENCE["prefix_cases_sha256"] or
+                          len(errors) != 1 or teardown_at is None):
+                      return False
+                  position, error = errors[0]
+                  test = tests[error["testID"]]
+                  return (position > teardown_at and suites[test["suiteID"]] == files[6] and
+                          test["name"] == "loading " + str(worker / files[6]) and
+                          error.get("isFailure") is False and
+                          error["error"] == "Shell subprocess crashed with segmentation fault." and
+                          "FlutterTesterTestDevice.finished" in error.get("stackTrace", "") and
+                          "unhandled error during finalization of test:" in result["report"].read_text())
+              except (KeyError, TypeError, ValueError):
+                  return False
+
+          @contextmanager
+          def prepared_worker(source, parent, data, runner):
+              with tempfile.TemporaryDirectory(prefix="group7-", dir=parent) as temporary:
+                  worker = Path(temporary) / "source"
+                  gitlinks = []
+                  added = False
+                  try:
+                      subprocess.run(["git", "worktree", "add", "--detach", str(worker), data["source_sha"]],
+                                     cwd=source, check=True, timeout=60)
+                      added = True
+                      runner.add_gitlinks(source, worker, data["source_sha"], gitlinks)
+                      subprocess.run(["flutter", "pub", "get", "--offline", "--enforce-lockfile"],
+                                     cwd=worker, check=True, timeout=120)
+                      try:
+                          yield worker
+                      finally:
+                          for checkout in [worker, *[target for _, target in gitlinks]]:
+                              subprocess.run(["git", "diff", "--exit-code", "HEAD"],
+                                             cwd=checkout, check=True, timeout=30)
+                  finally:
+                      for original, target in reversed(gitlinks):
+                          subprocess.run(["git", "worktree", "remove", "--force", str(target)],
+                                         cwd=original, check=True, timeout=60)
+                      if added:
+                          subprocess.run(["git", "worktree", "remove", "--force", str(worker)],
+                                         cwd=source, check=True, timeout=60)
+
+          def execute(worker, output, name, files):
+              cache = worker / "build/test_cache"
+              if cache.is_symlink() or cache.parent.is_symlink():
+                  raise ValueError("compiler cache escaped disposable worker")
+              if cache.exists():
+                  shutil.rmtree(cache)
+              report, lcov = output / (name + ".jsonl"), output / (name + ".info")
+              command = ["/usr/bin/time", "-v", "-o", str(output / (name + ".resource.txt")),
+                         "timeout", "--signal=TERM", "--kill-after=30s", "300", "flutter", "test",
+                         "--no-pub", "--coverage", "--machine", "--concurrency=1",
+                         "--coverage-path", str(lcov), *files]
+              started = time.monotonic()
+              exit_code = None
+              try:
+                  with report.open("w") as stream:
+                      result = subprocess.run(command, cwd=worker, env=dict(os.environ, TZ="UTC"),
+                                              stdout=stream, stderr=subprocess.STDOUT, timeout=350,
+                                              check=False)
+                      exit_code = result.returncode
+              finally:
+                  (output / (name + ".timing.json")).write_text(json.dumps({
+                      "files": files, "command": command, "exit_code": exit_code,
+                      "elapsed_seconds": time.monotonic() - started,
+                  }, indent=2) + "\n")
+              return {"report": report, "lcov": lcov, "exit_code": exit_code}
+
+          def successful(result, worker, files, pilot, counter):
+              if result["exit_code"] != 0:
+                  raise ValueError("diagnostic command failed: " + str(result["exit_code"]))
+              return {"cases": pilot.identities(result["report"], worker, files, counter),
+                      "coverage": pilot.coverage(result["lcov"], worker)}
+
+          def require_prior(combined):
+              if (case_hash(combined["cases"]) != REFERENCE["cases_sha256"] or
+                      canonical(sorted(combined["coverage"])) != REFERENCE["coverage_sha256"] or
+                      sum(combined["cases"].values()) != REFERENCE["visible_cases"] or
+                      sum(count for key, count in combined["cases"].items() if key[2]) != REFERENCE["skipped_cases"] or
+                      not combined["coverage"] or len(combined["coverage"]) != REFERENCE["coverage_rows"]):
+                  raise ValueError("diagnostic differs from prior A identities/skips/coverage")
+
+          def experiment(source, output, data, files, pilot, counter, runner):
+              with prepared_worker(source, output, data, runner) as worker:
+                  result = execute(worker, output, "original", files)
+                  if result["exit_code"] == 0:
+                      require_prior(successful(result, worker, files, pilot, counter))
+                      return "NOT_REPRODUCED"
+                  if not matching_failure(result, worker, files, pilot):
+                      raise ValueError("original group7 failed with a different or incomplete signature")
+              combined = {"cases": Counter(), "coverage": set()}
+              with prepared_worker(source, output, data, runner) as worker:
+                  for name, subset in (("prefix6", files[:6]), ("isolated7", files[6:7]), ("suffix8", files[7:])):
+                      result = successful(execute(worker, output, name, subset), worker, subset, pilot, counter)
+                      combined["cases"].update(result["cases"])
+                      combined["coverage"].update(result["coverage"])
+              require_prior(combined)
+              return "REPRODUCED_WITH_ISOLATION_CONTROL_PASS"
+
+          def main():
+              if os.environ["DIAGNOSTIC_SCOPE"] != "group7" or platform.system() != "Linux" or platform.machine() != "x86_64":
+                  raise ValueError("group7 requires explicit native Linux x64 diagnostic mode")
+              tools = Path(os.environ["GITHUB_WORKSPACE"]) / ".pilot-tools"
+              spec = importlib.util.spec_from_file_location("pilot", tools / "scripts/flutter-coverage-pilot.py")
+              pilot = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(pilot)
+              data = pilot.manifest(pilot.DEFAULT_MANIFEST)
+              files = validate_reference(data, pilot)
+              source = Path(os.environ["GITHUB_WORKSPACE"]) / "source"
+              if subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip() != data["source_sha"]:
+                  raise ValueError("source differs from frozen group7 source")
+              subprocess.run(["git", "diff", "--exit-code", "HEAD"], cwd=source, check=True, timeout=30)
+              tracked = set(subprocess.check_output(["git", "ls-files", "--", "test/"], cwd=source, text=True).splitlines())
+              if not set(files).issubset(tracked) or any((source / file).is_symlink() for file in files):
+                  raise ValueError("group7 source missing or symlinked")
+              sdk = json.loads(subprocess.check_output(["flutter", "--version", "--machine"], text=True))
+              if any(sdk.get(key) != value for key, value in data["sdk"].items()):
+                  raise ValueError("SDK differs from frozen group7 identity")
+              output = Path(os.environ["RUNNER_TEMP"]) / "flutter-coverage-pilot/group7"
+              output.mkdir(parents=True, exist_ok=False)
+              (output / "input.json").write_text(json.dumps({
+                  "files": files, "sdk": sdk, "source_sha": data["source_sha"],
+                  "pilot_sha": os.environ["PILOT_SHA"], "builder_base": data["builder_base"],
+                  "reference": REFERENCE, "reference_sha256": REFERENCE_SHA256,
+                  "cpu_count": os.cpu_count(), "platform": platform.platform(),
+                  "cpu_max": Path("/sys/fs/cgroup/cpu.max").read_text() if Path("/sys/fs/cgroup/cpu.max").exists() else "UNKNOWN",
+                  "memory_max": Path("/sys/fs/cgroup/memory.max").read_text() if Path("/sys/fs/cgroup/memory.max").exists() else "UNKNOWN",
+                  "release_acceptance": False,
+              }, indent=2) + "\n")
+              counter = pilot.module("counter", tools / "scripts/count-flutter-machine-tests.py")
+              runner = pilot.module("runner", tools / "scripts/run-flutter-coverage.py")
+              receipt = {"status": "DIAGNOSTIC_FAILED", "release_acceptance": False,
+                         "reference_sha256": REFERENCE_SHA256, "files": 8}
+              try:
+                  receipt["status"] = experiment(source, output, data, files, pilot, counter, runner)
+              finally:
+                  (output / "comparison.json").write_text(json.dumps(receipt, indent=2) + "\n")
+              print(json.dumps(receipt))
+
+          if __name__ == "__main__":
+              main()
           PY
 
       - name: Retain successful or partial diagnostic evidence

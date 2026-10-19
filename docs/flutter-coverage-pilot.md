@@ -106,7 +106,7 @@ The coordinator integrates and dispatches this workflow only after the frozen
 1.3.140 release completes. It has no push, PR, schedule, workflow-call or release
 trigger, and never publishes a source proof or release artifact. A fixed
 concurrency group queues another manual invocation instead of cancelling an
-active run. One invocation performs **A, B, B, A exactly once**, on the same
+active run. An explicit `diagnostic_scope=abba` invocation performs **A, B, B, A exactly once**, on the same
 GitHub-hosted Ubuntu 24.04 x64 job. There is no repeated-trial loop or matrix.
 
 The workflow freezes source `473af71077c61db9e42170b304bce1fc446c9077`, baseline
@@ -165,7 +165,7 @@ coverage. The earlier 73m20s run used a different source and is not this baselin
 After integration and the coordinator's release-window check, dispatch manually:
 
 ```sh
-gh workflow run flutter-coverage-pilot.yml --repo onesyue/yuelink-ci --ref master
+gh workflow run flutter-coverage-pilot.yml --repo onesyue/yuelink-ci --ref master -f diagnostic_scope=abba
 gh run list --repo onesyue/yuelink-ci --workflow flutter-coverage-pilot.yml \
   --event workflow_dispatch --branch master --limit 1 \
   --json databaseId,headSha,status,url
@@ -178,3 +178,70 @@ comparators with only the expensive pilot invocation substituted. They include
 first-pair failure, removed second invocation, wrong source, changed cases/skips,
 missing terminals/LCOV, lost coverage, changed resources and retained Git
 credentials. They are wiring evidence, not a real Flutter benchmark.
+
+
+## Bounded group7 follow-up (default manual mode)
+
+Run39203863860 at workflow65be2c0 failed in AB/B group7: after all12 reset-operation
+store tests and hidden tearDownAll passed, the Flutter tester reported a
+segmentation fault during finalization; the enclosing command timed out at300s.
+The eighth suite never began; no group LCOV/final done or AB/BA aggregate acceptance
+exists. Individual A/21–28 commands completed with74 successes and2 existing skips.
+These facts reject the current grouping, but do not establish an engine cause,
+isolation fix, speedup or whole-suite result.
+
+The manual selector defaults to `group7`; choose `abba` explicitly for the historical
+four-variant experiment. No source, SDK or file-list override is accepted. Both modes
+retain the same fixed source473/baseline113c/pilot996/SDK3.47.7 identity and read-only
+authority. The production build/source-attestation workflows are unchanged.
+
+Group7 runs precisely the existing eight-file B group7 once, serially, in one fresh
+worker. It preserves coverage, --machine, --concurrency=1, compiler-cache reset and
+300s timeout/30s kill grace/350s outer watchdog. A complete success must match the
+previous A corpus and yields NOT_REPRODUCED, then stops. A different or incomplete
+failure stops as DIAGNOSTIC_FAILED. Only the exact prior signature (exit124, seven
+ordered suites, all prior prefix identities/skips, successful hidden tearDownAll,
+its loading sentinel's single native finalization error, no done/LCOV) permits the
+isolation control. That control uses a second fresh worker and exactly three serial
+commands: first six files, reset-operation store alone, last latch file alone.
+There are at most four Flutter test commands, never a retry or a second ABBA run.
+
+The successful control must match the prior76-case identity/skip multiset and17654-row
+LCOV instrumentation/hit union using the frozen actual parsers. SHA256 expectations
+are canonical JSON (sorted keys, compact separators, ASCII escaping); identity rows
+are sorted [file,name,skipped,multiplicity], and coverage rows are sorted
+[file,counter-kind,counter-key,hit]. They were derived from run39203863860 artifact
+12165665386 A/21–28. Their case digest is60f97696b06dbea7c8fd401300525a68e5f3002074773cbde2ddfaf9c1054474;
+coverage digest isbf27a06a11049742d6cd6005eff8891e843cef9de8700eb571eb10237ed6e862.
+The inline reference also binds each original JSONL/LCOV hash, original execution/input
+identities and A/B grouping hashes. A separate canonical reference digest rejects
+missing or changed reference fields. It is a reviewed prior-data reference, not a
+new manifest or a runtime download; the complete original raw artifact remains the
+audit source. No absent-reference fallback or narrower case-count-only success exists.
+
+Group7 has a25-minute step/40-minute job ceiling, preserving ABBA's105/120-minute
+ceilings. Setup uses the existing pinned SDK/cache stages; neither mode downloads a
+client package. Group7 writes input/reference/resource/timing/report/coverage data
+and an explicit non-release comparison status; partial evidence always uploads.
+Preflight failures before output creation still remain failed workflow steps with
+execution/host diagnostics. Only REPRODUCED_WITH_ISOLATION_CONTROL_PASS supports a
+later isolation candidate; it is not DIAGNOSTIC_ABBA_PASSED, a performance result or
+release acceptance. All statuses retain release_acceptance=false.
+
+A group7 run omits the former other three concurrent workers and preceding
+subscription-parser command. Resource/history differences remain recorded limitations;
+a non-reproduction does not refute the original failure. The workstation has no
+cached exact Linux x64 SDK; macOS ARM64 and Linux3.47.6 are not substitutes.
+
+After separate coordinator approval of a signed workflow revision, dispatch once:
+
+```sh
+gh workflow run flutter-coverage-pilot.yml --repo onesyue/yuelink-ci \
+  --ref <approved-workflow-ref> -f diagnostic_scope=group7
+```
+
+Bind the resulting run/head to that exact approved revision. This source change does
+not authorize dispatch, downloading a local SDK, raising resource/time limits or
+rerunning the whole ABBA experiment. Offline tests execute the extracted consumer,
+real machine/coverage parsers and real main receipt handling with only expensive
+Flutter/worktree setup substituted; they are not a native Flutter measurement.
