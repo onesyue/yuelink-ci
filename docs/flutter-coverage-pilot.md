@@ -1,8 +1,10 @@
 # Bounded Flutter coverage A/B pilot
 
-This is a diagnostic candidate for W12.1, not a production runner replacement,
+This is a diagnostic candidate for W12.3, not a production runner replacement,
 release receipt, complete-suite result, or demonstrated performance improvement.
-No workflow invokes it. The production coverage runner and workflows are unchanged.
+The manual `flutter-coverage-pilot.yml` workflow invokes the frozen implementation
+in a separate diagnostic job. The production coverage runner, release workflow
+and source-attestation workflow are unchanged.
 
 ## Frozen inputs and acceptance
 
@@ -97,3 +99,82 @@ that GNU-time case; only its actual Linux execution counts as evidence.
 No real Flutter A/B performance run has been performed for this candidate.
 Use the paired pilot to decide whether further investigation is justified; only
 a later unchanged-denominator full suite can validate production applicability.
+
+## Manual native Linux diagnostic
+
+The coordinator integrates and dispatches this workflow only after the frozen
+1.3.140 release completes. It has no push, PR, schedule, workflow-call or release
+trigger, and never publishes a source proof or release artifact. A fixed
+concurrency group queues another manual invocation instead of cancelling an
+active run. One invocation performs **A, B, B, A exactly once**, on the same
+GitHub-hosted Ubuntu 24.04 x64 job. There is no repeated-trial loop or matrix.
+
+The workflow freezes source `473af71077c61db9e42170b304bce1fc446c9077`, baseline
+builder `113c864b869d6b206a06d6ed5fe138a6f657bd69` and pilot implementation
+`9965321062a98a273fb92d8cd00cdc004f165866`. The workflow itself has a newer commit,
+recorded separately in `execution.json`; do not describe that as a run of the
+old builder workflow. The pilot verifies unchanged baseline helper hashes and
+the exact Flutter/framework/engine/Dart tuple. No user input can substitute a
+floating source or SDK. Recursive submodules and the signed native QUIC source
+export are checked before execution.
+
+Source access reuses the existing source-attestation job's read-only
+`SRC_DEPLOY_KEY` authorization. The pinned checkout action receives a fixed
+GitHub Ed25519 known-host key, strict SSH checking, full history and
+`persist-credentials: false`; its temporary authentication is removed before
+tests, and a real Git-config guard rejects retained SSH/header credentials.
+The GitHub host key was read from the official metadata API on 2026-10-19. This
+diagnostic adds no App/PAT configuration, fallback path or permission grant.
+When the main source-access chain migrates to the GitHub App under the existing
+security work item, migrate this diagnostic in the same reviewed batch.
+
+SDK installation reuses the pinned, digest-verifying setup action. The existing
+lockfile-keyed pub cache is warmed once before either timed pair. Each disposable
+worker still resolves with `--offline --enforce-lockfile`. GNU time is required;
+the workflow installs the distribution package only if the hosted image lacks
+it, then records its version and host resources. The workflow never builds a
+local emulator, downloads an app release package or changes the formal gate.
+
+The job has a **120-minute total ceiling** and the combined experiment step a
+**105-minute ceiling**, leaving up to 15 minutes for setup/evidence handling.
+The pilot's existing 300-second group timeout, 30-second kill grace and four
+workers remain fixed. These are failure limits, not promised completion times:
+if many groups approach their individual limit, the overall ceiling can expire
+first. A timeout is a failed diagnostic, never partial acceptance or permission
+to raise the production gate's limits. Raw results upload on normal success or
+failure; a runner loss or hard job cancellation can still prevent upload.
+
+After both pair-level comparators pass, the workflow reparses the actual JSONL
+and LCOV with the same frozen helpers. It compares case-name/file/skip multisets
+and instrumented/hit unions across **all four variants**, not only within each
+pair, and rejects changed SDK or CPU/memory resource bounds. Missing second-pair
+reports, terminal events, LCOV or successful pair receipts cannot create the
+aggregate `DIAGNOSTIC_ABBA_PASSED` receipt. All receipts explicitly retain
+`release_acceptance: false`. Artifacts include successful or partial raw data,
+GNU-time accounting, host facts and input identities for seven days.
+
+The current exact-source baseline is run `39188122863`: its complete coverage
+step took **81m11s** on 2026-10-19. The 36 pilot files have 464 passing and two
+macOS-skipped visible cases in that Linux execution. Their protocol-duration
+sum is 1,209.674 seconds across concurrent processes; 982.663 seconds precede
+initial hidden loading completion. Loading includes compilation and framework
+startup and is not isolated compiler CPU time. These observations justify the
+bounded experiment; they do not establish a speedup or replace full-suite
+coverage. The earlier 73m20s run used a different source and is not this baseline.
+
+After integration and the coordinator's release-window check, dispatch manually:
+
+```sh
+gh workflow run flutter-coverage-pilot.yml --repo onesyue/yuelink-ci --ref master
+gh run list --repo onesyue/yuelink-ci --workflow flutter-coverage-pilot.yml \
+  --event workflow_dispatch --branch master --limit 1 \
+  --json databaseId,headSha,status,url
+```
+
+Bind the returned run to the integrated workflow commit before accepting its
+artifact. Do not dispatch the side branch while the current release is frozen.
+Offline workflow tests execute the real shell wiring and frozen report
+comparators with only the expensive pilot invocation substituted. They include
+first-pair failure, removed second invocation, wrong source, changed cases/skips,
+missing terminals/LCOV, lost coverage, changed resources and retained Git
+credentials. They are wiring evidence, not a real Flutter benchmark.

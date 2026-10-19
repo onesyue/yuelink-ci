@@ -1,0 +1,196 @@
+name: Flutter coverage pilot
+run-name: Flutter coverage pilot 473af710 ABBA
+
+# Diagnostic only. No release, source attestation or production runner changes.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flutter-coverage-pilot-473af710
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: 473af71077c61db9e42170b304bce1fc446c9077
+  PILOT_SHA: 9965321062a98a273fb92d8cd00cdc004f165866
+  BUILDER_BASE: 113c864b869d6b206a06d6ed5fe138a6f657bd69
+  FLUTTER_VERSION: '3.47.7'
+  TZ: UTC
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Record diagnostic identity and require native Linux x64
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_OS" = Linux
+          test "$RUNNER_ARCH" = X64
+          test "$(uname -m)" = x86_64
+          mkdir -p "$RUNNER_TEMP/flutter-coverage-pilot"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          keys = ("SOURCE_SHA", "PILOT_SHA", "BUILDER_BASE", "FLUTTER_VERSION",
+                  "GITHUB_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "RUNNER_ARCH")
+          path = Path(os.environ["RUNNER_TEMP"]) / "flutter-coverage-pilot/execution.json"
+          path.write_text(json.dumps({key: os.environ[key] for key in keys}, indent=2) + "\n")
+          PY
+
+      # Reuse the already verified source-attestation authorization. App migration
+      # belongs to the shared security work item; this job adds no fallback path.
+      - name: Checkout exact private source with full history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ env.SOURCE_SHA }}
+          path: source
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          ssh-known-hosts: github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+          ssh-strict: true
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Bind source and reject retained checkout credentials
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/master
+          git diff --exit-code HEAD
+          if git config --local --get-regexp '^(core\.sshcommand|http\..*\.extraheader)$' >/dev/null; then
+            echo '::error::checkout credentials must be removed before test execution'
+            exit 1
+          fi
+          python3 core/mihomo/third_party/verify_quic_source.py
+
+      - name: Checkout frozen diagnostic implementation
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ env.PILOT_SHA }}
+          path: .pilot-tools
+          persist-credentials: false
+
+      - name: Set up exact verified Flutter SDK
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@25d71e2ab4d5c16695e569c6011ddbdc66ab221f # pinned installer v1
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Restore locked pub cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.pub-cache
+          key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('source/pubspec.lock') }}
+
+      - name: Warm dependencies before either timed pair
+        working-directory: source
+        run: flutter pub get --enforce-lockfile
+
+      - name: Prepare measurement tool and record runner resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x /usr/bin/time ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y time
+          fi
+          /usr/bin/time --version
+          command -v timeout
+          {
+            uname -a
+            nproc
+            lscpu
+            free -b
+            df -B1 "$RUNNER_TEMP"
+          } > "$RUNNER_TEMP/flutter-coverage-pilot/host.txt"
+
+      - name: Run one AB pair then one BA pair and compare all four variants
+        # This leaves 15 minutes of the job budget for setup and evidence upload.
+        # Existing per-group 300s + 30s grace remains unchanged and fail-closed.
+        timeout-minutes: 105
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/.pilot-tools/scripts/flutter-coverage-pilot.py" \
+            --source "$GITHUB_WORKSPACE/source" \
+            --output "$RUNNER_TEMP/flutter-coverage-pilot/AB" --order AB
+          python3 "$GITHUB_WORKSPACE/.pilot-tools/scripts/flutter-coverage-pilot.py" \
+            --source "$GITHUB_WORKSPACE/source" \
+            --output "$RUNNER_TEMP/flutter-coverage-pilot/BA" --order BA
+          python3 - <<'PY'
+          import importlib.util, json, os
+          from collections import Counter
+          from pathlib import Path
+          tools = Path(os.environ["GITHUB_WORKSPACE"]) / ".pilot-tools"
+          spec = importlib.util.spec_from_file_location("pilot", tools / "scripts/flutter-coverage-pilot.py")
+          pilot = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(pilot)
+          data = pilot.manifest(pilot.DEFAULT_MANIFEST)
+          if (data["source_sha"] != os.environ["SOURCE_SHA"] or
+                  data["builder_base"] != os.environ["BUILDER_BASE"]):
+              raise ValueError("frozen source/builder identity differs")
+          counter = pilot.module("counter", tools / "scripts/count-flutter-machine-tests.py")
+          root = Path(os.environ["RUNNER_TEMP"]) / "flutter-coverage-pilot"
+          combined, resources = [], []
+          for order in ("AB", "BA"):
+              folder = root / order
+              receipt = json.loads((folder / "comparison.json").read_text())
+              if (receipt["status"] != "DIAGNOSTIC_PAIR_PASSED" or
+                      receipt["release_acceptance"] is not False or receipt["files"] != 36):
+                  raise ValueError("missing successful diagnostic pair")
+              identity = json.loads((folder / "input.json").read_text())
+              if identity["manifest"] != data or identity["order"] != order:
+                  raise ValueError("pair inputs changed")
+              resources.append({key: identity[key] for key in
+                                ("sdk", "platform", "cpu_count", "cpu_max", "memory_max")})
+              for variant in order:
+                  directory = folder / variant
+                  groups = json.loads((directory / "groups.json").read_text())
+                  if groups != pilot.groups(data, variant):
+                      raise ValueError("pair group inventory changed")
+                  result = {"cases": Counter(), "coverage": set()}
+                  for index, files in enumerate(groups):
+                      report = directory / f"{index}.jsonl"
+                      events = []
+                      for line in report.read_text().splitlines():
+                          try:
+                              event = json.loads(line)
+                          except json.JSONDecodeError:
+                              continue
+                          if isinstance(event, dict) and event.get("type") == "suite":
+                              events.append(event)
+                      path = events[0]["suite"]["path"]
+                      if not any(path.endswith("/" + file) for file in files):
+                          raise ValueError("report suite escaped selected file set")
+                      worker = Path(path.rsplit("/test/", 1)[0])
+                      result["cases"].update(pilot.identities(report, worker, files, counter))
+                      result["coverage"].update(pilot.coverage(directory / f"{index}.info", worker))
+                  combined.append(result)
+          if resources[0] != resources[1]:
+              raise ValueError("SDK or runner resource bounds changed between pairs")
+          for result in combined[1:]:
+              pilot.compare(combined[0], result)
+          (root / "comparison.json").write_text(json.dumps({
+              "status": "DIAGNOSTIC_ABBA_PASSED", "release_acceptance": False,
+              "order": "ABBA", "files": 36,
+              "visible_cases": sum(combined[0]["cases"].values()),
+              "source_sha": data["source_sha"], "builder_base": data["builder_base"],
+          }, indent=2) + "\n")
+          PY
+
+      - name: Retain successful or partial diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: flutter-coverage-pilot-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/flutter-coverage-pilot/
+          if-no-files-found: error
+          retention-days: 7
