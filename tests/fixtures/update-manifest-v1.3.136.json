@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.136",
+  "channel": "stable",
+  "publishedAt": "2026-10-16T07:09:00Z",
+  "expiresAt": "2026-11-20T07:09:00Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "线路健康判断更准确。\n\n- 标准 204 探测地址只在收到预期响应时判定可用，减少自动选择和故障转移误选异常线路。\n- 旧订阅缓存会在配置处理时兼容修正，保留节点、策略组顺序和手动选择；自定义探测地址与明确指定的状态规则不受影响。\n- 配合本次订阅更新，Teams 媒体规则优先于通用 UDP 443 限制。刷新订阅后即可取得最新服务分流规则。\n\n实际会议质量仍取决于本地网络、运营商路径和服务端状态。\n",
+  "notesEn": "More accurate connection health checks.\n\n- Standard 204 probe endpoints must return their expected response before a route is considered healthy, reducing incorrect automatic selection and failover.\n- Cached profiles receive the compatibility correction during configuration processing. Nodes, group order and manual selections are preserved, as are custom probe endpoints and explicit status contracts.\n- Verified that the updated subscription keeps Teams media rules ahead of the general UDP 443 restriction. Refresh your subscription to receive the latest service routing rules.\n\nMeeting quality still depends on the local network, carrier path and remote service.\n",
+  "sourceCommit": "3e5a6fefcea301294e8d830707730e71698bfabc",
+  "sha256SumsSha256": "c647a99bf640491f98b369ae3bb04c38c515b3fbb29532094530bf4e05f521e7",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-android-arm64-v8a.apk",
+      "sha256": "cefee1db24dedcc49d8db23da81f2f0be13bfc2e73af10ec0ff1f12a6406aa0b"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-android-armeabi-v7a.apk",
+      "sha256": "86db279d688e2b1d976f23631b1766dcb7011da54a46aee3556efa25b87a5228"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-android-x86_64.apk",
+      "sha256": "f62b07cdff8b2d5978a5328b72dd1505e12aab798fe7348bd28b82e2c3c04463"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-android-universal.apk",
+      "sha256": "61045b7fff154f33bce9f77200183cbdbf54ba01f92f218274b00ab15cc21787"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-ios.ipa",
+      "sha256": "916641fa8d9016f2fd359d08392ec18297065d6ffefff06efb9ced6c3e8b2e54"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-macos-universal.dmg",
+      "sha256": "795587c255e8bfbcff5b47c9148ac32c280d4a2da101e1ee9d2d868e14c149d5",
+      "minimumSystemVersion": "13.0"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-windows-amd64-setup.exe",
+      "sha256": "cf6fb15d40c6730170dba8e915a863414ad759f3002b8fdeba86922e94814b54"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-windows-amd64-portable.zip",
+      "sha256": "9ad762a4967b8bb67fbf650a264a4e1f151acc66a369e93511c5f3685486900e"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-linux-amd64.AppImage",
+      "sha256": "e0d00f8b27e910f9279b1e7aa13fda1df13f51b317e6b0ca3f0500a470443872"
+    }
+  },
+  "compatibility": {
+    "schemaVersion": 1,
+    "policyRevision": 1,
+    "effectiveAt": "2026-10-15T00:00:00Z",
+    "transitionDays": 90,
+    "enforcement": "observe",
+    "unknownClient": "unverified",
+    "releases": [
+      {
+        "product": "sing-box",
+        "version": "1.13.21",
+        "releasedAt": "2026-08-30T11:24:04Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.13.21/sing-box-1.13.21-linux-arm64.tar.gz",
+          "sha256": "3e30b876c9a93c19e503e2a2d6249cf05e6a26766553d4b61e1daf48223f304f"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      },
+      {
+        "product": "sing-box",
+        "version": "1.14.3",
+        "releasedAt": "2026-10-09T05:35:00Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-linux-arm64.tar.gz",
+          "sha256": "29dae24d76bea3bc62d07dd3e60cfc12003de7debbd6b768df9be9c68360174e"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      }
+    ],
+    "policySourceSha256": "f1a12d625595963fb3c16b69ac216101c733fd21f18aad8b95c7ccdefada58b4"
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "ae6eed6d92acc0c8c458f38a9f359072522bff875b30ea2377ab89dcc167a12e",
+    "sha256SumsSha256": "c647a99bf640491f98b369ae3bb04c38c515b3fbb29532094530bf4e05f521e7",
+    "payloadBundleSha256": "a46ab30c7a0dd2491f02695334c5e3d2de6ee2bfd4a8c88ef03f985a1e3df8ee",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:KwN1RnJJOn5qQvLXcVLbekGnqYua4mt7TE1J5ChZb9iD4J2y42cAvVKLENvVZp9IzGCtU42UPpkviwci71TtBA=="
+}

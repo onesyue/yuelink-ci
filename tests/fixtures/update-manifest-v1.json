@@ -1,52 +1,52 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.136",
+  "version": "1.3.140",
   "channel": "stable",
-  "publishedAt": "2026-10-16T07:09:00Z",
-  "expiresAt": "2026-11-20T07:09:00Z",
+  "publishedAt": "2026-10-19T01:55:43Z",
+  "expiresAt": "2026-11-23T01:55:43Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "线路健康判断更准确。\n\n- 标准 204 探测地址只在收到预期响应时判定可用，减少自动选择和故障转移误选异常线路。\n- 旧订阅缓存会在配置处理时兼容修正，保留节点、策略组顺序和手动选择；自定义探测地址与明确指定的状态规则不受影响。\n- 配合本次订阅更新，Teams 媒体规则优先于通用 UDP 443 限制。刷新订阅后即可取得最新服务分流规则。\n\n实际会议质量仍取决于本地网络、运营商路径和服务端状态。\n",
-  "notesEn": "More accurate connection health checks.\n\n- Standard 204 probe endpoints must return their expected response before a route is considered healthy, reducing incorrect automatic selection and failover.\n- Cached profiles receive the compatibility correction during configuration processing. Nodes, group order and manual selections are preserved, as are custom probe endpoints and explicit status contracts.\n- Verified that the updated subscription keeps Teams media rules ahead of the general UDP 443 restriction. Refresh your subscription to receive the latest service routing rules.\n\nMeeting quality still depends on the local network, carrier path and remote service.\n",
-  "sourceCommit": "3e5a6fefcea301294e8d830707730e71698bfabc",
-  "sha256SumsSha256": "c647a99bf640491f98b369ae3bb04c38c515b3fbb29532094530bf4e05f521e7",
+  "notes": "改善 iOS 连接、订阅配置恢复和到期提醒。\n\n- 修复部分重新签名安装后无法识别 VPN 扩展的问题，并明确不同签名方式的 VPN 权限要求。\n- 刷新订阅时重新下载已损坏的缓存配置，拒绝用无效内容覆盖原有可用配置。\n- 补全桌面连接失败的诊断日志，便于定位底层连接问题。\n- 统一到期提醒，在应用重启后继续记住已处理的提醒。\n- 流量提醒按账号和当前流量周期判断，减少重复提醒；请求结果不明确时不会重复发送。\n- 切换账号、退出登录或更新流量周期后，取消过期提醒。\n- 继续遵循你的提醒开关和系统通知权限；无法确认权限时不会擅自开启通知。\n",
+  "notesEn": "Improve iOS connections, subscription recovery and reminders.\n\n- Recognize the installed VPN extension after re-signing and clarify the VPN permissions required by different signing methods.\n- Re-download damaged subscription caches on refresh and keep usable configurations when a response contains invalid content.\n- Include the correct desktop connection logs for more useful failure diagnostics.\n- Unify expiry reminders and remember handled events across app restarts.\n- Match quota reminders to the account and current allowance cycle, reducing duplicate attempts when a request has an uncertain result.\n- Cancel outdated reminders after switching accounts, signing out or starting a new allowance cycle.\n- Respect your reminder preference and system notification permission. An unknown permission state never enables notifications automatically.\n",
+  "sourceCommit": "473af71077c61db9e42170b304bce1fc446c9077",
+  "sha256SumsSha256": "1e47210704fc41956067c6b092310093da8cb958921abb55036bbfbb5b03e8d7",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-android-arm64-v8a.apk",
-      "sha256": "cefee1db24dedcc49d8db23da81f2f0be13bfc2e73af10ec0ff1f12a6406aa0b"
+      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-android-arm64-v8a.apk",
+      "sha256": "755c3e8b0fd229a22b07e0a91b20c2266617313ecf7c15bebb169eabe583846d"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-android-armeabi-v7a.apk",
-      "sha256": "86db279d688e2b1d976f23631b1766dcb7011da54a46aee3556efa25b87a5228"
+      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-android-armeabi-v7a.apk",
+      "sha256": "3f478ec0d08ae70914641f63138435b763d8d84c0e8fb802ffac5ef2d8279a7f"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-android-x86_64.apk",
-      "sha256": "f62b07cdff8b2d5978a5328b72dd1505e12aab798fe7348bd28b82e2c3c04463"
+      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-android-x86_64.apk",
+      "sha256": "42e4a4f281edc4baaa2299e75c12eb3561bcc25557bb5c57f20b2e08da42a5b9"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-android-universal.apk",
-      "sha256": "61045b7fff154f33bce9f77200183cbdbf54ba01f92f218274b00ab15cc21787"
+      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-android-universal.apk",
+      "sha256": "c97b94b416ee51674f0f5aee308d290146aaf801540a4fa13fb6c68eac0a751e"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-ios.ipa",
-      "sha256": "916641fa8d9016f2fd359d08392ec18297065d6ffefff06efb9ced6c3e8b2e54"
+      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-ios.ipa",
+      "sha256": "4fe3a76bc6b83e539ea0107f75ed0d75529f57fddc6caaf2a18729f296743108"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-macos-universal.dmg",
-      "sha256": "795587c255e8bfbcff5b47c9148ac32c280d4a2da101e1ee9d2d868e14c149d5",
+      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-macos-universal.dmg",
+      "sha256": "b0b156f1bebb7d14fdf8a368bd24748712d02dd137b89c8b9c989bf842cc44ce",
       "minimumSystemVersion": "13.0"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-windows-amd64-setup.exe",
-      "sha256": "cf6fb15d40c6730170dba8e915a863414ad759f3002b8fdeba86922e94814b54"
+      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-windows-amd64-setup.exe",
+      "sha256": "637d3ddd111d0b8e4ad219f58973c4710164eef5707a0aa6b34a3f24cb6d75d0"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-windows-amd64-portable.zip",
-      "sha256": "9ad762a4967b8bb67fbf650a264a4e1f151acc66a369e93511c5f3685486900e"
+      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-windows-amd64-portable.zip",
+      "sha256": "1197964eb20560be913825bc2ffef377238f0bf9539df36764adb541e1fee0f7"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.136/YueLink-1.3.136-linux-amd64.AppImage",
-      "sha256": "e0d00f8b27e910f9279b1e7aa13fda1df13f51b317e6b0ca3f0500a470443872"
+      "url": "https://yuetong.app/v1.3.140/YueLink-1.3.140-linux-amd64.AppImage",
+      "sha256": "3c253e3dfaa5f9ac213d3f009b8927cb6e6f89d891b731547ffa474a043f9d3d"
     }
   },
   "compatibility": {
@@ -84,10 +84,10 @@
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "ae6eed6d92acc0c8c458f38a9f359072522bff875b30ea2377ab89dcc167a12e",
-    "sha256SumsSha256": "c647a99bf640491f98b369ae3bb04c38c515b3fbb29532094530bf4e05f521e7",
-    "payloadBundleSha256": "a46ab30c7a0dd2491f02695334c5e3d2de6ee2bfd4a8c88ef03f985a1e3df8ee",
+    "candidateSha256": "eba7217901b308cbff54fff1fd7e3e5b4eb608ff01ecfe200e1dd124caf61d66",
+    "sha256SumsSha256": "1e47210704fc41956067c6b092310093da8cb958921abb55036bbfbb5b03e8d7",
+    "payloadBundleSha256": "713ad8fff6e312a4a4a01659dbb3ed7cd87cce5269639e260f6412fae5e857cc",
     "payloadCount": 19
   },
-  "sig": "ed25519:KwN1RnJJOn5qQvLXcVLbekGnqYua4mt7TE1J5ChZb9iD4J2y42cAvVKLENvVZp9IzGCtU42UPpkviwci71TtBA=="
+  "sig": "ed25519:Wz8QCoj+LcIMUHZkl6puSNwJjzC1PKWUv4UmznJfXetMl1FSv5i32fLK1D8upX5M3TQzOjKh3oi5IdSOHEawCQ=="
 }
