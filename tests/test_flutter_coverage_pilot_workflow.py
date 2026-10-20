@@ -124,7 +124,10 @@ class PilotWorkflowTests(unittest.TestCase):
     def test_manual_single_native_job_has_frozen_inputs_and_read_only_authority(self):
         text = WORKFLOW.read_text()
         trigger = text.split("on:\n", 1)[1].split("\npermissions:", 1)[0].strip()
-        self.assertEqual(trigger, "workflow_dispatch:")
+        self.assertIn("workflow_dispatch:", trigger)
+        self.assertIn("default: abba", trigger)
+        self.assertIn("- group25", trigger)
+        self.assertIn("if: inputs.experiment == 'abba' || inputs.experiment == ''", text)
         self.assertIn("permissions:\n  contents: read", text)
         self.assertEqual(text.count("permissions:"), 1)
         self.assertIn("runs-on: ubuntu-24.04", text)
@@ -141,7 +144,7 @@ class PilotWorkflowTests(unittest.TestCase):
                       "ssh-known-hosts: github.com ssh-ed25519 ", "ssh-strict: true",
                       "fetch-depth: 0", "submodules: recursive", "persist-credentials: false"):
             self.assertIn(value, checkout)
-        self.assertEqual(re.findall(r"secrets\.([A-Z0-9_]+)", text), ["SRC_DEPLOY_KEY"])
+        self.assertEqual(set(re.findall(r"secrets\.([A-Z0-9_]+)", text)), {"SRC_DEPLOY_KEY"})
         self.assertIn("ref: ${{ env.PILOT_SHA }}", step(text, "Checkout frozen diagnostic implementation"))
         for action in re.findall(r"uses:\s*(\S+)", text):
             self.assertRegex(action, r"@[0-9a-f]{40}$")
@@ -149,6 +152,73 @@ class PilotWorkflowTests(unittest.TestCase):
         self.assertIn("if: always()", upload)
         self.assertIn("if-no-files-found: error", upload)
         self.assertIn("path: ${{ runner.temp }}/flutter-coverage-pilot/", upload)
+
+    def test_group25_mode_has_fixed_inputs_cache_only_and_no_release_authority(self):
+        text = WORKFLOW.read_text().split("\n  group25:\n", 1)[1]
+        for required in ("if: inputs.experiment == 'group25'", "timeout-minutes: 25",
+                         "SOURCE_SHA: 2af5cd844480a097f8159c0f2562b009f6c39467",
+                         "ref: ${{ github.sha }}", "persist-credentials: false",
+                         "YUELINK_COVERAGE_MAX_WORKERS: '1'",
+                         "yue-flutter-sdk-v1-Linux-X64-3.47.7",
+                         "if: always()", "timeout-minutes: 15"):
+            self.assertIn(required, text)
+        for forbidden in ("setup-flutter@", "apt-get", "flutter pub get", "--order",
+                          "workflow run", "git push", "source-attestation", "continue-on-error"):
+            self.assertNotIn(forbidden, text)
+        self.assertIn("--group25 --source", text)
+        self.assertIn("path: ${{ runner.temp }}/flutter-group25/", text)
+
+    def test_real_group25_workflow_argv_identity_and_exit_are_preserved(self):
+        tools = self.workspace / ".group25-tools"
+        (tools / "scripts").mkdir(parents=True)
+        script = tools / "scripts/flutter-coverage-pilot.py"
+        script.write_text("import os,sys,json\nfrom pathlib import Path\n"
+                          "Path(os.environ['PILOT_CALLS']).write_text(json.dumps(sys.argv[1:]))\n"
+                          "raise SystemExit(int(os.environ['FIXTURE_RC']))\n")
+        subprocess.run(["git", "init", "-q", str(tools)], check=True)
+        subprocess.run(["git", "add", "."], cwd=tools, check=True)
+        subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                        "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
+                        "commit", "-qm", "fixture"], cwd=tools, check=True)
+        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=tools, text=True).strip()
+        command = ["bash", "-c", shell(WORKFLOW.read_text(), "Run fixed group25 and withdrawal diagnostics once")]
+        for code in (0, 23):
+            result = subprocess.run(command, env=self.env | {"GITHUB_SHA": sha, "FIXTURE_RC": str(code)},
+                                    capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, code, result.stderr)
+            self.assertEqual(json.loads(Path(self.env["PILOT_CALLS"]).read_text()),
+                             ["--group25", "--source", str(self.workspace / "source"),
+                              "--output", str(Path(self.env["RUNNER_TEMP"]) / "flutter-group25/result")])
+        Path(self.env["PILOT_CALLS"]).unlink()
+        result = subprocess.run(command, env=self.env | {"GITHUB_SHA": "1" * 40, "FIXTURE_RC": "0"},
+                                capture_output=True, text=True, check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(Path(self.env["PILOT_CALLS"]).exists())
+
+    def test_setup_failure_terminal_is_written_but_existing_failure_is_not_overwritten(self):
+        command = ["bash", "-c", shell(WORKFLOW.read_text(), "Record group25 setup failure if no terminal exists")]
+        result = subprocess.run(command, env=self.env | {"GITHUB_SHA": "1" * 40},
+                                capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        path = Path(self.env["RUNNER_TEMP"]) / "flutter-group25/result/diagnostic.json"
+        receipt = json.loads(path.read_text())
+        self.assertEqual(receipt["status"], "ENVIRONMENT_NOT_READY")
+        self.assertFalse(receipt["release_acceptance"])
+        path.write_text('{"status":"DIAGNOSTIC_PAIR_FAILED","release_acceptance":false}\n')
+        before = path.read_bytes()
+        subprocess.run(command, env=self.env | {"GITHUB_SHA": "1" * 40}, check=True)
+        self.assertEqual(path.read_bytes(), before)
+        path.unlink()
+        partial = path.parent / "group/events.jsonl"
+        partial.parent.mkdir()
+        partial.write_text('{"type":"start"}\n')
+        subprocess.run(command, env=self.env | {"GITHUB_SHA": "1" * 40}, check=True)
+        receipt = json.loads(path.read_text())
+        self.assertEqual(receipt["status"], "INCOMPLETE")
+        self.assertEqual(receipt["commands"], [
+            {"label": "group", "status": "UNKNOWN", "dispatch": "NOT_PROVED_BY_FINALIZER"}])
+        self.assertFalse(receipt["release_acceptance"])
+        self.assertEqual(partial.read_text(), '{"type":"start"}\n')
 
     def test_real_workflow_shell_invokes_exact_AB_then_BA_and_parses_all_reports(self):
         result = self.execute()
@@ -205,16 +275,22 @@ class PilotWorkflowTests(unittest.TestCase):
         verify.parent.mkdir(parents=True)
         verify.write_text("print('fixture source verification reached')\n")
         self.env["SOURCE_SHA"] = sha
-        command = shell(WORKFLOW.read_text(), "Bind source and reject retained checkout credentials")
-        positive = subprocess.run(["bash", "-c", command], cwd=source, env=self.env,
-                                  capture_output=True, text=True, check=False)
-        self.assertEqual(positive.returncode, 0, positive.stderr)
-        subprocess.run(["git", "config", "core.sshCommand", "ssh -i /fixture-key"], cwd=source, check=True)
-        negative = subprocess.run(["bash", "-c", command], cwd=source, env=self.env,
-                                  capture_output=True, text=True, check=False)
-        self.assertNotEqual(negative.returncode, 0)
-        self.assertIn("checkout credentials must be removed", negative.stdout)
-        self.assertNotIn("fixture source verification reached", negative.stdout)
+        for name in ("Bind source and reject retained checkout credentials",
+                     "Bind group25 source and refuse retained credentials"):
+            with self.subTest(guard=name):
+                command = shell(WORKFLOW.read_text(), name)
+                positive = subprocess.run(["bash", "-c", command], cwd=source, env=self.env,
+                                          capture_output=True, text=True, check=False)
+                self.assertEqual(positive.returncode, 0, positive.stderr)
+                for key in ("core.sshCommand", "http.https://github.com/.extraheader"):
+                    subprocess.run(["git", "config", key, "fixture-credential"], cwd=source, check=True)
+                    negative = subprocess.run(["bash", "-c", command], cwd=source, env=self.env,
+                                              capture_output=True, text=True, check=False)
+                    self.assertNotEqual(negative.returncode, 0)
+                    self.assertIn("checkout credentials must be removed", negative.stdout)
+                    self.assertNotIn("fixture source verification reached", negative.stdout)
+                    subprocess.run(["git", "config", "--unset", key], cwd=source, check=True)
+
 
 
 if __name__ == "__main__":

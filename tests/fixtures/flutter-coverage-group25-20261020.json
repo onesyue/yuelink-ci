@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "kind": "FIXED_GROUP25_DIAGNOSTIC",
+  "release_acceptance": false,
+  "source_sha": "2af5cd844480a097f8159c0f2562b009f6c39467",
+  "builder_base": "508358ebef580843b6d1412c7023ada65872462c",
+  "group_index": 25,
+  "files": [
+    "test/domain/proxy_group_icon_test.dart",
+    "test/domain/quota_reminder_test.dart",
+    "test/domain/store_order_balance_20260926_test.dart",
+    "test/domain/unlimited_and_expiry_test.dart",
+    "test/domain/withdrawal_test.dart",
+    "test/ffi/core_mock_proxy_test.dart",
+    "test/ffi/core_mock_test.dart",
+    "test/governance/apple_privacy_manifest_test.dart"
+  ],
+  "file_sha256": {
+    "test/domain/proxy_group_icon_test.dart": "1d106779e898a60c8ae17d237a55889fc85c0a3cd306eda429e83ab3176f928d",
+    "test/domain/quota_reminder_test.dart": "a151011124727629e7d70cb5254a6acb5e9594c74da72f08c6b6f92bfc30da22",
+    "test/domain/store_order_balance_20260926_test.dart": "f50a94603fbe39da3c224bae58e3112819deb31b408415ffaf5b777dbaf633b1",
+    "test/domain/unlimited_and_expiry_test.dart": "bd8075361ca21b0a0c46672f1cf8be6d69d6b581771ffd192dfb5bccd9694929",
+    "test/domain/withdrawal_test.dart": "b2d6852b893f9feba7f2cf6fa9c17a1f1e93798e3985b5b6404933fd3fe3c9d4",
+    "test/ffi/core_mock_proxy_test.dart": "399b2bd7a89deefe4dd18753a02e00ee1ea204c37b8b3035f99c67867b9193de",
+    "test/ffi/core_mock_test.dart": "0b1f4a64af125f1574cd71593aed50152e29af73e32526c26dace42d9e63b337",
+    "test/governance/apple_privacy_manifest_test.dart": "111c2420f2554661a53bfbb85aed6a6dc11b5a9556aab353b792cb3816052828"
+  },
+  "lib_tree": "c09139a5edfff26e4b50c80ad26c3a2c6e71a178",
+  "runtime_files": {
+    "pubspec.yaml": "4d6f77a85ddb7337628b2897d9b0b4bc0e6f6f84026ab3d5710dc95213137cfd",
+    "pubspec.lock": "9ecf042933ad80a2f592bd0742855ac841e95718c247fca8107a3992b987a0b3"
+  },
+  "sdk": {
+    "frameworkVersion": "3.47.7",
+    "frameworkRevision": "abaf9c523780a608bd46686fd5e53740a07077f8",
+    "engineRevision": "deb287481e3ce9468f3434937ced4240a70539ca",
+    "dartSdkVersion": "3.13.5"
+  },
+  "workers": 1,
+  "timeout_seconds": 300,
+  "outer_timeout_seconds": 350,
+  "helper_sha256": {
+    "scripts/run-flutter-coverage.py": "bc72139f0f5f3a5ae7f038f4295926127e828af060a66b55c058d28cbee6dda7",
+    "scripts/count-flutter-machine-tests.py": "cef17edaa97b6c207eb7bf2cceccf8823e53a2bafacf53cde53e512bcb872fcd",
+    ".github/actions/setup-flutter/install_flutter_sdk.py": "0ef481c00fbf51b0f35a09ae4eb5635521e8f9bb849f18a6f3b39d5cf961e568"
+  },
+  "expected": {
+    "group": {
+      "visible_cases": 78,
+      "visible_skips": 0,
+      "cases_sha256": "2b8d1a3e422d21c109cdc04498af94d42070a13b212ffcbedd6844d730f95944",
+      "coverage_sha256": "2d0162e5d065800e7f1118332bd20694066652919c16ab7ce25b91d8d378d85a",
+      "coverage_rows": 43372
+    },
+    "withdrawal": {
+      "visible_cases": 13,
+      "visible_skips": 0,
+      "cases_sha256": "3c35d23a50c32232ba03673fac63ac9b307cf8bcf2f16bf579138f9c1ff20960",
+      "coverage_sha256": "9412d3fea3fa9b69d5996cceef1d575220f3f4dec8a55007623c20ef322f7c8e",
+      "coverage_rows": 90
+    }
+  },
+  "baseline_archive_sha256": "da5c2d64ca33e5f86424c9429a3776c2ada91432b27c108d0ff61efae4aa7e50",
+  "failed_run": 39453244650,
+  "failed_attempt": 1
+}
