@@ -1072,13 +1072,27 @@
       "test/services/quit_watchdog_test.dart"
     ],
     [
-      "test/services/quota_reminder_api_test.dart",
-      "test/services/quota_reminder_platform_test.dart",
-      "test/services/recovery_manager_test.dart",
-      "test/services/rotating_log_file_test.dart",
-      "test/services/service_install_failure_test.dart",
-      "test/services/service_manager_root_allowlist_test.dart",
-      "test/services/service_manager_test.dart",
+      "test/services/quota_reminder_api_test.dart"
+    ],
+    [
+      "test/services/quota_reminder_platform_test.dart"
+    ],
+    [
+      "test/services/recovery_manager_test.dart"
+    ],
+    [
+      "test/services/rotating_log_file_test.dart"
+    ],
+    [
+      "test/services/service_install_failure_test.dart"
+    ],
+    [
+      "test/services/service_manager_root_allowlist_test.dart"
+    ],
+    [
+      "test/services/service_manager_test.dart"
+    ],
+    [
       "test/services/service_v1383_hardening_test.dart"
     ],
     [
@@ -1112,13 +1126,27 @@
       "test/shared/diag_uploader_test.dart"
     ],
     [
-      "test/shared/diagnostic_ipv6_redaction_test.dart",
-      "test/shared/diagnostic_redaction_escapes_test.dart",
-      "test/shared/diagnostic_report_test.dart",
-      "test/shared/diagnostic_text_test.dart",
-      "test/shared/error_logger_context_20261006_test.dart",
-      "test/shared/error_logger_first_frame_20260926_test.dart",
-      "test/shared/error_logger_test.dart",
+      "test/shared/diagnostic_ipv6_redaction_test.dart"
+    ],
+    [
+      "test/shared/diagnostic_redaction_escapes_test.dart"
+    ],
+    [
+      "test/shared/diagnostic_report_test.dart"
+    ],
+    [
+      "test/shared/diagnostic_text_test.dart"
+    ],
+    [
+      "test/shared/error_logger_context_20261006_test.dart"
+    ],
+    [
+      "test/shared/error_logger_first_frame_20260926_test.dart"
+    ],
+    [
+      "test/shared/error_logger_test.dart"
+    ],
+    [
       "test/shared/event_log_flush_before_exit_test.dart"
     ],
     [
@@ -1152,13 +1180,27 @@
       "test/widgets/app_notifier_overlay_test.dart"
     ],
     [
-      "test/widgets/appearance_persistence_reaudit_test.dart",
-      "test/widgets/color_token_usage_test.dart",
-      "test/widgets/connect_ux_a11y_test.dart",
-      "test/widgets/connection_morph_test.dart",
-      "test/widgets/desktop_refresh_affordance_test.dart",
-      "test/widgets/emby_focusable_tap_test.dart",
-      "test/widgets/empty_state_test.dart",
+      "test/widgets/appearance_persistence_reaudit_test.dart"
+    ],
+    [
+      "test/widgets/color_token_usage_test.dart"
+    ],
+    [
+      "test/widgets/connect_ux_a11y_test.dart"
+    ],
+    [
+      "test/widgets/connection_morph_test.dart"
+    ],
+    [
+      "test/widgets/desktop_refresh_affordance_test.dart"
+    ],
+    [
+      "test/widgets/emby_focusable_tap_test.dart"
+    ],
+    [
+      "test/widgets/empty_state_test.dart"
+    ],
+    [
       "test/widgets/growth_native_flow_test.dart"
     ],
     [
@@ -1192,11 +1234,21 @@
       "test/widgets/yl_async_state_test.dart"
     ],
     [
-      "test/widgets/yl_glass_page_background_test.dart",
-      "test/widgets/yl_glass_reduce_transparency_test.dart",
-      "test/widgets/yl_list_tile_layout_test.dart",
-      "test/widgets/yl_loading_contract_test.dart",
-      "test/widgets/yl_radius_token_usage_test.dart",
+      "test/widgets/yl_glass_page_background_test.dart"
+    ],
+    [
+      "test/widgets/yl_glass_reduce_transparency_test.dart"
+    ],
+    [
+      "test/widgets/yl_list_tile_layout_test.dart"
+    ],
+    [
+      "test/widgets/yl_loading_contract_test.dart"
+    ],
+    [
+      "test/widgets/yl_radius_token_usage_test.dart"
+    ],
+    [
       "test/widgets/yl_scaffold_density_test.dart"
     ]
   ],

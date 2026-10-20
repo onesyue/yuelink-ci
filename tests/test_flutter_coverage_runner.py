@@ -179,17 +179,25 @@ m.main()
                               cwd=self.root, env=env, text=True, capture_output=True, timeout=40, check=False)
 
     def test_complete_corpus_executes_once_with_independent_sources_and_kernels(self):
-        # A conservative split is consumed as separate real commands, while
-        # the complete fixture case/skip/coverage baseline stays unchanged.
-        split_index = next(i for i, group in enumerate(self.plan["groups"]) if len(group) == 8)
-        split_files = self.plan["groups"][split_index]
-        self.plan["groups"][split_index:split_index + 1] = [[path] for path in split_files]
+        # Use every formal filename and group with source-bound fixture bytes.
+        # Only the expensive engine, coverage payload and capacity are synthetic.
+        reviewed = json.loads(RUNNER.PLAN.read_text())
+        shutil.rmtree(self.root / "test")
+        for name in reviewed["files"]:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(("@TestOn('mac-os')\nlibrary;\n" if name == RUNNER.MACOS_TEST else "")
+                            + "void main() {}\n")
+        subprocess.run(["git", "add", "--", "test"], cwd=self.root, check=True)
+        self.commit_fixture(self.root, "complete reviewed filename corpus")
+        self.refresh_plan()
+        self.plan["groups"] = reviewed["groups"]
         self.plan_path.write_text(json.dumps(self.plan))
         result = self.run_gate()
         self.assertEqual(result.returncode, 0, result.stderr)
         evidence = self.root / "coverage/source-gate"
         groups = json.loads((evidence / "inventory.json").read_text())
-        self.assertEqual([len(group) for group in groups], [1] * 500)
+        self.assertEqual([len(group) for group in groups], [1] * 509)
         actual = []
         workers = set()
         for report in evidence.glob("*.jsonl"):
@@ -198,26 +206,42 @@ m.main()
                 if row["type"] == "suite":
                     actual.append(str(Path(row["suite"]["path"]).relative_to(row["worker"])))
                     workers.add(row["worker"])
-        self.assertEqual(sorted(actual), sorted(group[0] for group in groups))
-        self.assertEqual(len(set(actual)), 500)
+        self.assertEqual(sorted(actual), sorted(group[0] for group in groups
+                                                if group[0] != RUNNER.MACOS_TEST))
+        self.assertEqual(len(set(actual)), 508)
         self.assertEqual(len(workers), 4)
         receipt = json.loads((evidence / "execution.json").read_text())
         self.assertEqual(receipt["status"], "COMPLETE")
         self.assertEqual(receipt["groups"], self.plan["groups"])
-        for index, path in enumerate(split_files, split_index):
+        self.assertEqual(len(receipt["groups"]), 103)
+        for index, assigned in enumerate(reviewed["groups"]):
             command = json.loads((evidence / f"{index}.execution.json").read_text())
-            self.assertEqual([arg for arg in command["command"] if arg.startswith("test/")], [path])
+            self.assertEqual([arg for arg in command["command"] if arg.startswith("test/")], assigned)
             self.assertEqual(command["exit_code"], 0)
+            self.assertTrue((evidence / f"{index}.info").is_file())
         self.assertIsNone(receipt["aggregate_owned_job_peak_bytes"])
-        self.assertEqual(set(json.loads((evidence / "platform-assignments.json").read_text())), set(actual))
+        assignments = json.loads((evidence / "platform-assignments.json").read_text())
+        self.assertEqual(set(assignments), set(actual) | {RUNNER.MACOS_TEST})
+        self.assertEqual(assignments[RUNNER.MACOS_TEST], "macos_integration")
         self.assertNotIn(str(self.root), workers)
-        self.assertIn("Flutter tests observed: 2500", result.stdout)
+        self.assertIn("Flutter tests observed: 2540", result.stdout)
         self.assertTrue((self.root / "coverage/lcov.info").is_file())
         for worker in workers:
             self.assertFalse(Path(worker).exists())
 
-    def test_reviewed_group25_split_preserves_all_other_plan_inputs(self):
+    def test_reviewed_singleton_splits_preserve_all_other_plan_inputs(self):
         plan = json.loads(RUNNER.PLAN.read_text())
+        self.assertEqual(len(plan["groups"]), 103)
+        # Rejoin only failed64 and unstarted68/72/76 from the original77 groups.
+        # Exact byte recovery also preserves every other group and input field.
+        for start, width in reversed(((64, 8), (75, 8), (86, 8), (97, 6))):
+            singletons = plan["groups"][start:start + width]
+            self.assertEqual([len(group) for group in singletons], [1] * width)
+            plan["groups"][start:start + width] = [[group[0] for group in singletons]]
+        self.assertEqual(
+            hashlib.sha256((json.dumps(plan, indent=2) + "\n").encode()).hexdigest(),
+            "32d606bff6219109538421ab9d1f66ba937dd054b16d1984a61b6b33a8132646",
+        )
         original_group = json.loads(
             (ROOT / "tests/fixtures/flutter-coverage-group25-20261020.json").read_text()
         )["files"]
