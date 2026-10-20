@@ -24,6 +24,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "tests/fixtures/flutter-coverage-pilot-20261019.json"
 GROUP25_MANIFEST = ROOT / "tests/fixtures/flutter-coverage-group25-20261020.json"
+CONTRIBUTORS_MANIFEST = ROOT / "tests/fixtures/flutter-coverage-contributors-20261021.json"
+CONTRIBUTORS_SHA256 = "8ebf22cbc4ffd9d038955460fdc97f6a818f7951fb4934791105c47b00884d67"
 GROUP25_FILES = [
     "test/domain/proxy_group_icon_test.dart",
     "test/domain/quota_reminder_test.dart",
@@ -64,6 +66,51 @@ def group25_manifest() -> dict:
         if hashlib.sha256((ROOT / path).read_bytes()).hexdigest() != expected:
             raise ValueError("group25 helper identity differs")
     return data
+
+
+def contributors_manifest() -> dict:
+    """One immutable experiment, not an arbitrary manifest/command interface."""
+    raw = CONTRIBUTORS_MANIFEST.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != CONTRIBUTORS_SHA256:
+        raise ValueError("fixed contributors manifest identity differs")
+    data = json.loads(raw)
+    for path, expected in data["helper_sha256"].items():
+        if hashlib.sha256((ROOT / path).read_bytes()).hexdigest() != expected:
+            raise ValueError("contributors helper identity differs")
+    return data
+
+
+def contributors_coverage(path: Path, worker: Path, data: dict, runner) -> dict:
+    """Keep exact DA counts alongside the unchanged canonical hit-state reader."""
+    source, records, counts = None, 0, {}
+    for line in path.read_text().splitlines():
+        if line.startswith("SF:"):
+            if source is not None:
+                raise ValueError("unterminated coverage record")
+            source = runner.relative(line[3:], worker, "lib/")
+            records += 1
+        elif line == "end_of_record":
+            if source is None:
+                raise ValueError("coverage terminal without source")
+            source = None
+        elif line.startswith("DA:"):
+            fields = line[3:].split(",")
+            if source is None or len(fields) not in (2, 3):
+                raise ValueError("invalid DA record")
+            number, hits = int(fields[0]), int(fields[1])
+            key = (source, number)
+            if number < 1 or hits < 0 or key in counts:
+                raise ValueError("invalid or duplicate DA count")
+            counts[key] = hits
+    rows = runner.coverage_rows(path, worker)
+    if source is not None or records == 0 or not counts or not rows:
+        raise ValueError("incomplete or empty coverage")
+    targets = []
+    for target in data["targets"]:
+        hits = counts.get((target["source"], target["line"]))
+        targets.append(target | {"hits": hits, "state": "ABSENT" if hits is None else
+                                 "ZERO" if hits == 0 else "POSITIVE"})
+    return {"rows": sorted(rows), "targets": targets, "complete_records": records}
 
 
 def group25_cache(data: dict) -> dict:
@@ -178,18 +225,41 @@ def observe_command(command: list[str], worker: Path, output: Path, outer: float
 
 
 def group25_execute(source: Path, output: Path, data: dict) -> int:
-    """Two predeclared diagnostics, never a singleton release fallback."""
+    return fixed_execute(source, output, data, contributors=False)
+
+
+def contributors_execute(source: Path, output: Path, data: dict) -> int:
+    return fixed_execute(source, output, data, contributors=True)
+
+
+def fixed_execute(source: Path, output: Path, data: dict, *, contributors: bool) -> int:
+    """Two closed diagnostics share process/cleanup mechanics, never release authority."""
+    mode = "contributors" if contributors else "group25"
+    manifest_path = CONTRIBUTORS_MANIFEST if contributors else GROUP25_MANIFEST
+    commands = ([(str(i), [path]) for i, path in enumerate(data["files"])] if contributors
+                else [("group", data["files"]), ("withdrawal", [data["files"][4]])])
     output.mkdir(parents=True, exist_ok=False)
     terminal = {"schema": 1, "status": "INCOMPLETE", "release_acceptance": False,
                 "source_sha": data["source_sha"], "builder_base": data["builder_base"],
                 "diagnostic_policy": os.environ.get("GITHUB_SHA"), "workers": 1,
                 "commands": [], "cleanup_complete": False, "cleanup_errors": [],
-                "manifest_sha256": hashlib.sha256(GROUP25_MANIFEST.read_bytes()).hexdigest()}
+                "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest()}
     runner = module("group25_runner", ROOT / "scripts/run-flutter-coverage.py")
     counter = module("group25_counter", ROOT / "scripts/count-flutter-machine-tests.py")
+    if contributors:
+        terminal.update(diagnostic_complete=False, coverage_equal=None,
+                        comparison_scope="four historical singletons; no grouping causality",
+                        historical_run=data["baseline_run"], grouped_run=data["grouped_run"],
+                        grouped_observations=data["grouped_observations"])
     gitlinks, workers = [], []
     previous_handler = signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     try:
+        if contributors:
+            actual_tools = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+            if actual_tools != os.environ.get("GITHUB_SHA"):
+                raise ValueError("contributors executing tools differ from GITHUB_SHA")
+            subprocess.run(["git", "diff", "--exit-code", "HEAD"], cwd=ROOT, check=True)
+            terminal["diagnostic_policy"] = actual_tools
         terminal["sdk"] = group25_cache(data)
         terminal["resources_before"] = runner.resource_snapshot()
         runner.worker_count(terminal["resources_before"])  # Existing insufficient-capacity refusal.
@@ -198,13 +268,13 @@ def group25_execute(source: Path, output: Path, data: dict) -> int:
         subprocess.run(["git", "diff", "--exit-code", "HEAD"], cwd=source, check=True)
         if subprocess.check_output(["git", "rev-parse", "HEAD:lib"], cwd=source, text=True).strip() != data["lib_tree"]:
             raise ValueError("group25 lib tree differs")
-        for path, expected in (data["file_sha256"] | data["runtime_files"]).items():
+        for path, expected in (data["file_sha256"] | data["runtime_files"] | (data["source_files"] if contributors else {})).items():
             if (source / path).is_symlink() or hashlib.sha256((source / path).read_bytes()).hexdigest() != expected:
                 raise ValueError("group25 input differs: " + path)
         (output / "input.json").write_text(json.dumps(data, indent=2) + "\n")
-        with tempfile.TemporaryDirectory(prefix="flutter-group25-") as temporary:
+        with tempfile.TemporaryDirectory(prefix=f"flutter-{mode}-") as temporary:
             try:
-                for label, files in (("group", data["files"]), ("withdrawal", [data["files"][4]])):
+                for label, files in commands:
                     directory = output / label
                     directory.mkdir()
                     worker = Path(temporary).resolve() / label
@@ -251,9 +321,22 @@ def group25_execute(source: Path, output: Path, data: dict) -> int:
                                   "visible_skips": sum(n for key, n in cases.items() if key[2]),
                                   "cases_sha256": runner.digest(sorted([*key, n] for key, n in cases.items())),
                                   "coverage_sha256": runner.digest(sorted(coverage)), "coverage_rows": len(coverage)}
-                        if actual != data["expected"][label]:
+                        if contributors:
+                            expected = data["expected"][label]
+                            if any(actual[key] != expected[key] for key in
+                                   ("visible_cases", "visible_skips", "cases_sha256")):
+                                raise ValueError("exact contributor case/skip baseline differs")
+                            detail = contributors_coverage(directory / "coverage.info", worker, data, runner)
+                            (directory / "coverage-rows.json").write_text(json.dumps(detail["rows"]) + "\n")
+                            (directory / "case-multiset.json").write_text(
+                                json.dumps(sorted([*key, n] for key, n in cases.items())) + "\n")
+                            result.update(coverage_equal=actual["coverage_sha256"] == expected["coverage_sha256"],
+                                          target_lines=detail["targets"], historical_target_hits=expected["target_hits"],
+                                          historical_coverage_sha256=expected["coverage_sha256"],
+                                          complete_records=detail["complete_records"])
+                        elif actual != data["expected"][label]:
                             raise ValueError("exact diagnostic case/skip/coverage baseline differs")
-                        result.update(status="PASSED", observed=actual)
+                        result.update(status="OBSERVED" if contributors else "PASSED", observed=actual)
                     except (ValueError, OSError, KeyError) as error:
                         result["problem"] = str(error)
                     subprocess.run(["git", "diff", "--exit-code", "HEAD"], cwd=worker, check=True)
@@ -273,20 +356,29 @@ def group25_execute(source: Path, output: Path, data: dict) -> int:
                     context["cleanup_complete"] = terminal["cleanup_complete"]
                     context_path.write_text(json.dumps(context, indent=2) + "\n")
         terminal["resources_after"] = runner.resource_snapshot()
-        terminal["status"] = ("DIAGNOSTIC_PAIR_PASSED" if len(terminal["commands"]) == 2
-                              and all(row["status"] == "PASSED" for row in terminal["commands"])
-                              and terminal["cleanup_complete"] else "DIAGNOSTIC_PAIR_FAILED")
+        if contributors:
+            complete = (len(terminal["commands"]) == 4
+                        and [row["files"] for row in terminal["commands"]] == [[path] for path in data["files"]]
+                        and all(row["status"] == "OBSERVED" for row in terminal["commands"])
+                        and terminal["cleanup_complete"])
+            terminal.update(diagnostic_complete=complete,
+                            coverage_equal=all(row["coverage_equal"] for row in terminal["commands"]) if complete else None,
+                            status="DIAGNOSTIC_COMPLETE" if complete else "DIAGNOSTIC_FAILED")
+        else:
+            terminal["status"] = ("DIAGNOSTIC_PAIR_PASSED" if len(terminal["commands"]) == 2
+                                  and all(row["status"] == "PASSED" for row in terminal["commands"])
+                                  and terminal["cleanup_complete"] else "DIAGNOSTIC_PAIR_FAILED")
     except EnvironmentNotReady as error:
         terminal.update(status="ENVIRONMENT_NOT_READY", problem=str(error))
     except KeyboardInterrupt:
         terminal.update(status="CANCELED", problem="owner/process cancellation; remaining command not started")
     except (ValueError, OSError, KeyError, TypeError, subprocess.SubprocessError) as error:
-        terminal.update(status="DIAGNOSTIC_PAIR_FAILED", problem=str(error))
+        terminal.update(status="DIAGNOSTIC_FAILED" if contributors else "DIAGNOSTIC_PAIR_FAILED", problem=str(error))
     finally:
         signal.signal(signal.SIGTERM, previous_handler)
         terminal["finished_wall_ns"] = time.time_ns()
         (output / "diagnostic.json").write_text(json.dumps(terminal, indent=2) + "\n")
-    return 0 if terminal["status"] == "DIAGNOSTIC_PAIR_PASSED" else 1
+    return 0 if terminal["status"] == ("DIAGNOSTIC_COMPLETE" if contributors else "DIAGNOSTIC_PAIR_PASSED") else 1
 
 
 def module(name: str, path: Path):
@@ -583,6 +675,7 @@ def run_variant(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--contributors", action="store_true", help="Fixed four singleton observations; no release acceptance")
     parser.add_argument("--group25", action="store_true", help="Fixed two-command diagnostic; never release acceptance")
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument(
@@ -594,6 +687,16 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--order", choices=("AB", "BA"), default="AB")
     args = parser.parse_args()
+    if args.contributors:
+        if args.group25 or any(arg.split("=", 1)[0] in {"--manifest", "--order"} for arg in sys.argv[1:]):
+            parser.error("contributors rejects alternate modes/manifests/orders")
+        data = contributors_manifest()
+        if args.describe:
+            print(json.dumps(data, indent=2))
+            return
+        if args.source is None or args.output is None:
+            parser.error("contributors requires --source and a new --output")
+        raise SystemExit(contributors_execute(args.source.resolve(strict=True), args.output.resolve(), data))
     if args.group25:
         data = group25_manifest()
         if args.describe:

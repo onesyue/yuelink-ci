@@ -1,0 +1,653 @@
+{
+  "schema": 1,
+  "release_acceptance": false,
+  "workers": 1,
+  "timeout_seconds": 300,
+  "outer_timeout_seconds": 350,
+  "lib_tree": "c09139a5edfff26e4b50c80ad26c3a2c6e71a178",
+  "runtime_files": {
+    "pubspec.yaml": "4d6f77a85ddb7337628b2897d9b0b4bc0e6f6f84026ab3d5710dc95213137cfd",
+    "pubspec.lock": "9ecf042933ad80a2f592bd0742855ac841e95718c247fca8107a3992b987a0b3"
+  },
+  "sdk": {
+    "frameworkVersion": "3.47.7",
+    "frameworkRevision": "abaf9c523780a608bd46686fd5e53740a07077f8",
+    "engineRevision": "deb287481e3ce9468f3434937ced4240a70539ca",
+    "dartSdkVersion": "3.13.5"
+  },
+  "helper_sha256": {
+    "scripts/run-flutter-coverage.py": "bc72139f0f5f3a5ae7f038f4295926127e828af060a66b55c058d28cbee6dda7",
+    "scripts/count-flutter-machine-tests.py": "cef17edaa97b6c207eb7bf2cceccf8823e53a2bafacf53cde53e512bcb872fcd",
+    ".github/actions/setup-flutter/install_flutter_sdk.py": "0ef481c00fbf51b0f35a09ae4eb5635521e8f9bb849f18a6f3b39d5cf961e568"
+  },
+  "kind": "FIXED_CONTRIBUTORS_DIAGNOSTIC",
+  "source_sha": "b2d8d1dcef0b1e3c13000a536ae4bab5870354c6",
+  "builder_base": "251799fff13f9c80774a4731fb97a7cd8ca0c25e",
+  "files": [
+    "test/core/kernel/desktop_service_readiness_test.dart",
+    "test/infrastructure/account_subscription_fallback_test.dart",
+    "test/modules/force_upgrade_dialog_test.dart",
+    "test/modules/updater/update_dialog_handoff_test.dart"
+  ],
+  "file_sha256": {
+    "test/core/kernel/desktop_service_readiness_test.dart": "01f88b4eb5025e40a04ff039f79bbe281d9bb28046fe316b5d6977f6a0be6da9",
+    "test/infrastructure/account_subscription_fallback_test.dart": "08a9d508b84926eb3c196d1cfbefc54ff53b05922d013451fcb488402158930a",
+    "test/modules/force_upgrade_dialog_test.dart": "cca44b6034db3d8025bc9fa824c6842dd4277c66261abb946084555f760f6303",
+    "test/modules/updater/update_dialog_handoff_test.dart": "2e5cd93cc668744649d2a3de997af1a92647f5d7229af16548b550267e98fa76"
+  },
+  "source_files": {
+    "lib/core/kernel/desktop_service_readiness.dart": "7fedbb2496ecb2534ecb12e38d6d21ea1079287d8930a5e0eab31c3113f8f7a3",
+    "lib/infrastructure/repositories/profile_subscription_download.dart": "940513caf6c451b05518555721aa01cf58b764005ff23c8b82cf65f9d17d4f02",
+    "lib/modules/updater/update_checker_types.dart": "0135a135f56c08907735c7b796c2d20790ca6b3527935cf234e318377364076e"
+  },
+  "baseline_run": 39403709212,
+  "baseline_archive_sha256": "da5c2d64ca33e5f86424c9429a3776c2ada91432b27c108d0ff61efae4aa7e50",
+  "grouped_run": 39475347668,
+  "group_indexes": [
+    14,
+    33,
+    46,
+    56
+  ],
+  "targets": [
+    {
+      "source": "lib/core/kernel/desktop_service_readiness.dart",
+      "line": 63
+    },
+    {
+      "source": "lib/infrastructure/repositories/profile_subscription_download.dart",
+      "line": 288
+    },
+    {
+      "source": "lib/infrastructure/repositories/profile_subscription_download.dart",
+      "line": 386
+    },
+    {
+      "source": "lib/modules/updater/update_checker_types.dart",
+      "line": 106
+    }
+  ],
+  "expected": {
+    "0": {
+      "visible_cases": 13,
+      "visible_skips": 0,
+      "cases_sha256": "15e64b6ff8cddb87b7ca1f808161751db2143fe90e877fda4b12aa649dbac59c",
+      "coverage_sha256": "82f04cea81704d2a0b485f7c34b8ede9efec408a924e0fa32655d0569551a29d",
+      "coverage_rows": 467,
+      "target_hits": [
+        1,
+        null,
+        null,
+        null
+      ]
+    },
+    "1": {
+      "visible_cases": 22,
+      "visible_skips": 0,
+      "cases_sha256": "e0b0f2cf6e05bbd785ee420e12bb33e4d01663558644ab611295776dfbbb3907",
+      "coverage_sha256": "732363f8841be39e4c1fba447b27d1f46b2a327ee91a59397cb14728c28d76c9",
+      "coverage_rows": 17306,
+      "target_hits": [
+        0,
+        1,
+        0,
+        null
+      ]
+    },
+    "2": {
+      "visible_cases": 11,
+      "visible_skips": 0,
+      "cases_sha256": "957191b67900e82a5ac372e5bcc4f4ee1eae206e471b5b9e09b31437de33e492",
+      "coverage_sha256": "8a9494269d008e93cbdfe93f88308a21a9acf94bd20cbd67d1f158ccdff59e50",
+      "coverage_rows": 18475,
+      "target_hits": [
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "3": {
+      "visible_cases": 13,
+      "visible_skips": 0,
+      "cases_sha256": "a04a97e2e66e61800e5db7a77f887247d5c4a2a90c7adaad3a5ca228532daa41",
+      "coverage_sha256": "0b2cd076e36d214001848f6eb2b92c7cc3543edfa320e6551c45ca79e62ab70f",
+      "coverage_rows": 18725,
+      "target_hits": [
+        0,
+        0,
+        0,
+        1
+      ]
+    }
+  },
+  "provenance": {
+    "0": {
+      "machine_member": "80.jsonl",
+      "machine_sha256": "71928c3db4447d53af3698a671f1996d539e059168718025884d499cfa70ca40",
+      "coverage_member": "80.info",
+      "coverage_sha256": "9be210d618c96047d774759fd4823fb66fcce542172fa904ef9b7253740441a1",
+      "test_starts": 14,
+      "case_multiset": [
+        [
+          "test/core/kernel/desktop_service_readiness_test.dart",
+          "a real live controller with a failed TUN cannot report startup success",
+          false,
+          1
+        ],
+        [
+          "test/core/kernel/desktop_service_readiness_test.dart",
+          "classifyTunListener reads mihomo /configs shapes",
+          false,
+          1
+        ],
+        [
+          "test/core/kernel/desktop_service_readiness_test.dart",
+          "native service checks the listener before LKG or SUCCESS",
+          false,
+          1
+        ],
+        [
+          "test/core/kernel/desktop_service_readiness_test.dart",
+          "state-based TUN readiness a child that died and stays dead fails after the 8 s grace",
+          false,
+          1
+        ],
+        [
+          "test/core/kernel/desktop_service_readiness_test.dart",
+          "state-based TUN readiness a hung controller is bounded per probe and overall",
+          false,
+          1
+        ],
+        [
+          "test/core/kernel/desktop_service_readiness_test.dart",
+          "state-based TUN readiness a listener that never settles fails at the upper bound",
+          false,
+          1
+        ],
+        [
+          "test/core/kernel/desktop_service_readiness_test.dart",
+          "state-based TUN readiness a running child keeps the observation going",
+          false,
+          1
+        ],
+        [
+          "test/core/kernel/desktop_service_readiness_test.dart",
+          "state-based TUN readiness a schema it cannot read stays unknown, never \"disabled\"",
+          false,
+          1
+        ],
+        [
+          "test/core/kernel/desktop_service_readiness_test.dart",
+          "state-based TUN readiness a slow adapter is not a failure: pending for 8 s, then up",
+          false,
+          1
+        ],
+        [
+          "test/core/kernel/desktop_service_readiness_test.dart",
+          "state-based TUN readiness an attempted-and-failed TUN fails at once, actionably",
+          false,
+          1
+        ],
+        [
+          "test/core/kernel/desktop_service_readiness_test.dart",
+          "state-based TUN readiness an unknown status read resets the death clock",
+          false,
+          1
+        ],
+        [
+          "test/core/kernel/desktop_service_readiness_test.dart",
+          "state-based TUN readiness one controller error is not proof of anything: keep observing",
+          false,
+          1
+        ],
+        [
+          "test/core/kernel/desktop_service_readiness_test.dart",
+          "state-based TUN readiness system proxy mode never probes TUN",
+          false,
+          1
+        ]
+      ],
+      "complete_records": 3
+    },
+    "1": {
+      "machine_member": "165.jsonl",
+      "machine_sha256": "4e51ea9678f6f350c3f5302d99673379de38e4712f5072afa96b24736a57fa14",
+      "coverage_member": "165.info",
+      "coverage_sha256": "8805e5c8b9449882068388489d62fe7d01219556f38d309ba7a04c742ae09e95",
+      "test_starts": 25,
+      "case_multiset": [
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "DoH IP pinning does not accept a certificate for another hostname",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "DoH health probe keeps HTTPS with original hostname verification",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "DoH health probe never sends plaintext HTTP to an HTTPS endpoint",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "DoH health probe rejects an untrusted certificate before HTTP",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "DoH miss keeps TLS when falling back to OS DNS",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "HTTP 401 selects only an eligible trusted fallback",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "HTTP 403 selects only an eligible trusted fallback",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "HTTP 404 selects only an eligible trusted fallback",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "HTTP 410 selects only an eligible trusted fallback",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "HTTP 500 selects only an eligible trusted fallback",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "HTTP 503 selects only an eligible trusted fallback",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "TCP accepted but TLS silent advances to the trusted complete URL",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "a manual third-party subscription cannot opt into account fallback URLs",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "a throttled account parks every authenticated candidate endpoint",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "account retirement cancels an in-flight handshake and sends no fallback request",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "actual malformed UTF-8 does not retry another endpoint",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "authenticated fallback list is optional, bounded and canonical",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "mirror cannot return not-modified for the primary validator",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "one deadline covers all endpoints and stops waiting on stalled TLS",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "real CONNECT TLS HTTP 503 tries direct before mirrors (false)",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "real CONNECT TLS HTTP 503 tries direct before mirrors (true)",
+          false,
+          1
+        ],
+        [
+          "test/infrastructure/account_subscription_fallback_test.dart",
+          "untrusted certificate fails closed before the next valid endpoint",
+          false,
+          1
+        ]
+      ],
+      "complete_records": 176
+    },
+    "2": {
+      "machine_member": "269.jsonl",
+      "machine_sha256": "bccdeafed60581693fdaeb2453a792dc9c51ad7008fc62e447cef2dd5ba3a311",
+      "coverage_member": "269.info",
+      "coverage_sha256": "a3c0e0cefa97b01cf76d483b77128dd5f2d2898388306cbd408a794be4cc55a7",
+      "test_starts": 12,
+      "case_multiset": [
+        [
+          "test/modules/force_upgrade_dialog_test.dart",
+          "ForceUpgradeDialog a failed browser handoff reports the failure instead of doing nothing",
+          false,
+          1
+        ],
+        [
+          "test/modules/force_upgrade_dialog_test.dart",
+          "ForceUpgradeDialog a successful browser handoff keeps the gate closed (2026-09-26: the escape used to appear here too)",
+          false,
+          1
+        ],
+        [
+          "test/modules/force_upgrade_dialog_test.dart",
+          "ForceUpgradeDialog a throwing manifest check never leaves a dead button",
+          false,
+          1
+        ],
+        [
+          "test/modules/force_upgrade_dialog_test.dart",
+          "ForceUpgradeDialog always shows a copyable download address",
+          false,
+          1
+        ],
+        [
+          "test/modules/force_upgrade_dialog_test.dart",
+          "ForceUpgradeDialog hands off to the normal update flow when a manifest is reachable",
+          false,
+          1
+        ],
+        [
+          "test/modules/force_upgrade_dialog_test.dart",
+          "ForceUpgradeDialog offers a way out once the upgrade path has failed",
+          false,
+          1
+        ],
+        [
+          "test/modules/force_upgrade_dialog_test.dart",
+          "ForceUpgradeDialog onShown fires once after the first frame and isShowing tracks the gate",
+          false,
+          1
+        ],
+        [
+          "test/modules/force_upgrade_dialog_test.dart",
+          "ForceUpgradeDialog reports progress while the manifest race is in flight",
+          false,
+          1
+        ],
+        [
+          "test/modules/force_upgrade_dialog_test.dart",
+          "ForceUpgradeDialog store build whose browser opened offers no escape",
+          false,
+          1
+        ],
+        [
+          "test/modules/force_upgrade_dialog_test.dart",
+          "ForceUpgradeDialog store builds skip the manifest and go straight to the download page",
+          false,
+          1
+        ],
+        [
+          "test/modules/force_upgrade_dialog_test.dart",
+          "ForceUpgradeDialog the back gesture cannot dismiss the gate",
+          false,
+          1
+        ]
+      ],
+      "complete_records": 193
+    },
+    "3": {
+      "machine_member": "345.jsonl",
+      "machine_sha256": "138fcdc351f0cdaecc760820319678ffe83d6bb33414a06a00accd9a8c929b6c",
+      "coverage_member": "345.info",
+      "coverage_sha256": "e72978fe6370a92c9f67beb6ae5ddffe9cbd6a688d73c320977208781e95cbd6",
+      "test_starts": 14,
+      "case_multiset": [
+        [
+          "test/modules/updater/update_dialog_handoff_test.dart",
+          "Android install grant a grant revoked mid-download surfaces as a retryable install failure",
+          false,
+          1
+        ],
+        [
+          "test/modules/updater/update_dialog_handoff_test.dart",
+          "Android install grant a settings page that will not open is said out loud",
+          false,
+          1
+        ],
+        [
+          "test/modules/updater/update_dialog_handoff_test.dart",
+          "Android install grant desktop platforms never ask",
+          false,
+          1
+        ],
+        [
+          "test/modules/updater/update_dialog_handoff_test.dart",
+          "Android install grant is checked before any byte is downloaded",
+          false,
+          1
+        ],
+        [
+          "test/modules/updater/update_dialog_handoff_test.dart",
+          "Android install grant returning with the grant continues in one tap",
+          false,
+          1
+        ],
+        [
+          "test/modules/updater/update_dialog_handoff_test.dart",
+          "Android install grant returning without the grant asks again, still no download",
+          false,
+          1
+        ],
+        [
+          "test/modules/updater/update_dialog_handoff_test.dart",
+          "Android install grant the download page is offered while the grant is missing",
+          false,
+          1
+        ],
+        [
+          "test/modules/updater/update_dialog_handoff_test.dart",
+          "a download failure is still a download failure",
+          false,
+          1
+        ],
+        [
+          "test/modules/updater/update_dialog_handoff_test.dart",
+          "a failed hand-off keeps the dialog and offers both exits",
+          false,
+          1
+        ],
+        [
+          "test/modules/updater/update_dialog_handoff_test.dart",
+          "an incompatible OS prevents download and handoff but exposes supported options",
+          false,
+          1
+        ],
+        [
+          "test/modules/updater/update_dialog_handoff_test.dart",
+          "mounted bundle incompatibility stays visible without manual fallback",
+          false,
+          1
+        ],
+        [
+          "test/modules/updater/update_dialog_handoff_test.dart",
+          "open download page from a failed install keeps the retry",
+          false,
+          1
+        ],
+        [
+          "test/modules/updater/update_dialog_handoff_test.dart",
+          "the dialog closes only AFTER the hand-off succeeded",
+          false,
+          1
+        ]
+      ],
+      "complete_records": 191
+    }
+  },
+  "grouped_observations": [
+    {
+      "index": 14,
+      "files": [
+        "test/core/kernel/config/vless_encryption_passthrough_test.dart",
+        "test/core/kernel/core_log_tail_test.dart",
+        "test/core/kernel/core_start_errors_test.dart",
+        "test/core/kernel/desktop_service_readiness_test.dart",
+        "test/core/kernel/find_available_port_fallback_20261004_test.dart",
+        "test/core/kernel/first_party_ruleset_transformer_test.dart",
+        "test/core/kernel/mark_running_toctou_test.dart",
+        "test/core/kernel/poll_proxies_ready_20261004_test.dart"
+      ],
+      "counters": [
+        {
+          "source": "lib/core/kernel/desktop_service_readiness.dart",
+          "line": 63,
+          "hits": 0
+        },
+        {
+          "source": "lib/infrastructure/repositories/profile_subscription_download.dart",
+          "line": 288,
+          "hits": 0
+        },
+        {
+          "source": "lib/infrastructure/repositories/profile_subscription_download.dart",
+          "line": 386,
+          "hits": 0
+        }
+      ]
+    },
+    {
+      "index": 33,
+      "files": [
+        "test/governance/deleted_i18n_keys_ratchet_test.dart",
+        "test/governance/empty_catch_ratchet_test.dart",
+        "test/governance/i18n_ternary_ratchet_test.dart",
+        "test/governance/ios_scene_lifecycle_test.dart",
+        "test/governance/material_ui_migration_test.dart",
+        "test/governance/no_user_visible_latency_ms_test.dart",
+        "test/governance/semantic_token_ratchet_test.dart",
+        "test/infrastructure/account_subscription_fallback_test.dart"
+      ],
+      "counters": [
+        {
+          "source": "lib/infrastructure/repositories/profile_subscription_download.dart",
+          "line": 288,
+          "hits": 0
+        },
+        {
+          "source": "lib/infrastructure/repositories/profile_subscription_download.dart",
+          "line": 386,
+          "hits": 2
+        },
+        {
+          "source": "lib/core/kernel/desktop_service_readiness.dart",
+          "line": 63,
+          "hits": 0
+        }
+      ]
+    },
+    {
+      "index": 46,
+      "files": [
+        "test/modules/diagnose_actions_test.dart",
+        "test/modules/diagnostics_probe_targets_test.dart",
+        "test/modules/emby/emby_entry_go_home_test.dart",
+        "test/modules/emby/emby_item_pager_test.dart",
+        "test/modules/emby/emby_models_test.dart",
+        "test/modules/emby/playback_rate_state_test.dart",
+        "test/modules/emby/player_seek_test.dart",
+        "test/modules/force_upgrade_dialog_test.dart"
+      ],
+      "counters": [
+        {
+          "source": "lib/core/kernel/desktop_service_readiness.dart",
+          "line": 63,
+          "hits": 0
+        },
+        {
+          "source": "lib/infrastructure/repositories/profile_subscription_download.dart",
+          "line": 288,
+          "hits": 0
+        },
+        {
+          "source": "lib/infrastructure/repositories/profile_subscription_download.dart",
+          "line": 386,
+          "hits": 0
+        },
+        {
+          "source": "lib/modules/updater/update_checker_types.dart",
+          "line": 106,
+          "hits": 0
+        }
+      ]
+    },
+    {
+      "index": 56,
+      "files": [
+        "test/modules/two_factor_page_test.dart",
+        "test/modules/updater/install_failure_message_20260926_test.dart",
+        "test/modules/updater/macos_update_test.dart",
+        "test/modules/updater/update_dialog_handoff_test.dart",
+        "test/modules/updater/upgrade_handoff_arming_test.dart",
+        "test/modules/ux_polish_20260928_test.dart",
+        "test/modules/wallet_transfer_refresh_20260926_test.dart",
+        "test/modules/withdraw_page_test.dart"
+      ],
+      "counters": [
+        {
+          "source": "lib/core/kernel/desktop_service_readiness.dart",
+          "line": 63,
+          "hits": 0
+        },
+        {
+          "source": "lib/infrastructure/repositories/profile_subscription_download.dart",
+          "line": 288,
+          "hits": 0
+        },
+        {
+          "source": "lib/infrastructure/repositories/profile_subscription_download.dart",
+          "line": 386,
+          "hits": 0
+        },
+        {
+          "source": "lib/modules/updater/update_checker_types.dart",
+          "line": 106,
+          "hits": 0
+        }
+      ]
+    }
+  ],
+  "source_correlation_sha256": "0a716726925ea816cd1fc5836ab5142c2306cb43c5edc60c4e03b9b84d92c4eb"
+}

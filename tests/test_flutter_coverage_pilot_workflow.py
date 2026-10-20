@@ -276,7 +276,8 @@ class PilotWorkflowTests(unittest.TestCase):
         verify.write_text("print('fixture source verification reached')\n")
         self.env["SOURCE_SHA"] = sha
         for name in ("Bind source and reject retained checkout credentials",
-                     "Bind group25 source and refuse retained credentials"):
+                     "Bind group25 source and refuse retained credentials",
+                     "Bind contributors source and refuse retained credentials"):
             with self.subTest(guard=name):
                 command = shell(WORKFLOW.read_text(), name)
                 positive = subprocess.run(["bash", "-c", command], cwd=source, env=self.env,
@@ -291,6 +292,77 @@ class PilotWorkflowTests(unittest.TestCase):
                     self.assertNotIn("fixture source verification reached", negative.stdout)
                     subprocess.run(["git", "config", "--unset", key], cwd=source, check=True)
 
+
+    def test_real_contributors_workflow_argv_identity_and_exit_are_preserved(self):
+        tools = self.workspace / ".contributors-tools"
+        (tools / "scripts").mkdir(parents=True)
+        script = tools / "scripts/flutter-coverage-pilot.py"
+        script.write_text("import os,sys,json\nfrom pathlib import Path\n"
+                          "Path(os.environ['PILOT_CALLS']).write_text(json.dumps(sys.argv[1:]))\n"
+                          "raise SystemExit(int(os.environ['FIXTURE_RC']))\n")
+        subprocess.run(["git", "init", "-q", str(tools)], check=True)
+        subprocess.run(["git", "add", "."], cwd=tools, check=True)
+        subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                        "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
+                        "commit", "-qm", "fixture"], cwd=tools, check=True)
+        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=tools, text=True).strip()
+        command = ["bash", "-c", shell(WORKFLOW.read_text(), "Run four fixed contributor singletons once")]
+        for code in (0, 23):
+            result = subprocess.run(command, env=self.env | {"GITHUB_SHA": sha, "FIXTURE_RC": str(code)},
+                                    capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, code, result.stderr)
+            self.assertEqual(json.loads(Path(self.env["PILOT_CALLS"]).read_text()),
+                             ["--contributors", "--source", str(self.workspace / "source"),
+                              "--output", str(Path(self.env["RUNNER_TEMP"]) / "flutter-contributors/result")])
+        Path(self.env["PILOT_CALLS"]).unlink()
+        result = subprocess.run(command, env=self.env | {"GITHUB_SHA": "1" * 40, "FIXTURE_RC": "0"},
+                                capture_output=True, text=True, check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(Path(self.env["PILOT_CALLS"]).exists())
+
+    def test_contributors_manual_closed_job_uses_only_verified_cache(self):
+        text = WORKFLOW.read_text()
+        trigger = text.split("on:\n", 1)[1].split("\npermissions:", 1)[0]
+        self.assertEqual(re.findall(r"^  ([a-z_]+):", trigger, re.MULTILINE), ["workflow_dispatch"])
+        self.assertIn("- contributors", trigger)
+        job = text.split("\n  contributors:\n", 1)[1]
+        for item in ("if: inputs.experiment == 'contributors'", "timeout-minutes: 45",
+                     "timeout-minutes: 40", "SOURCE_SHA: b2d8d1dcef0b1e3c13000a536ae4bab5870354c6",
+                     "YUELINK_COVERAGE_MAX_WORKERS: '1'", "yue-flutter-sdk-v1-Linux-X64-3.47.7",
+                     "ref: ${{ github.sha }}", "persist-credentials: false", "if-no-files-found: error"):
+            self.assertIn(item, job)
+        for item in ("apt-get", "setup-flutter@", "flutter pub get", "--order", "--manifest",
+                     "git push", "workflow run", "source-attestation", "continue-on-error"):
+            self.assertNotIn(item, job)
+        self.assertEqual(job.count("--contributors --source"), 1)
+        self.assertIn("if: always()", step(text, "Retain complete or partial contributors evidence"))
+
+    def test_contributors_missing_invocation_or_partial_cannot_be_complete(self):
+        command = ["bash", "-c", shell(WORKFLOW.read_text(), "Record contributors setup failure if no terminal exists")]
+        env = self.env | {"GITHUB_SHA": "1" * 40}
+        result = subprocess.run(command, env=env, capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        path = Path(env["RUNNER_TEMP"]) / "flutter-contributors/result/diagnostic.json"
+        receipt = json.loads(path.read_text())
+        self.assertEqual(receipt["status"], "ENVIRONMENT_NOT_READY")
+        self.assertFalse(receipt["diagnostic_complete"])
+        self.assertIsNone(receipt["coverage_equal"])
+        self.assertFalse(receipt["release_acceptance"])
+        path.write_text('{"status":"DIAGNOSTIC_FAILED","release_acceptance":false}\n')
+        before = path.read_bytes()
+        subprocess.run(command, env=env, check=True)
+        self.assertEqual(path.read_bytes(), before)
+        path.unlink()
+        partial = path.parent / "2/events.jsonl"
+        partial.parent.mkdir()
+        partial.write_text('{"type":"start"}\n')
+        subprocess.run(command, env=env, check=True)
+        receipt = json.loads(path.read_text())
+        self.assertEqual(receipt["status"], "INCOMPLETE")
+        self.assertEqual(receipt["commands"], [{"label": "2", "status": "UNKNOWN", "dispatch": "NOT_PROVED_BY_FINALIZER"}])
+        self.assertFalse(receipt["diagnostic_complete"])
+        self.assertIsNone(receipt["coverage_equal"])
+        self.assertFalse(receipt["release_acceptance"])
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ on:
         options:
           - abba
           - group25
+          - contributors
 
 permissions:
   contents: read
@@ -301,5 +302,105 @@ jobs:
         with:
           name: flutter-group25-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/flutter-group25/
+          if-no-files-found: error
+          retention-days: 7
+
+  contributors:
+    if: inputs.experiment == 'contributors'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      SOURCE_SHA: b2d8d1dcef0b1e3c13000a536ae4bab5870354c6
+    steps:
+      - name: Create owned contributors diagnostic output
+        run: mkdir -p "$RUNNER_TEMP/flutter-contributors"
+
+      - name: Checkout exact contributors private source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ env.SOURCE_SHA }}
+          path: source
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          ssh-known-hosts: github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+          ssh-strict: true
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Bind contributors source and refuse retained credentials
+        working-directory: source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/master
+          git diff --exit-code HEAD
+          if git config --local --get-regexp '^(core\.sshcommand|http\..*\.extraheader)$' >/dev/null; then
+            echo '::error::checkout credentials must be removed before test execution'
+            exit 1
+          fi
+          python3 core/mihomo/third_party/verify_quic_source.py
+
+      - name: Checkout exact contributors diagnostic implementation
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          path: .contributors-tools
+          persist-credentials: false
+
+      - name: Restore existing contributors SDK cache only
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ${{ runner.tool_cache }}/yue-flutter/3.47.7/Linux-X64
+          key: yue-flutter-sdk-v1-Linux-X64-3.47.7
+
+      - name: Restore existing contributors locked pub cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.pub-cache
+          key: yue-pub-v1-Linux-${{ hashFiles('source/pubspec.lock') }}
+
+      - name: Run four fixed contributor singletons once
+        timeout-minutes: 40
+        env:
+          YUELINK_COVERAGE_MAX_WORKERS: '1'
+          LANG: C.UTF-8
+          LC_ALL: C.UTF-8
+        run: |
+          set -euo pipefail
+          test "$(git -C "$GITHUB_WORKSPACE/.contributors-tools" rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 "$GITHUB_WORKSPACE/.contributors-tools/scripts/flutter-coverage-pilot.py" \
+            --contributors --source "$GITHUB_WORKSPACE/source" \
+            --output "$RUNNER_TEMP/flutter-contributors/result"
+
+      - name: Record contributors setup failure if no terminal exists
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, os, time
+          from pathlib import Path
+          path = Path(os.environ["RUNNER_TEMP"]) / "flutter-contributors/result/diagnostic.json"
+          if not path.exists():
+              path.parent.mkdir(parents=True, exist_ok=True)
+              partial = [name for name in ("0", "1", "2", "3") if (path.parent / name).exists()]
+              prepared = bool(partial) or (path.parent / "input.json").exists()
+              path.write_text(json.dumps({
+                  "schema": 1, "status": "INCOMPLETE" if prepared else "ENVIRONMENT_NOT_READY",
+                  "release_acceptance": False, "diagnostic_complete": False, "coverage_equal": None,
+                  "source_sha": os.environ["SOURCE_SHA"],
+                  "diagnostic_policy": os.environ["GITHUB_SHA"],
+                  "commands": [{"label": name, "status": "UNKNOWN",
+                                "dispatch": "NOT_PROVED_BY_FINALIZER"} for name in partial],
+                  "finished_wall_ns": time.time_ns(),
+                  "problem": "No authoritative terminal. Command directories may contain preparation or partial execution; inspect retained streams and original failed step."
+              }, indent=2) + "\n")
+          PY
+
+      - name: Retain complete or partial contributors evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: flutter-contributors-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/flutter-contributors/
           if-no-files-found: error
           retention-days: 7

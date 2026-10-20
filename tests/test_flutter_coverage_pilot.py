@@ -519,5 +519,196 @@ if fault!="coverage" or len(files)==1:
                     self.assertEqual(calls.read_text(), "")
 
 
+class ContributorsTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.data = pilot.contributors_manifest()
+
+    def test_real_cli_fixed_describe_and_alternate_inputs_are_refused(self):
+        command = [sys.executable, str(ROOT / "scripts/flutter-coverage-pilot.py"),
+                   "--contributors", "--describe"]
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(result.stdout), self.data)
+        for args in (["--group25"], ["--order", "AB"], ["--manifest", str(pilot.DEFAULT_MANIFEST)],
+                     ["--manifest=" + str(pilot.CONTRIBUTORS_MANIFEST)], ["--workers", "4"],
+                     ["--file", self.data["files"][0]]):
+            with self.subTest(args=args):
+                result = subprocess.run(command + args, capture_output=True, text=True, check=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+
+    def test_fixed_fixture_and_actual_helper_tampering_are_refused(self):
+        for field, value in (("source_sha", "1" * 40), ("files", self.data["files"][:-1]),
+                             ("files", self.data["files"] + [self.data["files"][0]]),
+                             ("files", list(reversed(self.data["files"]))), ("workers", 2),
+                             ("sdk", {}), ("runtime_files", {}), ("expected", {})):
+            with self.subTest(field=field, value=value):
+                data = copy.deepcopy(self.data)
+                data[field] = value
+                path = self.root / "changed.json"
+                path.write_text(json.dumps(data))
+                with patch.object(pilot, "CONTRIBUTORS_MANIFEST", path), self.assertRaisesRegex(ValueError, "manifest identity"):
+                    pilot.contributors_manifest()
+        tools = self.root / "tools"
+        for path in self.data["helper_sha256"]:
+            target = tools / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((ROOT / path).read_bytes())
+        (tools / "scripts/run-flutter-coverage.py").write_text("raise SystemExit(0)\n")
+        with patch.object(pilot, "ROOT", tools), self.assertRaisesRegex(ValueError, "helper identity"):
+            pilot.contributors_manifest()
+
+    def test_complete_lcov_preserves_raw_absent_zero_positive_and_rejects_corruption(self):
+        path = self.root / "coverage.info"
+        data = {"targets": [{"source": "lib/a.dart", "line": n} for n in (1, 2, 3)]}
+        good = "SF:lib/a.dart\nDA:1,0\nDA:2,7\nend_of_record\n"
+        path.write_text(good)
+        result = pilot.contributors_coverage(path, self.root, data, RUNNER)
+        self.assertEqual([r["state"] for r in result["targets"]], ["ZERO", "POSITIVE", "ABSENT"])
+        self.assertEqual([r["hits"] for r in result["targets"]], [0, 7, None])
+        for raw in ("", good.replace("end_of_record\n", ""), good.replace("DA:2,7", "DA:1,2"),
+                    good.replace("DA:1,0", "DA:1,-1"), good.replace("DA:1,0", "DA:0,1"),
+                    good.replace("DA:1,0", "DA:1"), good.replace("lib/a.dart", "../../a.dart"),
+                    "end_of_record\n" + good, good.replace("DA:1,0", "SF:lib/b.dart")):
+            with self.subTest(raw=raw):
+                path.write_text(raw)
+                with self.assertRaises(ValueError):
+                    pilot.contributors_coverage(path, self.root, data, RUNNER)
+
+    def fixture_source(self):
+        real = self.data
+        # Reuse the existing real Git/engine fixture; the extra four files are
+        # fixture source only and are never selected by the new closed mode.
+        self.data = pilot.group25_manifest()
+        self.data["files"] = real["files"] + self.data["files"][4:]
+        self.data["file_sha256"] = dict.fromkeys(self.data["files"], "fixture")
+        source, binary = Group25Tests.fixture_source(self)
+        generated = self.data
+        self.data = copy.deepcopy(real)
+        for key in ("source_sha", "lib_tree", "runtime_files"):
+            self.data[key] = generated[key]
+        self.data["file_sha256"] = {p: generated["file_sha256"][p] for p in real["files"]}
+        self.data["source_files"] = {"lib/fixture.dart": hashlib.sha256((source / "lib/fixture.dart").read_bytes()).hexdigest()}
+        self.data["targets"] = [{"source": "lib/fixture.dart", "line": n} for n in (1, 2, 3, 4)]
+        self.data["expected"] = {str(i): {
+            "visible_cases": 1, "visible_skips": 0,
+            "cases_sha256": RUNNER.digest([[p, "case", False, 1]]),
+            "coverage_sha256": RUNNER.digest([["lib/fixture.dart", "DA", "1", False], ["lib/fixture.dart", "DA", "1", True]]),
+            "coverage_rows": 2, "target_hits": [1, None, None, None],
+        } for i, p in enumerate(real["files"])}
+        engine = binary / "flutter"
+        code = engine.read_text().replace("len(files)>1", "True").replace("len(files)==1", "False")
+        code = code.replace('"\\nDA:1,1\\nend_of_record\\n"',
+                            '("\\nDA:1,0\\nend_of_record\\n" if fault=="changed_coverage" else '
+                            '"\\nDA:1,1\\nDA:1,1\\nend_of_record\\n" if fault=="duplicate_da" else '
+                            '"\\nDA:1,1\\nend_of_record\\n")')
+        engine.write_text(code)
+        tools = self.root / "tools"
+        for path in self.data["helper_sha256"]:
+            target = tools / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((ROOT / path).read_bytes())
+        manifest = tools / "fixture.json"
+        manifest.write_text(json.dumps(self.data))
+        subprocess.run(["git", "init", "-q", str(tools)], check=True)
+        subprocess.run(["git", "add", "."], cwd=tools, check=True)
+        subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                        "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture"],
+                       cwd=tools, check=True)
+        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=tools, text=True).strip()
+        return source, binary, tools, manifest, sha
+
+    def test_actual_main_four_commands_truthful_equality_failures_and_cleanup(self):
+        source, binary, tools, manifest, sha = self.fixture_source()
+        calls = self.root / "calls"
+        original_module = pilot.module
+        def modules(name, path):
+            return RUNNER if name == "group25_runner" else original_module(name, path)
+        with patch.object(pilot, "ROOT", tools), patch.object(pilot, "CONTRIBUTORS_MANIFEST", manifest), \
+             patch.object(pilot, "CONTRIBUTORS_SHA256", hashlib.sha256(manifest.read_bytes()).hexdigest()), \
+             patch.object(pilot, "group25_cache", return_value=self.data["sdk"]), \
+             patch.object(pilot, "module", side_effect=modules), \
+             patch.object(RUNNER, "resource_snapshot", return_value={"effective_cpus": 1,
+                 "available_memory_bytes": 4 * 1024**3, "capacity_status": "VISIBLE_BOUNDS"}), \
+             patch.dict(os.environ, {"PATH": str(binary) + os.pathsep + os.environ["PATH"], "GITHUB_SHA": sha,
+                 "GROUP25_CALLS": str(calls), "GROUP25_OWNER_PID": str(os.getpid())}):
+            for fault in ("", "changed_coverage", "engine", "terminal", "coverage", "skip", "case", "duplicate",
+                          "malformed", "duplicate_da", "pub", "cancel", "cleanup"):
+                with self.subTest(fault=fault), patch.dict(os.environ, {"GROUP25_FAULT": fault}):
+                    output = self.root / ("out-" + (fault or "pass"))
+                    calls.write_text("")
+                    with patch.object(sys, "argv", ["pilot", "--contributors", "--source", str(source), "--output", str(output)]), \
+                         self.assertRaises(SystemExit) as result:
+                        pilot.main()
+                    receipt = json.loads((output / "diagnostic.json").read_text())
+                    complete = fault in ("", "changed_coverage")
+                    self.assertEqual(result.exception.code, 0 if complete else 1, receipt)
+                    self.assertEqual(receipt["diagnostic_complete"], complete, receipt)
+                    self.assertEqual(receipt["coverage_equal"], (not fault) if complete else None, receipt)
+                    self.assertFalse(receipt["release_acceptance"])
+                    self.assertEqual(receipt["diagnostic_policy"], sha)
+                    self.assertEqual(receipt["cleanup_complete"], fault != "cleanup")
+                    tests = [json.loads(line) for line in calls.read_text().splitlines() if json.loads(line)["args"][0] == "test"]
+                    self.assertEqual(len(tests), 0 if fault == "pub" else 1 if fault == "cancel" else 4)
+                    if complete:
+                        self.assertEqual(receipt["status"], "DIAGNOSTIC_COMPLETE")
+                        self.assertEqual(len({x["cwd"] for x in tests}), 4)
+                        self.assertEqual([r["files"] for r in receipt["commands"]], [[p] for p in self.data["files"]])
+                        for i in range(4):
+                            directory = output / str(i)
+                            observed = receipt["commands"][i]
+                            self.assertEqual(observed["status"], "OBSERVED")
+                            self.assertEqual(observed["coverage_equal"], not fault)
+                            self.assertEqual(observed["target_lines"][0]["hits"], 0 if fault else 1)
+                            for name in ("events.jsonl", "stderr.log", "arrivals.jsonl", "execution.json", "coverage.info",
+                                         "coverage-rows.json", "case-multiset.json", "context.json"):
+                                self.assertTrue((directory / name).is_file(), name)
+                            execution = json.loads((directory / "execution.json").read_text())
+                            self.assertIn("300", execution["command"])
+                            self.assertEqual(execution["outer_timeout_seconds"], 350)
+                    if fault == "cancel":
+                        self.assertEqual(receipt["status"], "CANCELED")
+                        self.assertFalse((output / "1").exists())
+                    if fault == "cleanup":
+                        self.assertEqual(len(receipt["cleanup_errors"]), 4)
+                        with patch.dict(os.environ, {"GROUP25_FAULT": ""}):
+                            subprocess.run(["git", "worktree", "prune"], cwd=source, check=True)
+                    self.assertEqual(subprocess.check_output(["git", "worktree", "list", "--porcelain"],
+                                                             cwd=source, text=True).count("worktree "), 1)
+            for name in ("source_sha", "lib_tree", "file_sha256", "runtime_files", "source_files", "tools", "dirty"):
+                with self.subTest(identity=name):
+                    data = copy.deepcopy(self.data)
+                    if name in ("source_sha", "lib_tree"):
+                        data[name] = "1" * 40
+                    elif name not in ("tools", "dirty"):
+                        data[name] = dict.fromkeys(data[name], "1" * 64)
+                    if name == "dirty":
+                        (source / data["files"][0]).write_text("dirty")
+                    calls.write_text("")
+                    with patch.dict(os.environ, {"GITHUB_SHA": "1" * 40 if name == "tools" else sha}):
+                        output = self.root / ("refusal-" + name)
+                        self.assertEqual(pilot.contributors_execute(source, output, data), 1)
+                    self.assertEqual(calls.read_text(), "")
+                    receipt = json.loads((output / "diagnostic.json").read_text())
+                    self.assertFalse(receipt["diagnostic_complete"])
+                    self.assertIsNone(receipt["coverage_equal"])
+                    self.assertEqual(receipt["commands"], [])
+
+    def test_contributors_cache_miss_has_no_commands_or_download(self):
+        _, _, tools, _, sha = self.fixture_source()
+        with patch.object(pilot, "ROOT", tools), patch.dict(os.environ, {"GITHUB_SHA": sha,
+              "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64", "RUNNER_TOOL_CACHE": str(self.root / "missing")}), \
+             patch.object(pilot.sys, "platform", "linux"), patch.object(pilot.platform, "machine", return_value="x86_64"):
+            output = self.root / "cache-miss"
+            self.assertEqual(pilot.contributors_execute(self.root, output, self.data), 1)
+            result = json.loads((output / "diagnostic.json").read_text())
+            self.assertEqual(result["status"], "ENVIRONMENT_NOT_READY")
+            self.assertEqual(result["commands"], [])
+            self.assertFalse(result["diagnostic_complete"])
+            self.assertIsNone(result["coverage_equal"])
+
+
 if __name__ == "__main__":
     unittest.main()
