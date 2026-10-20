@@ -179,6 +179,12 @@ m.main()
                               cwd=self.root, env=env, text=True, capture_output=True, timeout=40, check=False)
 
     def test_complete_corpus_executes_once_with_independent_sources_and_kernels(self):
+        # A conservative split is consumed as separate real commands, while
+        # the complete fixture case/skip/coverage baseline stays unchanged.
+        split_index = next(i for i, group in enumerate(self.plan["groups"]) if len(group) == 8)
+        split_files = self.plan["groups"][split_index]
+        self.plan["groups"][split_index:split_index + 1] = [[path] for path in split_files]
+        self.plan_path.write_text(json.dumps(self.plan))
         result = self.run_gate()
         self.assertEqual(result.returncode, 0, result.stderr)
         evidence = self.root / "coverage/source-gate"
@@ -198,6 +204,10 @@ m.main()
         receipt = json.loads((evidence / "execution.json").read_text())
         self.assertEqual(receipt["status"], "COMPLETE")
         self.assertEqual(receipt["groups"], self.plan["groups"])
+        for index, path in enumerate(split_files, split_index):
+            command = json.loads((evidence / f"{index}.execution.json").read_text())
+            self.assertEqual([arg for arg in command["command"] if arg.startswith("test/")], [path])
+            self.assertEqual(command["exit_code"], 0)
         self.assertIsNone(receipt["aggregate_owned_job_peak_bytes"])
         self.assertEqual(set(json.loads((evidence / "platform-assignments.json").read_text())), set(actual))
         self.assertNotIn(str(self.root), workers)
@@ -205,6 +215,21 @@ m.main()
         self.assertTrue((self.root / "coverage/lcov.info").is_file())
         for worker in workers:
             self.assertFalse(Path(worker).exists())
+
+    def test_reviewed_group25_split_preserves_all_other_plan_inputs(self):
+        plan = json.loads(RUNNER.PLAN.read_text())
+        original_group = json.loads(
+            (ROOT / "tests/fixtures/flutter-coverage-group25-20261020.json").read_text()
+        )["files"]
+        self.assertEqual(len(plan["groups"]), 77)
+        self.assertEqual(plan["groups"][25:33], [[path] for path in original_group])
+        # Rejoin only this boundary and recover the exact prior reviewed plan:
+        # every file/blob, other group, native assignment and union stays fixed.
+        plan["groups"][25:33] = [original_group]
+        self.assertEqual(
+            hashlib.sha256((json.dumps(plan, indent=2) + "\n").encode()).hexdigest(),
+            "c7ec33a96ff89f22c8bad3a55b200231324b27bd7d4e010205a45aa21208252e",
+        )
 
     def test_every_failed_engine_protocol_dependency_or_merge_blocks_acceptance(self):
         for failure in ["FLUTTER_FAILURE", "MISSING_DONE", "MISSING_COVERAGE",

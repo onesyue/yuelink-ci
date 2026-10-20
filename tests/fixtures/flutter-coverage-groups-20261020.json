@@ -738,13 +738,27 @@
       "test/domain/paused_subscription_20260926_test.dart"
     ],
     [
-      "test/domain/proxy_group_icon_test.dart",
-      "test/domain/quota_reminder_test.dart",
-      "test/domain/store_order_balance_20260926_test.dart",
-      "test/domain/unlimited_and_expiry_test.dart",
-      "test/domain/withdrawal_test.dart",
-      "test/ffi/core_mock_proxy_test.dart",
-      "test/ffi/core_mock_test.dart",
+      "test/domain/proxy_group_icon_test.dart"
+    ],
+    [
+      "test/domain/quota_reminder_test.dart"
+    ],
+    [
+      "test/domain/store_order_balance_20260926_test.dart"
+    ],
+    [
+      "test/domain/unlimited_and_expiry_test.dart"
+    ],
+    [
+      "test/domain/withdrawal_test.dart"
+    ],
+    [
+      "test/ffi/core_mock_proxy_test.dart"
+    ],
+    [
+      "test/ffi/core_mock_test.dart"
+    ],
+    [
       "test/governance/apple_privacy_manifest_test.dart"
     ],
     [
