@@ -645,8 +645,12 @@
     [
       "test/core/kernel/config/vless_encryption_passthrough_test.dart",
       "test/core/kernel/core_log_tail_test.dart",
-      "test/core/kernel/core_start_errors_test.dart",
-      "test/core/kernel/desktop_service_readiness_test.dart",
+      "test/core/kernel/core_start_errors_test.dart"
+    ],
+    [
+      "test/core/kernel/desktop_service_readiness_test.dart"
+    ],
+    [
       "test/core/kernel/find_available_port_fallback_20261004_test.dart",
       "test/core/kernel/first_party_ruleset_transformer_test.dart",
       "test/core/kernel/mark_running_toctou_test.dart",
@@ -768,7 +772,9 @@
       "test/governance/ios_scene_lifecycle_test.dart",
       "test/governance/material_ui_migration_test.dart",
       "test/governance/no_user_visible_latency_ms_test.dart",
-      "test/governance/semantic_token_ratchet_test.dart",
+      "test/governance/semantic_token_ratchet_test.dart"
+    ],
+    [
       "test/infrastructure/account_subscription_fallback_test.dart"
     ],
     [
@@ -898,7 +904,9 @@
       "test/modules/emby/emby_item_pager_test.dart",
       "test/modules/emby/emby_models_test.dart",
       "test/modules/emby/playback_rate_state_test.dart",
-      "test/modules/emby/player_seek_test.dart",
+      "test/modules/emby/player_seek_test.dart"
+    ],
+    [
       "test/modules/force_upgrade_dialog_test.dart"
     ],
     [
@@ -994,8 +1002,12 @@
     [
       "test/modules/two_factor_page_test.dart",
       "test/modules/updater/install_failure_message_20260926_test.dart",
-      "test/modules/updater/macos_update_test.dart",
-      "test/modules/updater/update_dialog_handoff_test.dart",
+      "test/modules/updater/macos_update_test.dart"
+    ],
+    [
+      "test/modules/updater/update_dialog_handoff_test.dart"
+    ],
+    [
       "test/modules/updater/upgrade_handoff_arming_test.dart",
       "test/modules/ux_polish_20260928_test.dart",
       "test/modules/wallet_transfer_refresh_20260926_test.dart",

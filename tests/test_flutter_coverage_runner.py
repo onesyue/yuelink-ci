@@ -178,7 +178,7 @@ m.main()
         return subprocess.run([sys.executable, str(self.entry)],
                               cwd=self.root, env=env, text=True, capture_output=True, timeout=40, check=False)
 
-    def test_complete_corpus_executes_once_with_independent_sources_and_kernels(self):
+    def reviewed_filename_corpus(self):
         # Use every formal filename and group with source-bound fixture bytes.
         # Only the expensive engine, coverage payload and capacity are synthetic.
         reviewed = json.loads(RUNNER.PLAN.read_text())
@@ -193,6 +193,10 @@ m.main()
         self.refresh_plan()
         self.plan["groups"] = reviewed["groups"]
         self.plan_path.write_text(json.dumps(self.plan))
+        return reviewed
+
+    def test_complete_corpus_executes_once_with_independent_sources_and_kernels(self):
+        reviewed = self.reviewed_filename_corpus()
         result = self.run_gate()
         self.assertEqual(result.returncode, 0, result.stderr)
         evidence = self.root / "coverage/source-gate"
@@ -213,7 +217,7 @@ m.main()
         receipt = json.loads((evidence / "execution.json").read_text())
         self.assertEqual(receipt["status"], "COMPLETE")
         self.assertEqual(receipt["groups"], self.plan["groups"])
-        self.assertEqual(len(receipt["groups"]), 103)
+        self.assertEqual(len(receipt["groups"]), 109)
         for index, assigned in enumerate(reviewed["groups"]):
             command = json.loads((evidence / f"{index}.execution.json").read_text())
             self.assertEqual([arg for arg in command["command"] if arg.startswith("test/")], assigned)
@@ -229,9 +233,28 @@ m.main()
         for worker in workers:
             self.assertFalse(Path(worker).exists())
 
+    def rejoin_contributors(self, plan):
+        self.assertEqual(len(plan["groups"]), 109)
+        boundaries = (
+            (14, [3, 1, 4], "test/core/kernel/desktop_service_readiness_test.dart"),
+            (35, [7, 1], "test/infrastructure/account_subscription_fallback_test.dart"),
+            (49, [7, 1], "test/modules/force_upgrade_dialog_test.dart"),
+            (60, [3, 1, 4], "test/modules/updater/update_dialog_handoff_test.dart"),
+        )
+        for start, sizes, contributor in reversed(boundaries):
+            groups = plan["groups"][start:start + len(sizes)]
+            self.assertEqual([len(group) for group in groups], sizes)
+            self.assertEqual(groups[1], [contributor])
+            plan["groups"][start:start + len(sizes)] = [[path for group in groups for path in group]]
+        return plan
+
     def test_reviewed_singleton_splits_preserve_all_other_plan_inputs(self):
-        plan = json.loads(RUNNER.PLAN.read_text())
-        self.assertEqual(len(plan["groups"]), 103)
+        plan = self.rejoin_contributors(json.loads(RUNNER.PLAN.read_text()))
+        # Recover exact103: all99 other groups and every non-group field remain.
+        self.assertEqual(
+            hashlib.sha256((json.dumps(plan, indent=2) + "\n").encode()).hexdigest(),
+            "876d05655fe79d103bc3d5f47f076bebd06c2114b12b56fe67c4eed8dbe68d19",
+        )
         # Rejoin only failed64 and unstarted68/72/76 from the original77 groups.
         # Exact byte recovery also preserves every other group and input field.
         for start, width in reversed(((64, 8), (75, 8), (86, 8), (97, 6))):
@@ -254,6 +277,26 @@ m.main()
             hashlib.sha256((json.dumps(plan, indent=2) + "\n").encode()).hexdigest(),
             "c7ec33a96ff89f22c8bad3a55b200231324b27bd7d4e010205a45aa21208252e",
         )
+
+    def test_contributor_isolation_contract_and_actual_order_refusal(self):
+        self.reviewed_filename_corpus()
+        original = json.loads(self.plan_path.read_text())
+        inventory = RUNNER.partition(self.root)
+        with patch.object(RUNNER, "PLAN", self.plan_path):
+            # Regrouping remains structurally valid to the unchanged runner,
+            # but cannot satisfy the new reviewed contributor isolation contract.
+            regrouped = json.loads(json.dumps(original))
+            regrouped["groups"][14:16] = [[path for group in regrouped["groups"][14:16] for path in group]]
+            self.plan_path.write_text(json.dumps(regrouped))
+            _, groups = RUNNER.grouped_plan(self.root, inventory)
+            self.assertEqual(len(groups), 108)
+            with self.assertRaises(AssertionError):
+                self.rejoin_contributors(regrouped)
+            reordered = json.loads(json.dumps(original))
+            reordered["groups"][14], reordered["groups"][15] = reordered["groups"][15], reordered["groups"][14]
+            self.plan_path.write_text(json.dumps(reordered))
+            with self.assertRaisesRegex(ValueError, "grouping inventory/blob/isolation plan mismatch"):
+                RUNNER.grouped_plan(self.root, inventory)
 
     def test_every_failed_engine_protocol_dependency_or_merge_blocks_acceptance(self):
         for failure in ["FLUTTER_FAILURE", "MISSING_DONE", "MISSING_COVERAGE",
