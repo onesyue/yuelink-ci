@@ -178,3 +178,82 @@ comparators with only the expensive pilot invocation substituted. They include
 first-pair failure, removed second invocation, wrong source, changed cases/skips,
 missing terminals/LCOV, lost coverage, changed resources and retained Git
 credentials. They are wiring evidence, not a real Flutter benchmark.
+
+## 2026-10-20: proposed complete-corpus successor
+
+The preceding sections describe the immutable 2026-10-19 diagnostic. Its
+manifest and receipts remain unchanged. The historical manifest intentionally
+refuses a changed runner helper; use the original frozen builder when inspecting
+that diagnostic. Current unit fixtures explicitly bind their synthetic helper
+bytes and also test this refusal. They do not requalify or rewrite old ABBA
+results.
+
+The canonical runner now consumes
+`tests/fixtures/flutter-coverage-groups-20261020.json`. It binds all 509 current
+files by content hash, the application tree, dependency lock and exact SDK.
+There are 508 Linux files in 70 proposed commands: seven protected singleton
+commands and 63 groups of at most eight, preserving file order. The native
+macOS keychain file retains its separate required job. Unknown added, removed,
+renamed or changed tests fail before execution; no implicit subset or retry
+fallback is permitted. This plan is a candidate awaiting its own complete source
+gate, not a measured full-suite improvement.
+
+The comparison baseline is accepted source gate 39403709212, source
+`3b7218f6d81146fe3e8b3cb024607996d24d4a84`, builder
+`cac7b43e2854087b6d713b5f1cdf77999bcdd164`, artifact SHA256
+`da5c2d64ca33e5f86424c9429a3776c2ada91432b27c108d0ff61efae4aa7e50`.
+Its 4,441 visible identities include 4,389 passes and 52 existing skips. Its
+canonical instrumented/hit coverage union contains 73,153 rows. Every requested
+file must appear in the new machine stream, with unique suite/start/terminal
+identities and a successful final done. The complete visible case/skip multiset
+and coverage union must match the baseline. Hidden loading events remain
+separate. Empty source-only LCOV files are retained; absent reports fail. Native
+LCOV merge, the existing count floor, coverage ratchet and native source jobs
+remain required. A runtime or grouping change needs its own evidence; the old
+attestation does not transfer to a new source or builder SHA.
+
+Existing no-argument invocations remain valid. The runner selects at most four
+workers from visible CPU affinity/quota, available host memory and applicable
+cgroup-v2 ancestor limits. macOS uses CPU count and `vm_stat` free/inactive pages.
+The genuine cgroup-v2 root has no CPU/memory limit files: this is recognized only
+with readable CPU/memory controller discovery and an absent `cgroup.events`
+(the kernel exposes that file on non-root cgroups). Namespace-root limits and
+missing or unreadable child interfaces retain their normal constraints or
+UNKNOWN status. See the [kernel cgroup-v2 interface documentation](https://docs.kernel.org/admin-guide/cgroup-v2.html).
+`YUELINK_COVERAGE_MAX_WORKERS` is optional and only lowers the selected upper
+bound; it cannot bypass CPU or memory limits or raise the existing four-worker
+ceiling. Scheduling reserves 2.5 GiB per worker plus 0.5 GiB shared headroom, a
+conservative heuristic above the old sample's 1.53 GiB individual maximum,
+not a demonstrated full-corpus peak. Known insufficient memory refuses even
+when another capacity interface is missing.
+
+Unknown CPU, available memory or applicable Linux cgroup limits permits only
+one worker for compatibility, with `capacity_status=UNKNOWN`, named missing
+interfaces and `worker_selection=CONSERVATIVE_UNKNOWN`. This is permission to
+execute conservatively, **not resource admission or performance acceptance**.
+Unsupported cgroup-v1 limits are explicitly unknown. No new caller variable or
+external approval is required. Root still schedules the real full gate using
+actual available capacity; finite executable fixtures are not real Flutter
+memory qualification.
+
+`inventory.json` retains per-file semantics, and every file is present in
+`platform-assignments.json`. `execution.json` records the exact plan, helper,
+source, SDK, selected workers, groups and resource observations. Per-command
+receipts retain argv, worker, timestamps, exit and elapsed time. Linux GNU time
+records user/system CPU and individual command RSS when its interface is
+available; unavailable metrics (including this timer interface on macOS) remain
+UNKNOWN. These measurements never stand for the concurrent job's peak memory.
+Cgroup peak/current/OOM counters are labeled with their broader scope, which
+may include other processes and earlier work. Owned concurrent-job peak remains
+UNKNOWN without an attributable measurement. Successful execution still leaves
+resource/performance acceptance NOT_EVALUATED for independent review.
+
+Case and coverage union artifacts are retained. Any command, identity, union,
+merge or cleanup failure prevents COMPLETE. Completed commands and failed
+partial evidence are preserved; no automatic singleton retry hides a failure.
+A new exact public runner commit is reviewed before private fixed pins advance.
+The generated public workflow successor keeps its actual `github.sha` binding;
+no commit embeds its own prospective SHA. Ordinary developer `make test`
+semantics, stable attestation reuse and the adapter are unchanged. The next
+necessary complete source gate must qualify final source/builder identities;
+no repeat old pilot or separate full A-then-B campaign is required.

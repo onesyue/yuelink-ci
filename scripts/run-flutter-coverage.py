@@ -2,15 +2,20 @@
 """Run the complete Flutter corpus with independent compiler/cache lifetimes."""
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import hashlib
 import importlib.util
 import json
+import os
+import platform
 import re
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import threading
+import time
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 REQUIRED_TESTS = {
     "test/services/user_custom_rules_test.dart",
@@ -22,6 +27,17 @@ MINIMUM_FILES = 500
 MINIMUM_TESTS = 2044
 WORKERS = 4
 MACOS_TEST = "test/core/storage/secure_storage_macos_keychain_test.dart"
+ISOLATED = REQUIRED_TESTS | {
+    "test/governance/mihomo_fork_ledger_test.dart",
+    "test/core/storage/subscription_reset_operation_store_test.dart",
+    "test/core/storage/tun_datapath_accel_latch_test.dart",
+}
+PLAN = Path(__file__).resolve().parents[1] / "tests/fixtures/flutter-coverage-groups-20261020.json"
+GIB = 1024 ** 3
+# Scheduling headroom above the observed 1.53 GiB sample maximum, not a
+# full-corpus peak-memory claim. Unknown capacity admits only one worker.
+WORKER_MEMORY = 5 * GIB // 2
+
 
 
 def partition(root: Path) -> list[list[str]]:
@@ -43,6 +59,223 @@ def partition(root: Path) -> list[list[str]]:
     early = REQUIRED_TESTS | {"test/governance/mihomo_fork_ledger_test.dart"}
     return [[p] for p in sorted(tests, key=lambda path: (path not in early, path))]
 
+
+
+def digest(value) -> str:
+    return hashlib.sha256(json.dumps(value, separators=(",", ":"), ensure_ascii=True).encode()).hexdigest()
+
+
+def grouped_plan(root: Path, inventory: list[list[str]]) -> tuple[dict, list[list[str]]]:
+    data = json.loads(PLAN.read_text())
+    paths = [item[0] for item in inventory]
+    expected = {path: hashlib.sha256((root / path).read_bytes()).hexdigest() for path in paths}
+    groups = data["groups"]
+    linux = [path for path in paths if path != MACOS_TEST]
+    if (data["schema"] != 1 or data["files"] != expected
+            or sorted(data["isolated"]) != sorted(ISOLATED)
+            or data["macos_test"] != MACOS_TEST
+            or not all(isinstance(group, list) and 1 <= len(group) <= 8 for group in groups)
+            or [path for group in groups for path in group] != linux
+            or any(path in ISOLATED and group != [path] for group in groups for path in group)
+            or not ISOLATED.issubset(expected)):
+        raise ValueError("reviewed grouping inventory/blob/isolation plan mismatch")
+    if set(data["runtime_files"]) != {"pubspec.lock"} or set(data["sdk"]) != {
+            "frameworkVersion", "frameworkRevision", "engineRevision", "dartSdkVersion"}:
+        raise ValueError("missing reviewed runtime/SDK binding")
+    for path, expected_hash in data["runtime_files"].items():
+        if path != "pubspec.lock":
+            raise ValueError("unknown runtime binding")
+        if hashlib.sha256((root / path).read_bytes()).hexdigest() != expected_hash:
+            raise ValueError("reviewed grouping runtime lock mismatch")
+    tree = subprocess.check_output(["git", "rev-parse", "HEAD:lib"], cwd=root, text=True).strip()
+    if tree != data["lib_tree"]:
+        raise ValueError("reviewed grouping runtime tree mismatch")
+    return data, groups
+
+
+def relative(path: str, worker: Path, prefix: str) -> str:
+    candidate = Path(path)
+    if candidate.is_absolute():
+        candidate = candidate.relative_to(worker)
+    if ".." in candidate.parts or not str(candidate).startswith(prefix):
+        raise ValueError(f"report path escaped {prefix}")
+    return str(candidate)
+
+
+def cases(report: Path, worker: Path, expected: list[str], counter) -> tuple[int, Counter]:
+    lines = report.read_text().splitlines()
+    count = counter.count_test_starts(lines)
+    suites, started, finished, reached = {}, {}, set(), set()
+    result = Counter()
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue  # The canonical parser rejects corruption after start.
+        if not isinstance(event, dict):
+            continue
+        kind = event.get("type")
+        if kind == "suite":
+            suite = event["suite"]
+            path = relative(suite["path"], worker, "test/")
+            if suite["id"] in suites or path in suites.values() or path not in expected:
+                raise ValueError("duplicate or unexpected suite identity")
+            suites[suite["id"]] = path
+        elif kind == "testStart":
+            test = event["test"]
+            if test["id"] in started or test["suiteID"] not in suites:
+                raise ValueError("duplicate test or missing suite identity")
+            started[test["id"]] = test
+        elif kind == "testDone":
+            identity = event["testID"]
+            if identity not in started or identity in finished or event["result"] != "success":
+                raise ValueError("missing/duplicate/failed test terminal")
+            if type(event["hidden"]) is not bool or type(event["skipped"]) is not bool:
+                raise ValueError("invalid visible/skip classification")
+            finished.add(identity)
+            if not event["hidden"]:
+                test = started[identity]
+                path = suites[test["suiteID"]]
+                reached.add(path)
+                result[(path, test["name"].replace(str(worker), "<source>"), event["skipped"])] += 1
+    if finished != set(started) or reached != set(expected) or set(suites.values()) != set(expected):
+        raise ValueError("requested file or test terminal missing")
+    return count, result
+
+
+def coverage_rows(path: Path, worker: Path) -> set:
+    rows = set()
+    source = None
+    for line in path.read_text().splitlines():
+        if line.startswith("SF:"):
+            source = relative(line[3:], worker, "lib/")
+        elif line == "end_of_record":
+            source = None
+        elif line.startswith(("DA:", "BRDA:", "FNDA:")):
+            if source is None:
+                raise ValueError("coverage counter without source")
+            kind, payload = line.split(":", 1)
+            fields = payload.split(",")
+            if kind == "DA":
+                key, hits = fields[:2]
+            elif kind == "BRDA":
+                key, hits = ",".join(fields[:3]), fields[3]
+            else:
+                hits, key = payload.split(",", 1)
+            rows.add((source, kind, key, False))
+            if hits != "-" and int(hits) > 0:
+                rows.add((source, kind, key, True))
+    return rows
+
+
+def read_text(path: Path) -> str | None:
+    try:
+        return path.read_text().strip()
+    except (OSError, UnicodeError):
+        return None
+
+
+def resource_snapshot() -> dict:
+    """Visible host/cgroup evidence only; unavailable interfaces remain null."""
+    cpu = os.cpu_count()
+    if hasattr(os, "sched_getaffinity"):
+        cpu = min(cpu or 1, len(os.sched_getaffinity(0)))
+    system = platform.system()
+    cgroup = Path("/sys/fs/cgroup")
+    membership = read_text(Path("/proc/self/cgroup"))
+    match = re.search(r"^0::(/.*)$", membership or "", re.MULTILINE)
+    hierarchy_known = False
+    bases = [cgroup]
+    if match and ".." not in Path(match[1]).parts:
+        candidate = cgroup / match[1].lstrip("/")
+        if read_text(candidate / "cgroup.controllers") is not None:
+            hierarchy_known = True
+            bases = [candidate]
+            while candidate != cgroup:
+                candidate = candidate.parent
+                bases.append(candidate)
+    available = None
+    meminfo = read_text(Path("/proc/meminfo"))
+    if meminfo:
+        match = re.search(r"^MemAvailable:\s+(\d+) kB$", meminfo, re.MULTILINE)
+        if match:
+            available = int(match[1]) * 1024
+    elif system == "Darwin":
+        try:
+            vm = subprocess.check_output(["vm_stat"], text=True, timeout=5)
+            page = int(re.search(r"page size of (\d+) bytes", vm)[1])
+            available = sum(int(re.search(rf"^{label}:\s+(\d+)\.", vm, re.MULTILINE)[1])
+                            for label in ("Pages free", "Pages inactive")) * page
+        except (OSError, subprocess.SubprocessError, TypeError, ValueError):
+            pass
+    limits = []
+    for base in bases:
+        quota = read_text(base / "cpu.max")
+        if quota and quota.split()[0] != "max":
+            amount, period = map(int, quota.split())
+            cpu = min(cpu or 1, max(1, amount // period))
+        memory_max = read_text(base / "memory.max")
+        root_uncontrolled = False
+        # Only the real v2 root omits cgroup.events. Namespace roots still
+        # expose it and their limits; unreadable files do not prove absence.
+        if base == cgroup and quota is None and memory_max is None:
+            controllers = read_text(base / "cgroup.controllers")
+            if controllers is not None and {"cpu", "memory"} <= set(controllers.split()):
+                try:
+                    os.stat(base / "cgroup.events")
+                except FileNotFoundError:
+                    root_uncontrolled = True
+                except OSError:
+                    pass
+        current = read_text(base / "memory.current")
+        limit = int(memory_max) if memory_max and memory_max.isdecimal() else None
+        current_bytes = int(current) if current and current.isdecimal() else None
+        if limit is not None and current_bytes is not None:
+            headroom = max(0, limit - current_bytes)
+            available = min(available, headroom) if available is not None else headroom
+        limits.append({"path": str(base), "cpu_max": quota, "memory_max": memory_max,
+                       "root_limits_not_applicable": root_uncontrolled,
+                       "current_bytes": current_bytes, "peak_bytes": read_text(base / "memory.peak"),
+                       "events": read_text(base / "memory.events")})
+    missing = []
+    if cpu is None:
+        missing.append("effective CPU count")
+    if available is None:
+        missing.append("host available memory or visible cgroup headroom")
+    if system == "Linux" and (not hierarchy_known or any(
+            (item["cpu_max"] is None or item["memory_max"] is None)
+            and not item["root_limits_not_applicable"] for item in limits)):
+        missing.append("complete applicable cgroup-v2 CPU/memory hierarchy (v1 is not measured)")
+    return {"effective_cpus": cpu, "available_memory_bytes": available, "cgroup": limits,
+            "capacity_status": "UNKNOWN" if missing else "VISIBLE_BOUNDS",
+            "missing_interfaces": missing,
+            "scope": "host/cgroup; peak may include other processes and prior work, not owned job peak"}
+
+
+def worker_count(snapshot: dict) -> int:
+    explicit = os.environ.get("YUELINK_COVERAGE_MAX_WORKERS", str(WORKERS))
+    if not re.fullmatch(r"[1-9][0-9]*", explicit):
+        raise ValueError("worker upper bound must be a positive integer")
+    cpu = snapshot["effective_cpus"]
+    memory = snapshot["available_memory_bytes"]
+    maximum = min(WORKERS, int(explicit), cpu or 1)
+    if memory is not None:
+        memory_workers = max(0, (memory - GIB // 2) // WORKER_MEMORY)
+        if not memory_workers:
+            raise ValueError("insufficient visible memory for one grouped compiler worker")
+        maximum = min(maximum, memory_workers)
+    if snapshot["capacity_status"] == "UNKNOWN":
+        return 1  # Compatibility execution only, never resource/performance acceptance.
+    return maximum
+
+
+def timed_command(command: list[str], output: Path) -> list[str]:
+    timer = Path("/usr/bin/time")
+    if not timer.is_file():
+        return command  # Resource receipt explicitly records unavailable data.
+    if platform.system() == "Linux":
+        return [str(timer), "-v", "-o", str(output), *command]
+    return command
 
 
 def add_gitlinks(source: Path, worker: Path, revision: str,
@@ -74,12 +307,32 @@ def main() -> None:
     root = Path.cwd()
     out = root / "coverage/source-gate"
     out.mkdir(parents=True, exist_ok=False)
-    groups = partition(root)
-    (out / "inventory.json").write_text(json.dumps(groups, indent=2) + "\n")
-    assignments = {group[0]: ("macos_integration" if group == [MACOS_TEST]
-                             else "source_contract") for group in groups}
+    inventory = partition(root)
+    plan, groups = grouped_plan(root, inventory)
+    (out / "inventory.json").write_text(json.dumps(inventory, indent=2) + "\n")
+    assignments = {path: ("macos_integration" if path == MACOS_TEST else "source_contract")
+                   for group in inventory for path in group}
     (out / "platform-assignments.json").write_text(json.dumps(assignments, indent=2) + "\n")
-    groups = [group for group in groups if group != [MACOS_TEST]]
+    resources = resource_snapshot()
+    capacity = None
+    receipt = {"schema": 1, "status": "INCOMPLETE", "groups": groups,
+               "plan_sha256": hashlib.sha256(PLAN.read_bytes()).hexdigest(),
+               "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+               "resources_before": resources, "workers": capacity,
+               "worker_memory_reservation_bytes": WORKER_MEMORY,
+               "resource_acceptance": "NOT_EVALUATED; visible bounds are scheduling inputs only",
+               "worker_selection": "CONSERVATIVE_UNKNOWN" if resources["capacity_status"] == "UNKNOWN" else "VISIBLE_BOUNDS",
+               "aggregate_owned_job_peak_bytes": None,
+               "aggregate_peak_scope": "UNKNOWN; group RSS is not concurrent job peak"}
+    receipt_path = out / "execution.json"
+    receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
+    try:
+        capacity = worker_count(resources)
+    except ValueError as error:
+        receipt.update(status="RESOURCE_REFUSED", resource_error=str(error))
+        receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
+        raise
+    receipt["workers"] = capacity
     source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root).decode().strip()
     subprocess.run(["git", "diff", "--exit-code", "HEAD", "--", "test"], cwd=root, check=True)
     spec = importlib.util.spec_from_file_location(
@@ -88,6 +341,15 @@ def main() -> None:
     counter = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(counter)
     stop = threading.Event()
+    case_union = Counter()
+    coverage_union = set()
+    union_lock = threading.Lock()
+    receipt["source_sha"] = source
+    receipt["sdk"] = json.loads(subprocess.check_output(["flutter", "--version", "--machine"], cwd=root, text=True, timeout=30))
+    if any(receipt["sdk"].get(key) != value for key, value in plan["sdk"].items()):
+        raise ValueError("grouping SDK differs from reviewed baseline")
+    receipt["counter_sha256"] = hashlib.sha256(Path(spec.origin).read_bytes()).hexdigest()
+    receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
 
     def execute(worker: Path, assignments: list[tuple[int, list[str]]]) -> list[tuple[int, int, Path]]:
         completed = []
@@ -109,14 +371,33 @@ def main() -> None:
                     "flutter", "test", "--no-pub", "--coverage", "--machine",
                     "--concurrency=1", "--coverage-path", str(lcov), *tests,
                 ]
-                print(f"Flutter coverage file {index + 1}/{len(groups)}: {tests[0]}", flush=True)
-                with report.open("w") as log:
-                    result = subprocess.run(command, cwd=worker, stdout=log,
-                                            stderr=subprocess.STDOUT, timeout=350)
+                print(f"Flutter coverage group {index + 1}/{len(groups)}: {len(tests)} files", flush=True)
+                group_receipt = {"index": index, "files": tests, "worker": worker.name,
+                                 "command": command, "started_at": time.time(), "exit_code": None}
+                start = time.monotonic()
+                try:
+                    with report.open("w") as log:
+                        result = subprocess.run(timed_command(command, out / f"{index}.resource.txt"),
+                                                cwd=worker, stdout=log, stderr=subprocess.STDOUT, timeout=350, check=False)
+                    group_receipt["exit_code"] = result.returncode
+                finally:
+                    raw_resource = read_text(out / f"{index}.resource.txt")
+                    metrics = {}
+                    for key, pattern in {
+                        "user_cpu_seconds": r"User time \(seconds\): ([0-9.]+)",
+                        "system_cpu_seconds": r"System time \(seconds\): ([0-9.]+)",
+                        "max_rss_kib": r"Maximum resident set size \(kbytes\): ([0-9]+)",
+                    }.items():
+                        matched = re.search(pattern, raw_resource or "")
+                        metrics[key] = float(matched[1]) if matched else None
+                    group_receipt.update(elapsed_seconds=time.monotonic() - start, finished_at=time.time(),
+                                         resources=metrics,
+                                         resource_status="OBSERVED" if all(v is not None for v in metrics.values()) else "UNKNOWN",
+                                         resource_scope="per-command process tree; not concurrent job peak")
+                    (out / f"{index}.execution.json").write_text(json.dumps(group_receipt, indent=2) + "\n")
                 if result.returncode:
                     raise subprocess.CalledProcessError(result.returncode, command)
-                with report.open() as log:
-                    observed = counter.count_test_starts(log)
+                observed, visible = cases(report, worker, tests, counter)
                 if not lcov.is_file():
                     raise ValueError(f"coverage report missing for file {index}")
                 lines = lcov.read_text().splitlines(keepends=True)
@@ -130,6 +411,10 @@ def main() -> None:
                         raise ValueError("coverage source escaped the exact application tree")
                     lines[i] = "SF:" + path + "\n"
                 lcov.write_text("".join(lines))
+                rows = coverage_rows(lcov, worker)
+                with union_lock:
+                    case_union.update(visible)
+                    coverage_union.update(rows)
                 completed.append((index, observed, lcov))
             subprocess.run(["git", "diff", "--exit-code", "HEAD"], cwd=worker, check=True)
             return completed
@@ -142,8 +427,8 @@ def main() -> None:
     gitlinks = []
     with tempfile.TemporaryDirectory(prefix="flutter-coverage-") as temporary:
         try:
-            for index in range(WORKERS):
-                worker = Path(temporary) / f"source-{index}"
+            for index in range(capacity):
+                worker = Path(temporary).resolve() / f"source-{index}"
                 subprocess.run(["git", "worktree", "add", "--detach", str(worker), source],
                                cwd=root, check=True)
                 workers.append(worker)
@@ -151,8 +436,8 @@ def main() -> None:
                 subprocess.run(["flutter", "pub", "get", "--offline", "--enforce-lockfile"],
                                cwd=worker, check=True, timeout=120)
             assignments = list(enumerate(groups))
-            with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-                futures = [pool.submit(execute, worker, assignments[index::WORKERS])
+            with ThreadPoolExecutor(max_workers=capacity) as pool:
+                futures = [pool.submit(execute, worker, assignments[index::capacity])
                            for index, worker in enumerate(workers)]
                 for future in as_completed(futures):
                     completed.extend(future.result())
@@ -162,6 +447,16 @@ def main() -> None:
                 raise ValueError("complete test corpus did not execute")
             observed = sum(count for _, count, _ in completed)
             counter.enforce_floor(observed, MINIMUM_TESTS)
+            case_rows = [[*identity, count] for identity, count in sorted(case_union.items())]
+            summary = {"cases_sha256": digest(case_rows), "coverage_sha256": digest(sorted(coverage_union)),
+                       "visible_cases": sum(case_union.values()),
+                       "visible_skips": sum(count for (_, _, skipped), count in case_union.items() if skipped),
+                       "coverage_rows": len(coverage_union)}
+            receipt["union"] = summary
+            (out / "case-union.json").write_text(json.dumps(case_rows, indent=2) + "\n")
+            (out / "coverage-union.json").write_text(json.dumps(sorted(coverage_union)) + "\n")
+            if summary != plan["baseline_union"]:
+                raise ValueError("full-corpus case/skip or coverage union differs from reviewed baseline")
             # Source-contract tests may execute no application library lines.
             # Flutter still emits their empty LCOV file; absent output refuses.
             nonempty = [path for _, _, path in sorted(completed) if path.stat().st_size]
@@ -171,14 +466,26 @@ def main() -> None:
                         for argument in ("--add-tracefile", str(path))]
             subprocess.run(["lcov", *coverage, "--output-file", "coverage/lcov.info"],
                            cwd=root, check=True)
-            print(f"Flutter tests observed: {observed}; complete file inventory: {len(groups)}", flush=True)
+            receipt["tests_complete"] = True
         finally:
-            for original, target in reversed(gitlinks):
-                subprocess.run(["git", "worktree", "remove", "--force", str(target)],
-                               cwd=original, check=True, timeout=60)
-            for worker in workers:
-                subprocess.run(["git", "worktree", "remove", "--force", str(worker)],
-                               cwd=root, check=True, timeout=60)
+            receipt["resources_after"] = resource_snapshot()
+            receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
+            cleanup_errors = []
+            for original, target in [*reversed(gitlinks), *((root, worker) for worker in workers)]:
+                try:
+                    subprocess.run(["git", "worktree", "remove", "--force", str(target)],
+                                   cwd=original, check=True, timeout=60)
+                except (OSError, subprocess.SubprocessError) as error:
+                    cleanup_errors.append(str(error))
+            receipt["cleanup_complete"] = not cleanup_errors
+            receipt["cleanup_errors"] = cleanup_errors
+            receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
+            if cleanup_errors:
+                raise RuntimeError("owned worktree cleanup failed")
+    receipt["status"] = "COMPLETE"
+    receipt["cleanup_complete"] = True
+    receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
+    print(f"Flutter tests observed: {observed}; complete file inventory: {len(groups)} groups/{len(inventory)} files", flush=True)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 """Execute the workflow shell and real report comparators without Flutter/network."""
 
+import hashlib
 import json
 import os
 import re
@@ -103,8 +104,11 @@ class PilotWorkflowTests(unittest.TestCase):
         main = '\nif __name__ == "__main__":\n    main()\n'
         self.assertIn(main, original)
         (self.tools / "scripts/flutter-coverage-pilot.py").write_text(original.replace(main, STUB))
-        shutil.copyfile(ROOT / "tests/fixtures/flutter-coverage-pilot-20261019.json",
-                        self.tools / "tests/fixtures/flutter-coverage-pilot-20261019.json")
+        # This is the executable fixture's helper binding, not the historical receipt.
+        manifest = json.loads((ROOT / "tests/fixtures/flutter-coverage-pilot-20261019.json").read_text())
+        manifest["helper_sha256"] = {name: hashlib.sha256((self.tools / "scripts" / name).read_bytes()).hexdigest()
+                                     for name in manifest["helper_sha256"]}
+        (self.tools / "tests/fixtures/flutter-coverage-pilot-20261019.json").write_text(json.dumps(manifest))
         self.env = dict(os.environ, GITHUB_WORKSPACE=str(self.workspace),
                         RUNNER_TEMP=str(self.root / "runner"), SOURCE_SHA=SOURCE,
                         BUILDER_BASE=BASE, PILOT_SHA=PILOT,

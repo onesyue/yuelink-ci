@@ -1,16 +1,23 @@
 """Exercise the real coverage orchestrator with bounded executable fixtures."""
 from __future__ import annotations
 
+import hashlib
+import importlib.util
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+SPEC = importlib.util.spec_from_file_location("coverage_runner", ROOT / "scripts/run-flutter-coverage.py")
+RUNNER = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(RUNNER)
+
 
 
 class CoverageRunnerTests(unittest.TestCase):
@@ -23,7 +30,9 @@ class CoverageRunnerTests(unittest.TestCase):
         names = [
             "services/user_custom_rules", "services/subscription_parser",
             "core/storage/persisted_schema", "core/storage/settings_service_schema",
-            *[f"services/case_{i}" for i in range(496)],
+            "governance/mihomo_fork_ledger",
+            "core/storage/subscription_reset_operation_store", "core/storage/tun_datapath_accel_latch",
+            *[f"services/case_{i}" for i in range(493)],
         ]
         for name in names:
             path = self.root / "test" / (name + "_test.dart")
@@ -31,8 +40,9 @@ class CoverageRunnerTests(unittest.TestCase):
             path.write_text("void main() {}\n")
         (self.root / "lib").mkdir()
         (self.root / "lib/a.dart").write_text("void fixture() {}\n")
+        (self.root / "pubspec.lock").write_text("fixture lock\n")
         subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
-        subprocess.run(["git", "add", "test", "lib"], cwd=self.root, check=True)
+        subprocess.run(["git", "add", "test", "lib", "pubspec.lock"], cwd=self.root, check=True)
         subprocess.run([
             "git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
             "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
@@ -44,12 +54,13 @@ class CoverageRunnerTests(unittest.TestCase):
         self.executable("flutter", '''import json,os,sys
 from pathlib import Path
 args=sys.argv[1:]
+if args==['--version','--machine']: print(json.dumps({k:'fixture' for k in ['frameworkVersion','frameworkRevision','engineRevision','dartSdkVersion']})); sys.exit(0)
 if args[:2]==['pub','get']:
     assert args==['pub','get','--offline','--enforce-lockfile']
     sys.exit(8 if os.environ.get('PUBGET_FAILURE') else 0)
 assert args[:5]==['test','--no-pub','--coverage','--machine','--concurrency=1']
 files=[a for a in args if a.startswith('test/')]
-assert len(files)==1
+assert 1<=len(files)<=8
 if os.environ.get('SUBMODULE_REQUIRED'):
     assert Path('core/mihomo/go.mod').read_text()=='module fixture\\n'
     assert Path('core/mihomo/dependency/leaf.txt').read_text()=='pinned dependency\\n'
@@ -68,18 +79,32 @@ if os.environ.get('TRACKED_MUTATION'):
     Path('lib/a.dart').write_text('changed source')
 if not os.environ.get('MISSING_COVERAGE'):
     report.write_text('SF:'+('/outside/a.dart' if os.environ.get('COVERAGE_ESCAPE') else str(Path.cwd()/'lib/a.dart'))+'\\nDA:1,1\\nend_of_record\\n')
+if os.environ.get('COVERAGE_LOSS') and report.is_file(): report.write_text(report.read_text().replace('DA:1,1','DA:2,1'))
 if os.environ.get('ALL_EMPTY_COVERAGE') or (os.environ.get('EMPTY_COVERAGE') and report.stem=='7'):
     report.write_text('')
 print(json.dumps({'type':'start'}))
 count=1 if os.environ.get('LOW_COUNT') else 5
-for i in range(count):
-    print(json.dumps({'type':'testStart','test':{'id':i,'name':files[0]},'worker':str(Path.cwd())}))
+if os.environ.get('OMIT_SECOND') and len(files)>1: files.pop(1)
+if os.environ.get('UNEXPECTED_FILE'): files[0]='test/unexpected_test.dart'
+for suite,path in enumerate(files):
+    record={'type':'suite','suite':{'id':suite,'path':str(Path.cwd()/path)},'worker':str(Path.cwd())}
+    print(json.dumps(record))
+    if os.environ.get('DUPLICATE_SUITE'): print(json.dumps(record))
+    for case in range(count):
+        i=suite*10+case
+        record={'type':'testStart','test':{'id':i,'suiteID':suite,'name':f'case {case}'}}
+        print(json.dumps(record))
+        if os.environ.get('DUPLICATE_START'): print(json.dumps(record))
+        record={'type':'testDone','testID':i,'result':'failure' if os.environ.get('FAILED_TERMINAL') else 'success','hidden':bool(os.environ.get('HIDE_CASE')),'skipped':bool(os.environ.get('CHANGED_SKIP'))}
+        if not os.environ.get('MISSING_TERMINAL'): print(json.dumps(record))
+        if os.environ.get('DUPLICATE_TERMINAL'): print(json.dumps(record))
 if not os.environ.get('MISSING_DONE'): print(json.dumps({'type':'done','success':True}))
+if os.environ.get('CANCEL_ENGINE'): os.kill(os.getpid(),15)
 if os.environ.get('FLUTTER_FAILURE') or os.environ.get('FAIL_GROUP')==report.stem: sys.exit(7)
 ''')
         self.executable("lcov", '''import os,sys
 from pathlib import Path
-expected=499 if os.environ.get('EMPTY_COVERAGE') else 500
+expected=int(os.environ['FIXTURE_GROUPS']) - bool(os.environ.get('EMPTY_COVERAGE'))
 assert sys.argv.count('--add-tracefile')==expected
 reports=[Path(sys.argv[i+1]) for i,a in enumerate(sys.argv) if a=='--add-tracefile']
 assert len(set(reports))==expected and all(p.is_file() for p in reports)
@@ -88,15 +113,70 @@ if os.environ.get('MERGE_FAILURE'): sys.exit(9)
 Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
 ''')
 
+        self.tools = self.root / "tools"
+        (self.tools / "scripts").mkdir(parents=True)
+        (self.tools / "tests/fixtures").mkdir(parents=True)
+        for name in ("run-flutter-coverage.py", "count-flutter-machine-tests.py"):
+            shutil.copyfile(ROOT / "scripts" / name, self.tools / "scripts" / name)
+        self.plan_path = self.tools / "tests/fixtures/flutter-coverage-groups-20261020.json"
+        self.refresh_plan()
+        # Only the expensive engine and resource capacity are fixture controls.
+        # The runner, Git worktrees, plan/protocol/coverage checks execute unchanged.
+        self.entry = self.tools / "fixture-entry.py"
+        self.entry.write_text("""import importlib.util,json,os
+from pathlib import Path
+p=Path(__file__).parent/'scripts/run-flutter-coverage.py'
+s=importlib.util.spec_from_file_location('runner',p)
+m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+m.resource_snapshot=lambda:json.loads(os.environ['FIXTURE_RESOURCES'])
+m.main()
+""")
+
+    def refresh_plan(self):
+        inventory = RUNNER.partition(self.root)
+        groups, batch = [], []
+        for (path,) in inventory:
+            if path == RUNNER.MACOS_TEST:
+                continue
+            if path in RUNNER.ISOLATED:
+                if batch:
+                    groups.append(batch)
+                    batch = []
+                groups.append([path])
+            else:
+                batch.append(path)
+                if len(batch) == 8:
+                    groups.append(batch)
+                    batch = []
+        if batch:
+            groups.append(batch)
+        rows = [[path, f"case {i}", False, 1] for (path,) in inventory
+                if path != RUNNER.MACOS_TEST for i in range(5)]
+        self.plan = {"schema": 1, "files": {path: hashlib.sha256((self.root / path).read_bytes()).hexdigest()
+                                          for (path,) in inventory},
+                     "groups": groups, "isolated": sorted(RUNNER.ISOLATED), "macos_test": RUNNER.MACOS_TEST,
+                     "runtime_files": {"pubspec.lock": hashlib.sha256((self.root / "pubspec.lock").read_bytes()).hexdigest()}, "lib_tree": subprocess.check_output(
+                         ["git", "rev-parse", "HEAD:lib"], cwd=self.root, text=True).strip(),
+                     "sdk": {key: "fixture" for key in ("frameworkVersion", "frameworkRevision", "engineRevision", "dartSdkVersion")},
+                     "baseline_union": {"cases_sha256": RUNNER.digest(sorted(rows)),
+                                        "coverage_sha256": RUNNER.digest([
+                                            ("lib/a.dart", "DA", "1", False), ("lib/a.dart", "DA", "1", True)]),
+                                        "visible_cases": len(rows), "visible_skips": 0, "coverage_rows": 2}}
+        self.plan_path.write_text(json.dumps(self.plan))
+
     def executable(self, name, body):
         path = self.bin / name
         path.write_text(f"#!{sys.executable}\n" + body)
         path.chmod(0o755)
 
     def run_gate(self, **overrides):
-        env = dict(os.environ, PATH=str(self.bin) + os.pathsep + os.environ["PATH"], **overrides)
-        return subprocess.run([sys.executable, str(ROOT / "scripts/run-flutter-coverage.py")],
-                              cwd=self.root, env=env, text=True, capture_output=True, timeout=40)
+        env = dict(os.environ, PATH=str(self.bin) + os.pathsep + os.environ["PATH"],
+                   FIXTURE_GROUPS=str(len(self.plan["groups"])),
+                   FIXTURE_RESOURCES=json.dumps({"effective_cpus": 4, "available_memory_bytes": 16 * RUNNER.GIB, "capacity_status": "VISIBLE_BOUNDS", "missing_interfaces": []}))
+        env.pop("YUELINK_COVERAGE_MAX_WORKERS", None)
+        env.update(overrides)
+        return subprocess.run([sys.executable, str(self.entry)],
+                              cwd=self.root, env=env, text=True, capture_output=True, timeout=40, check=False)
 
     def test_complete_corpus_executes_once_with_independent_sources_and_kernels(self):
         result = self.run_gate()
@@ -108,12 +188,18 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
         workers = set()
         for report in evidence.glob("*.jsonl"):
             rows = [json.loads(line) for line in report.read_text().splitlines()]
-            first = next(row for row in rows if row["type"] == "testStart")
-            actual.append(first["test"]["name"])
-            workers.add(first["worker"])
+            for row in rows:
+                if row["type"] == "suite":
+                    actual.append(str(Path(row["suite"]["path"]).relative_to(row["worker"])))
+                    workers.add(row["worker"])
         self.assertEqual(sorted(actual), sorted(group[0] for group in groups))
         self.assertEqual(len(set(actual)), 500)
         self.assertEqual(len(workers), 4)
+        receipt = json.loads((evidence / "execution.json").read_text())
+        self.assertEqual(receipt["status"], "COMPLETE")
+        self.assertEqual(receipt["groups"], self.plan["groups"])
+        self.assertIsNone(receipt["aggregate_owned_job_peak_bytes"])
+        self.assertEqual(set(json.loads((evidence / "platform-assignments.json").read_text())), set(actual))
         self.assertNotIn(str(self.root), workers)
         self.assertIn("Flutter tests observed: 2500", result.stdout)
         self.assertTrue((self.root / "coverage/lcov.info").is_file())
@@ -123,7 +209,7 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
     def test_every_failed_engine_protocol_dependency_or_merge_blocks_acceptance(self):
         for failure in ["FLUTTER_FAILURE", "MISSING_DONE", "MISSING_COVERAGE",
                         "LOW_COUNT", "MERGE_FAILURE", "PUBGET_FAILURE",
-                        "COVERAGE_ESCAPE", "TRACKED_MUTATION", "ALL_EMPTY_COVERAGE"]:
+                        "COVERAGE_ESCAPE", "TRACKED_MUTATION", "ALL_EMPTY_COVERAGE", "COVERAGE_LOSS", "CANCEL_ENGINE"]:
             with self.subTest(failure=failure):
                 shutil.rmtree(self.root / "coverage", ignore_errors=True)
                 result = self.run_gate(**{failure: "1"})
@@ -135,7 +221,7 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
         self.assertEqual(result.returncode, 0, result.stderr)
         evidence = self.root / "coverage/source-gate"
         self.assertEqual((evidence / "7.info").read_text(), "")
-        self.assertEqual(len(list(evidence.glob("*.jsonl"))), 500)
+        self.assertEqual(len(list(evidence.glob("*.jsonl"))), len(self.plan["groups"]))
         self.assertTrue((self.root / "coverage/lcov.info").is_file())
 
     def test_late_failure_preserves_prior_evidence_and_never_merges(self):
@@ -144,7 +230,7 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
         evidence = self.root / "coverage/source-gate"
         self.assertTrue((evidence / "4.info").is_file())
         self.assertTrue((evidence / "8.jsonl").is_file())
-        self.assertFalse((evidence / "499.jsonl").exists())
+        self.assertFalse((evidence / f"{len(self.plan['groups']) - 1}.jsonl").exists())
         self.assertFalse((self.root / "coverage/lcov.info").exists())
 
     def test_cache_symlink_refuses_before_touching_its_target(self):
@@ -164,12 +250,13 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
         subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                         "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
                         "commit", "-qm", "native macOS assignment"], cwd=self.root, check=True)
+        self.refresh_plan()
         result = self.run_gate()
         self.assertEqual(result.returncode, 0, result.stderr)
         evidence = self.root / "coverage/source-gate"
         self.assertEqual(len(json.loads((evidence / "inventory.json").read_text())), 501)
         self.assertEqual(json.loads((evidence / "platform-assignments.json").read_text())[name], "macos_integration")
-        self.assertEqual(len(list(evidence.glob("*.jsonl"))), 500)
+        self.assertEqual(len(list(evidence.glob("*.jsonl"))), len(self.plan["groups"]))
         self.assertIn("Flutter tests observed: 2500", result.stdout)
         workflow = (ROOT / ".github/workflows/source-attestation.yml").read_text()
         native = workflow.split("  macos_integration:", 1)[1].split("  windows_durability:", 1)[0]
@@ -265,6 +352,171 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
         result = self.run_gate()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("test paths are symlinks", result.stderr)
+
+    def test_actual_tracked_add_rename_and_edit_require_reviewed_plan_refresh(self):
+        baseline = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root, text=True).strip()
+        path = self.root / "test/services/case_0_test.dart"
+        for change in ("add", "rename", "edit"):
+            with self.subTest(change=change):
+                if change == "add":
+                    (path.parent / "added_test.dart").write_text("void main() {}")
+                elif change == "rename":
+                    path.rename(path.with_name("renamed_test.dart"))
+                else:
+                    path.write_text("void main() { /* changed */ }\n")
+                subprocess.run(["git", "add", "-A", "test"], cwd=self.root, check=True)
+                self.commit_fixture(self.root, change)
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                result = self.run_gate()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("plan mismatch", result.stderr)
+                self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
+                # This repository is an owned temporary test fixture only.
+                subprocess.run(["git", "reset", "--hard", baseline], cwd=self.root, check=True, capture_output=True)
+
+    def test_cleanup_failure_cannot_emit_complete_after_successful_tests(self):
+        real_git = shutil.which("git")
+        self.executable("git", f"""import os,sys
+if sys.argv[1:3]==['worktree','remove']: sys.exit(19)
+os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
+""")
+        result = self.run_gate()
+        self.assertNotEqual(result.returncode, 0)
+        receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
+        self.assertEqual(receipt["status"], "INCOMPLETE")
+        self.assertFalse(receipt["cleanup_complete"])
+        self.assertEqual(len(receipt["cleanup_errors"]), 4)
+        self.assertNotIn("Flutter tests observed:", result.stdout)
+
+    def test_group_file_case_skip_and_terminal_changes_refuse_real_commands(self):
+        for fault in ("OMIT_SECOND", "UNEXPECTED_FILE", "DUPLICATE_SUITE", "DUPLICATE_START",
+                      "MISSING_TERMINAL", "DUPLICATE_TERMINAL", "FAILED_TERMINAL", "HIDE_CASE", "CHANGED_SKIP"):
+            with self.subTest(fault=fault):
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                result = self.run_gate(**{fault: "1"})
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertFalse((self.root / "coverage/lcov.info").exists())
+                receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
+                self.assertNotEqual(receipt["status"], "COMPLETE")
+
+    def test_reviewed_plan_rejects_changed_blob_membership_and_isolation(self):
+        original = json.loads(self.plan_path.read_text())
+        for fault in ("blob", "missing", "duplicate", "isolated", "order", "lib", "lock", "sdk"):
+            with self.subTest(fault=fault):
+                data = json.loads(json.dumps(original))
+                if fault == "blob":
+                    data["files"][next(iter(data["files"]))] = "0" * 64
+                elif fault == "missing":
+                    data["groups"].pop()
+                elif fault == "duplicate":
+                    data["groups"].append(data["groups"][0])
+                elif fault == "isolated":
+                    data["groups"][0].extend(data["groups"].pop(1))
+                elif fault == "order":
+                    data["groups"].reverse()
+                elif fault == "lib":
+                    data["lib_tree"] = "0" * 40
+                else:
+                    data["runtime_files" if fault == "lock" else "sdk"] = {}
+                self.plan_path.write_text(json.dumps(data))
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                result = self.run_gate()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
+
+    def test_resource_default_unknown_capacity_limit_and_refusal_reach_entry(self):
+        for cpu, memory, limit, workers in ((4, 16 * RUNNER.GIB, None, 4),
+                                           (2, 16 * RUNNER.GIB, "3", 2),
+                                           (8, 6 * RUNNER.GIB, None, 2),
+                                           (None, None, None, 1), (4, 16 * RUNNER.GIB, "1", 1)):
+            with self.subTest(cpu=cpu, memory=memory, limit=limit):
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                env = {"FIXTURE_RESOURCES": json.dumps({"effective_cpus": cpu, "available_memory_bytes": memory, "capacity_status": "UNKNOWN" if cpu is None or memory is None else "VISIBLE_BOUNDS", "missing_interfaces": ["fixture CPU/memory"] if cpu is None or memory is None else []})}
+                if limit is not None:
+                    env["YUELINK_COVERAGE_MAX_WORKERS"] = limit
+                result = self.run_gate(**env)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
+                self.assertEqual(receipt["workers"], workers)
+                if memory is None:
+                    self.assertEqual(receipt["resources_before"]["capacity_status"], "UNKNOWN")
+                    self.assertEqual(receipt["worker_selection"], "CONSERVATIVE_UNKNOWN")
+                    self.assertTrue(receipt["resources_before"]["missing_interfaces"])
+                    self.assertIn("NOT_EVALUATED", receipt["resource_acceptance"])
+        for env in ({"YUELINK_COVERAGE_MAX_WORKERS": "0"}, {"YUELINK_COVERAGE_MAX_WORKERS": "auto"},
+                    {"FIXTURE_RESOURCES": json.dumps({"effective_cpus": 4, "available_memory_bytes": RUNNER.GIB, "capacity_status": "UNKNOWN", "missing_interfaces": ["fixture cgroup"]})}):
+            shutil.rmtree(self.root / "coverage", ignore_errors=True)
+            result = self.run_gate(**env)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
+
+    def test_visible_linux_and_macos_capacity_interfaces_do_not_require_new_env(self):
+        values = {"cpu.max": "200000 100000", "memory.max": str(8 * RUNNER.GIB),
+                  "memory.current": str(RUNNER.GIB), "memory.peak": "12345", "memory.events": "oom 0",
+                  "meminfo": "MemAvailable: 16777216 kB", "cgroup": "0::/",
+                  "cgroup.controllers": "cpu memory"}
+        with patch.object(RUNNER, "read_text", side_effect=lambda p: values.get(p.name)), \
+                patch.object(RUNNER.os, "cpu_count", return_value=8), \
+                patch.object(RUNNER.platform, "system", return_value="Linux"):
+            result = RUNNER.resource_snapshot()
+            self.assertEqual(result["effective_cpus"], 2)
+            self.assertEqual(result["available_memory_bytes"], 7 * RUNNER.GIB)
+            self.assertEqual(result["cgroup"][0]["peak_bytes"], "12345")
+        with patch.object(RUNNER, "read_text", return_value=None), \
+                patch.object(RUNNER.platform, "system", return_value="Darwin"), \
+                patch.object(RUNNER.subprocess, "check_output", return_value=(
+                    "Mach Virtual Memory Statistics: (page size of 16384 bytes)\n"
+                    "Pages free: 100000.\nPages inactive: 200000.\n")):
+            result = RUNNER.resource_snapshot()
+            self.assertEqual(result["available_memory_bytes"], 300000 * 16384)
+            self.assertIsNone(result["cgroup"][0]["peak_bytes"])
+
+    def test_real_cgroup_root_absence_does_not_hide_missing_child_or_namespace_limits(self):
+        root = "/sys/fs/cgroup"
+        values = {"/proc/self/cgroup": "0::/job",
+                  "/proc/meminfo": "MemAvailable: 16777216 kB",
+                  f"{root}/cgroup.controllers": "cpu memory",
+                  f"{root}/job/cgroup.controllers": "",
+                  f"{root}/job/cpu.max": "400000 100000",
+                  f"{root}/job/memory.max": str(12 * RUNNER.GIB),
+                  f"{root}/job/memory.current": str(RUNNER.GIB)}
+        with patch.object(RUNNER, "read_text", side_effect=lambda p: values.get(str(p))), \
+                patch.object(RUNNER.os, "cpu_count", return_value=8), \
+                patch.object(RUNNER.os, "sched_getaffinity", return_value=set(range(8)), create=True), \
+                patch.object(RUNNER.platform, "system", return_value="Linux"), \
+                patch.object(RUNNER.os, "stat", side_effect=FileNotFoundError) as stat:
+            result = RUNNER.resource_snapshot()
+            stat.assert_called_once_with(Path(root) / "cgroup.events")
+            self.assertEqual(result["capacity_status"], "VISIBLE_BOUNDS")
+            self.assertTrue(result["cgroup"][-1]["root_limits_not_applicable"])
+            self.assertEqual(RUNNER.worker_count(result), 4)
+            # The same root absence cannot excuse a missing child limit.
+            del values[f"{root}/job/cpu.max"]
+            result = RUNNER.resource_snapshot()
+            self.assertEqual(result["capacity_status"], "UNKNOWN")
+            self.assertEqual(RUNNER.worker_count(result), 1)
+            values[f"{root}/job/memory.max"] = str(2 * RUNNER.GIB)
+            with self.assertRaisesRegex(ValueError, "insufficient visible memory"):
+                RUNNER.worker_count(RUNNER.resource_snapshot())
+            # Direct membership of the genuine host root remains valid.
+            values["/proc/self/cgroup"] = "0::/"
+            result = RUNNER.resource_snapshot()
+            self.assertEqual(result["capacity_status"], "VISIBLE_BOUNDS")
+            self.assertEqual(RUNNER.worker_count(result), 4)
+            # A namespace root has cgroup.events, even if its limits cannot be read.
+            stat.side_effect = None
+            self.assertEqual(RUNNER.resource_snapshot()["capacity_status"], "UNKNOWN")
+            stat.side_effect = PermissionError
+            self.assertEqual(RUNNER.resource_snapshot()["capacity_status"], "UNKNOWN")
+            # Readable namespace-root limits must still constrain and refuse.
+            values[f"{root}/cpu.max"] = "200000 100000"
+            values[f"{root}/memory.max"] = str(2 * RUNNER.GIB)
+            values[f"{root}/memory.current"] = str(RUNNER.GIB)
+            result = RUNNER.resource_snapshot()
+            self.assertEqual(result["effective_cpus"], 2)
+            self.assertEqual(result["available_memory_bytes"], RUNNER.GIB)
+            with self.assertRaisesRegex(ValueError, "insufficient visible memory"):
+                RUNNER.worker_count(result)
 
 
 if __name__ == "__main__":

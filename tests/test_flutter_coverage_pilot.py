@@ -1,6 +1,7 @@
 """Bounded pilot correctness controls; no Flutter engine or release execution."""
 
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -59,14 +60,20 @@ class PilotTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.data = pilot.manifest(pilot.DEFAULT_MANIFEST)
+        # Synthetic current-helper fixture only; the historical manifest remains frozen.
+        self.data = json.loads(pilot.DEFAULT_MANIFEST.read_text())
+        self.data["helper_sha256"] = {name: hashlib.sha256((ROOT / "scripts" / name).read_bytes()).hexdigest()
+                                      for name in self.data["helper_sha256"]}
+        self.synthetic_manifest = self.root / "synthetic-current-helper-manifest.json"
+        self.synthetic_manifest.write_text(json.dumps(self.data))
+        self.data = pilot.manifest(self.synthetic_manifest)
 
     def test_real_cli_describes_exact_bounded_sample_without_execution(self):
         result = subprocess.run(
             [
                 sys.executable,
                 str(ROOT / "scripts/flutter-coverage-pilot.py"),
-                "--describe",
+                "--describe", "--manifest", str(self.synthetic_manifest),
             ],
             capture_output=True,
             text=True,
@@ -83,6 +90,14 @@ class PilotTests(unittest.TestCase):
             )
             for path in self.data["isolated"]:
                 self.assertIn([path], description[variant])
+
+    def test_historical_manifest_does_not_admit_changed_runner(self):
+        with self.assertRaisesRegex(ValueError, "helper differs from the frozen builder"):
+            pilot.manifest(pilot.DEFAULT_MANIFEST)
+        result = subprocess.run([sys.executable, str(ROOT / "scripts/flutter-coverage-pilot.py"),
+                                 "--describe"], capture_output=True, text=True, check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("helper differs from the frozen builder", result.stderr)
 
     def test_manifest_mutations_refuse_lost_inventory_isolation_and_helpers(self):
         for mutation in ("file", "isolation", "helper", "workers", "group_size"):
@@ -189,7 +204,8 @@ class PilotTests(unittest.TestCase):
         flutter = binaries / "flutter"
         flutter.write_text(
             f"#!{sys.executable}\n"
-            + """import json,os,sys
+            + """import hashlib
+import json,os,sys
 from pathlib import Path
 args=sys.argv[1:]
 if args==['--version','--machine']: print(os.environ['PILOT_SDK']); sys.exit(0)
