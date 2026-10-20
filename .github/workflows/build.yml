@@ -56,6 +56,8 @@ permissions:
   contents: read
 
 env:
+  # Private template fallback only; public runs use their exact builder SHA.
+  COVERAGE_TOOLS_SHA: 'd0d073cd44e11d3624ffe5b936fd435bb9948329'
   # Flutter 3.47.7 / Dart 3.13.5 (2026-10-08): iOS VoiceOver semantics
   # parent fix (flutter/182604, flutter/100946) on top of the 3.47.6 Windows
   # release-app hang fix (flutter/192513) and the 3.47.5 iOS 27 debugger,
@@ -328,12 +330,49 @@ jobs:
           fi
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout non-reused coverage tools
+        if: github.repository != 'onesyue/yuelink-ci' || !startsWith(github.ref, 'refs/tags/v')
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.repository == 'onesyue/yuelink-ci' && github.sha || env.COVERAGE_TOOLS_SHA }}
+          path: coverage/canonical-tools
+          persist-credentials: false
+
+      - name: Verify non-reused coverage tools
+        if: github.repository != 'onesyue/yuelink-ci' || !startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          EXPECTED_COVERAGE_TOOLS_SHA: ${{ github.repository == 'onesyue/yuelink-ci' && github.sha || env.COVERAGE_TOOLS_SHA }}
+          YUELINK_CI_TOOLS_DIR: ${{ github.workspace }}/coverage/canonical-tools/scripts
+        run: |
+          set -Eeuo pipefail
+          tools_root="$(pwd -P)/coverage/canonical-tools"
+          [[ ! -L coverage && ! -L "$tools_root" && ! -L "$tools_root/scripts" ]]
+          [[ "$YUELINK_CI_TOOLS_DIR" = "$tools_root/scripts" ]]
+          [[ "$EXPECTED_COVERAGE_TOOLS_SHA" =~ ^[0-9a-f]{40}$ ]]
+          actual_tools_sha="$(git -C "$tools_root" rev-parse HEAD)"
+          [[ "$actual_tools_sha" = "$EXPECTED_COVERAGE_TOOLS_SHA" ]] || {
+            echo '::error::coverage tools differ from the exact builder'
+            exit 1
+          }
+          tools_status="$(git -C "$tools_root" status --porcelain)"
+          [[ -z "$tools_status" ]] || {
+            echo '::error::coverage tools checkout is dirty'
+            exit 1
+          }
+          if ! command -v lcov >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y lcov
+          fi
+
       - name: Run in-workflow release gates
         env:
           GH_TOKEN: ${{ github.token }}
           ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
           SOURCE_ATTESTATION_RUN_ID: ${{ needs.source_binding.outputs.attestation_run_id }}
           REUSE_SOURCE_GATES: ${{ github.repository == 'onesyue/yuelink-ci' && startsWith(github.ref, 'refs/tags/v') && 'true' || 'false' }}
+          YUELINK_CI_TOOLS_DIR: ${{ github.workspace }}/coverage/canonical-tools/scripts
           RELEASE_TAG: ${{ github.ref_name }}
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
