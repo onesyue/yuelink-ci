@@ -57,7 +57,7 @@ permissions:
 
 env:
   # Private template fallback only; public runs use their exact builder SHA.
-  COVERAGE_TOOLS_SHA: '0a68fc4df385e151850d46a65037f5310e54e22c'
+  COVERAGE_TOOLS_SHA: '07856de8be832ceed6e4daeff7bf840c2269d8dc'
   # Flutter 3.47.7 / Dart 3.13.5 (2026-10-08): iOS VoiceOver semantics
   # parent fix (flutter/182604, flutter/100946) on top of the 3.47.6 Windows
   # release-app hang fix (flutter/192513) and the 3.47.5 iOS 27 debugger,
