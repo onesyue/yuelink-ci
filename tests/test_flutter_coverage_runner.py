@@ -54,7 +54,8 @@ class CoverageRunnerTests(unittest.TestCase):
         self.executable("flutter", '''import json,os,sys
 from pathlib import Path
 args=sys.argv[1:]
-if args==['--version','--machine']: print(json.dumps({k:'fixture' for k in ['frameworkVersion','frameworkRevision','engineRevision','dartSdkVersion']})); sys.exit(0)
+if args==['--version','--machine']:
+    print(json.dumps({k:('wrong' if os.environ.get('WRONG_SDK') else 'fixture') for k in ['frameworkVersion','frameworkRevision','engineRevision','dartSdkVersion']})); sys.exit(0)
 if args[:2]==['pub','get']:
     assert args==['pub','get','--offline','--enforce-lockfile']
     sys.exit(8 if os.environ.get('PUBGET_FAILURE') else 0)
@@ -85,6 +86,7 @@ if os.environ.get('ALL_EMPTY_COVERAGE') or (os.environ.get('EMPTY_COVERAGE') and
 print(json.dumps({'type':'start'}))
 count=1 if os.environ.get('LOW_COUNT') else 5
 if os.environ.get('OMIT_SECOND') and len(files)>1: files.pop(1)
+if os.environ.get('OMIT_FILE'): files=[]
 if os.environ.get('UNEXPECTED_FILE'): files[0]='test/unexpected_test.dart'
 for suite,path in enumerate(files):
     record={'type':'suite','suite':{'id':suite,'path':str(Path.cwd()/path)},'worker':str(Path.cwd())}
@@ -95,7 +97,7 @@ for suite,path in enumerate(files):
         record={'type':'testStart','test':{'id':i,'suiteID':suite,'name':f'case {case}'}}
         print(json.dumps(record))
         if os.environ.get('DUPLICATE_START'): print(json.dumps(record))
-        record={'type':'testDone','testID':i,'result':'failure' if os.environ.get('FAILED_TERMINAL') else 'success','hidden':bool(os.environ.get('HIDE_CASE')),'skipped':bool(os.environ.get('CHANGED_SKIP'))}
+        record={'type':'testDone','testID':i,'result':'failure' if os.environ.get('FAILED_TERMINAL') else 'success','hidden':bool(os.environ.get('HIDE_CASE')),'skipped':bool(os.environ.get('CHANGED_SKIP')) or bool(os.environ.get('SKIP_ONE') and report.stem=='0' and case==0)}
         if not os.environ.get('MISSING_TERMINAL'): print(json.dumps(record))
         if os.environ.get('DUPLICATE_TERMINAL'): print(json.dumps(record))
 if not os.environ.get('MISSING_DONE'): print(json.dumps({'type':'done','success':True}))
@@ -129,6 +131,7 @@ p=Path(__file__).parent/'scripts/run-flutter-coverage.py'
 s=importlib.util.spec_from_file_location('runner',p)
 m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
 m.resource_snapshot=lambda:json.loads(os.environ['FIXTURE_RESOURCES'])
+m.GROUPED_PLAN_SHA256=os.environ['FIXTURE_GROUPED_PLAN_SHA256']
 m.main()
 """)
 
@@ -163,6 +166,7 @@ m.main()
                                             ("lib/a.dart", "DA", "1", False), ("lib/a.dart", "DA", "1", True)]),
                                         "visible_cases": len(rows), "visible_skips": 0, "coverage_rows": 2}}
         self.plan_path.write_text(json.dumps(self.plan))
+        self.grouped_digest = hashlib.sha256(self.plan_path.read_bytes()).hexdigest()
 
     def executable(self, name, body):
         path = self.bin / name
@@ -172,6 +176,7 @@ m.main()
     def run_gate(self, **overrides):
         env = dict(os.environ, PATH=str(self.bin) + os.pathsep + os.environ["PATH"],
                    FIXTURE_GROUPS=str(len(self.plan["groups"])),
+                   FIXTURE_GROUPED_PLAN_SHA256=self.grouped_digest,
                    FIXTURE_RESOURCES=json.dumps({"effective_cpus": 4, "available_memory_bytes": 16 * RUNNER.GIB, "capacity_status": "VISIBLE_BOUNDS", "missing_interfaces": []}))
         env.pop("YUELINK_COVERAGE_MAX_WORKERS", None)
         env.update(overrides)
@@ -193,6 +198,7 @@ m.main()
         self.refresh_plan()
         self.plan["groups"] = reviewed["groups"]
         self.plan_path.write_text(json.dumps(self.plan))
+        self.grouped_digest = hashlib.sha256(self.plan_path.read_bytes()).hexdigest()
         return reviewed
 
     def test_complete_corpus_executes_once_with_independent_sources_and_kernels(self):
@@ -232,6 +238,207 @@ m.main()
         self.assertTrue((self.root / "coverage/lcov.info").is_file())
         for worker in workers:
             self.assertFalse(Path(worker).exists())
+
+    def materialize_singletons(self):
+        inventory = RUNNER.partition(self.root)
+        self.singleton_path = self.tools / "tests/fixtures/flutter-coverage-singletons-20261021-yl12.json"
+        self.singleton = {
+            "schema": 1, "execution_mode": "singletons",
+            "source_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root, text=True).strip(),
+            "feature_ancestor": self.feature_ancestor,
+            "source_repository": "onesyue/yuelink",
+            "files": {path: hashlib.sha256((self.root / path).read_bytes()).hexdigest()
+                      for (path,) in inventory},
+            "lib_tree": subprocess.check_output(["git", "rev-parse", "HEAD:lib"], cwd=self.root, text=True).strip(),
+            "runtime_files": dict(self.plan["runtime_files"]), "sdk": dict(self.plan["sdk"]),
+            "macos_test": RUNNER.MACOS_TEST,
+            "groups": [group for group in inventory if group != [RUNNER.MACOS_TEST]],
+        }
+        self.singleton_path.write_text(json.dumps(self.singleton))
+
+    def admitted_singleton_corpus(self):
+        self.reviewed_filename_corpus()
+        new_test = self.root / "test/modules/auth_login_single_submission_test.dart"
+        new_test.write_text("void main() { /* newly admitted login contract */ }\n")
+        (self.root / "lib/a.dart").write_text("void changedLogin() {}\n")
+        subprocess.run(["git", "add", "test", "lib"], cwd=self.root, check=True)
+        self.commit_fixture(self.root, "admitted feature source")
+        self.feature_ancestor = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root, text=True).strip()
+        (self.root / "pubspec.yaml").write_text("version: 2.0.0+2\n")
+        subprocess.run(["git", "add", "pubspec.yaml"], cwd=self.root, check=True)
+        self.commit_fixture(self.root, "final version metadata")
+        self.materialize_singletons()
+
+    def run_singletons(self, **overrides):
+        return self.run_gate(**({"FIXTURE_GROUPS": str(len(self.singleton["groups"]))} | overrides))
+
+    def test_admitted_final_source_executes_complete_singletons_once(self):
+        self.admitted_singleton_corpus()
+        self.assertNotEqual(self.singleton["source_sha"], self.feature_ancestor)
+        result = self.run_singletons()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        out = self.root / "coverage/source-gate"
+        receipt = json.loads((out / "execution.json").read_text())
+        self.assertEqual(receipt["execution_mode"], "singletons")
+        self.assertEqual(receipt["union_comparison"], "observed_singletons; no grouped equivalence claim")
+        self.assertEqual(receipt["plan_sha256"], hashlib.sha256(self.singleton_path.read_bytes()).hexdigest())
+        self.assertEqual(receipt["source_sha"], self.singleton["source_sha"])
+        self.assertEqual(receipt["status"], "COMPLETE")
+        self.assertTrue(receipt["tests_complete"] and receipt["cleanup_complete"])
+        self.assertEqual(receipt["cleanup_errors"], [])
+        self.assertEqual(len(receipt["groups"]), 509)
+        expected = self.singleton["groups"]
+        self.assertTrue(all(len(group) == 1 for group in expected))
+        executed, workers = [], set()
+        for index, group in enumerate(expected):
+            command = json.loads((out / f"{index}.execution.json").read_text())
+            self.assertEqual(command["files"], group)
+            self.assertEqual([arg for arg in command["command"] if arg.startswith("test/")], group)
+            self.assertEqual(command["exit_code"], 0)
+            rows = [json.loads(line) for line in (out / f"{index}.jsonl").read_text().splitlines()]
+            for row in rows:
+                if row["type"] == "suite":
+                    executed.append(str(Path(row["suite"]["path"]).relative_to(row["worker"])))
+                    workers.add(row["worker"])
+        self.assertEqual(sorted(executed), sorted(group[0] for group in expected))
+        self.assertEqual(len(set(executed)), 509)
+        self.assertIn("test/modules/auth_login_single_submission_test.dart", executed)
+        assignments = json.loads((out / "platform-assignments.json").read_text())
+        self.assertEqual(len(assignments), 510)
+        self.assertEqual(assignments[RUNNER.MACOS_TEST], "macos_integration")
+        self.assertEqual(receipt["union"]["visible_cases"], 2545)
+        self.assertEqual(receipt["union"]["visible_skips"], 0)
+        self.assertTrue((self.root / "coverage/lcov.info").is_file())
+        self.assertEqual(len(workers), 4)
+        self.assertTrue(all(not Path(worker).exists() for worker in workers))
+        self.assertEqual(hashlib.sha256(self.plan_path.read_bytes()).hexdigest(), self.grouped_digest)
+
+    def test_singleton_plan_unknown_corrupt_and_stale_inputs_refuse_before_commands(self):
+        self.admitted_singleton_corpus()
+        original = self.singleton_path.read_bytes()
+        unrelated = subprocess.check_output(
+            ["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+             "-c", "commit.gpgsign=false", "commit-tree", "HEAD^{tree}", "-m", "unrelated root"],
+            cwd=self.root, text=True).strip()
+        for fault in ("missing", "schema", "extra", "source", "ancestor", "blob", "lib", "lock", "sdk",
+                      "missing_file", "duplicate", "empty", "multi", "order", "grouped_control"):
+            with self.subTest(fault=fault):
+                data = json.loads(original)
+                if fault == "schema": data["schema"] = True
+                elif fault == "extra": data["baseline_union"] = self.plan["baseline_union"]
+                elif fault == "source": data["source_sha"] = self.feature_ancestor
+                elif fault == "ancestor": data["feature_ancestor"] = unrelated
+                elif fault == "blob": data["files"][next(iter(data["files"]))] = "0" * 64
+                elif fault == "lib": data["lib_tree"] = "0" * 40
+                elif fault == "lock": data["runtime_files"]["pubspec.lock"] = "0" * 64
+                elif fault == "sdk": data["sdk"]["frameworkVersion"] = "other"
+                elif fault == "missing_file": data["groups"].pop()
+                elif fault == "duplicate": data["groups"].append(data["groups"][0])
+                elif fault == "empty": data["groups"][0] = []
+                elif fault == "multi": data["groups"][0].extend(data["groups"].pop(1))
+                elif fault == "order": data["groups"].reverse()
+                self.singleton_path.write_text(json.dumps(data))
+                if fault == "missing": self.singleton_path.unlink()
+                if fault == "grouped_control": self.plan_path.write_text("{}")
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                result = self.run_singletons()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
+                self.singleton_path.write_bytes(original)
+                self.plan_path.write_text(json.dumps(self.plan))
+
+        (self.root / "pubspec.yaml").write_text("version: 2.0.1+3\n")
+        subprocess.run(["git", "add", "pubspec.yaml"], cwd=self.root, check=True)
+        self.commit_fixture(self.root, "later metadata invalidates source binding")
+        shutil.rmtree(self.root / "coverage", ignore_errors=True)
+        result = self.run_singletons()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("singleton source/inventory/runtime plan mismatch", result.stderr)
+        self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
+        self.materialize_singletons()
+        shutil.rmtree(self.root / "coverage", ignore_errors=True)
+        # Reach an intentionally failed first engine command after explicit
+        # rematerialization. This is not another full-corpus pass claim.
+        result = self.run_singletons(FAIL_GROUP="0")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((self.root / "coverage/source-gate/0.jsonl").is_file())
+
+    def test_singleton_actual_source_drift_never_selects_a_reduced_corpus(self):
+        self.admitted_singleton_corpus()
+        source = self.singleton["source_sha"]
+        test = self.root / "test/modules/auth_login_single_submission_test.dart"
+        for fault in ("untracked", "required", "symlink", "annotation", "dirty_lib", "lib", "test", "lock"):
+            with self.subTest(fault=fault):
+                if fault == "untracked": (test.parent / "untracked_test.dart").write_text("void main() {}")
+                elif fault == "required": (self.root / sorted(RUNNER.REQUIRED_TESTS)[0]).unlink()
+                elif fault == "symlink":
+                    test.unlink()
+                    test.symlink_to(self.root / sorted(RUNNER.REQUIRED_TESTS)[0])
+                elif fault == "annotation": test.write_text("@TestOn('windows')\nlibrary;\nvoid main() {}")
+                elif fault in ("dirty_lib", "lib"): (self.root / "lib/a.dart").write_text("void unboundRuntime() {}")
+                elif fault == "test": test.write_text("void main() { /* unbound change */ }")
+                elif fault == "lock": (self.root / "pubspec.lock").write_text("unbound lock")
+                if fault in ("lib", "test", "lock"):
+                    subprocess.run(["git", "add", "test", "lib", "pubspec.lock"], cwd=self.root, check=True)
+                    self.commit_fixture(self.root, "unbound source drift")
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                result = self.run_singletons()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
+                subprocess.run(["git", "reset", "--hard", source], cwd=self.root, check=True, capture_output=True)
+                (test.parent / "untracked_test.dart").unlink(missing_ok=True)
+
+    def test_singleton_engine_protocol_merge_and_sdk_failures_cannot_pass(self):
+        self.admitted_singleton_corpus()
+        for fault in ("FLUTTER_FAILURE", "MISSING_DONE", "MISSING_COVERAGE", "LOW_COUNT", "MERGE_FAILURE",
+                      "PUBGET_FAILURE", "COVERAGE_ESCAPE", "TRACKED_MUTATION", "ALL_EMPTY_COVERAGE",
+                      "CANCEL_ENGINE", "OMIT_FILE", "UNEXPECTED_FILE", "DUPLICATE_SUITE", "DUPLICATE_START",
+                      "MISSING_TERMINAL", "DUPLICATE_TERMINAL", "FAILED_TERMINAL", "HIDE_CASE", "WRONG_SDK"):
+            with self.subTest(fault=fault):
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                result = self.run_singletons(**{fault: "1"})
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertNotIn("Flutter tests observed:", result.stdout)
+                out = self.root / "coverage/source-gate"
+                receipt = json.loads((out / "execution.json").read_text())
+                self.assertNotEqual(receipt["status"], "COMPLETE")
+                self.assertFalse((self.root / "coverage/lcov.info").exists())
+                if fault == "WRONG_SDK": self.assertFalse(list(out.glob("*.jsonl")))
+
+    def test_singletons_record_actual_union_and_skips_without_old_baseline_relabeling(self):
+        self.admitted_singleton_corpus()
+        result = self.run_singletons(SKIP_ONE="1", COVERAGE_LOSS="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        out = self.root / "coverage/source-gate"
+        receipt = json.loads((out / "execution.json").read_text())
+        self.assertEqual(receipt["union"]["visible_skips"], 1)
+        self.assertNotEqual(receipt["union"], self.plan["baseline_union"])
+        self.assertEqual(receipt["union_comparison"], "observed_singletons; no grouped equivalence claim")
+        rows = json.loads((out / "case-union.json").read_text())
+        self.assertEqual(sum(row[-1] for row in rows if row[-2]), 1)
+        self.assertEqual(sum(row[-1] for row in rows if not row[-2]), 2544)
+        self.assertEqual(hashlib.sha256(self.plan_path.read_bytes()).hexdigest(), self.grouped_digest)
+
+    def test_singleton_cleanup_and_gitlink_failures_preserve_primary(self):
+        self.admitted_singleton_corpus()
+        self.add_recursive_native_fixture()
+        self.materialize_singletons()
+        result = self.run_singletons(SUBMODULE_REQUIRED="1", SUBMODULE_MUTATION="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.root / "core/mihomo/go.mod").read_text(), "module fixture\n")
+        shutil.rmtree(self.root / "coverage", ignore_errors=True)
+        real_git = shutil.which("git")
+        self.executable("git", f"""import os,sys
+if sys.argv[1:3]==['worktree','remove']: sys.exit(19)
+os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
+""")
+        result = self.run_singletons(SUBMODULE_REQUIRED="1")
+        self.assertNotEqual(result.returncode, 0)
+        receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
+        self.assertEqual(receipt["status"], "INCOMPLETE")
+        self.assertTrue(receipt["tests_complete"])
+        self.assertFalse(receipt["cleanup_complete"])
+        self.assertTrue(receipt["cleanup_errors"])
 
     def rejoin_contributors(self, plan):
         self.assertEqual(len(plan["groups"]), 109)

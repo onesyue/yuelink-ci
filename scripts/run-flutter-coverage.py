@@ -33,6 +33,10 @@ ISOLATED = REQUIRED_TESTS | {
     "test/core/storage/tun_datapath_accel_latch_test.dart",
 }
 PLAN = Path(__file__).resolve().parents[1] / "tests/fixtures/flutter-coverage-groups-20261020.json"
+# This accepted control is immutable. A corrupt plan must not select a different
+# execution mode merely because its source bindings no longer match.
+GROUPED_PLAN_SHA256 = "9addd367954bb8ed2cc4b6d18c21a50e1f82a211c72097386a154a4a113b0d28"
+SINGLETON_PLAN = PLAN.with_name("flutter-coverage-singletons-20261021-yl12.json")
 GIB = 1024 ** 3
 # Scheduling headroom above the observed 1.53 GiB sample maximum, not a
 # full-corpus peak-memory claim. Unknown capacity admits only one worker.
@@ -91,6 +95,45 @@ def grouped_plan(root: Path, inventory: list[list[str]]) -> tuple[dict, list[lis
     if tree != data["lib_tree"]:
         raise ValueError("reviewed grouping runtime tree mismatch")
     return data, groups
+
+
+def execution_plan(root: Path, inventory: list[list[str]]) -> tuple[dict, list[list[str]], str, Path]:
+    """Select only an explicitly admitted corpus, never retry a failed mode."""
+    if hashlib.sha256(PLAN.read_bytes()).hexdigest() != GROUPED_PLAN_SHA256:
+        raise ValueError("reviewed grouping control digest mismatch")
+    grouped = json.loads(PLAN.read_text())
+    expected = {path: hashlib.sha256((root / path).read_bytes()).hexdigest()
+                for (path,) in inventory}
+    tree = subprocess.check_output(["git", "rev-parse", "HEAD:lib"], cwd=root, text=True).strip()
+    lock = {"pubspec.lock": hashlib.sha256((root / "pubspec.lock").read_bytes()).hexdigest()}
+    if (grouped["files"] == expected and grouped["lib_tree"] == tree
+            and grouped["runtime_files"] == lock):
+        data, groups = grouped_plan(root, inventory)
+        return data, groups, "reviewed_groups", PLAN
+
+    if not SINGLETON_PLAN.is_file() or SINGLETON_PLAN.is_symlink():
+        raise ValueError("reviewed corpus plan mismatch; no admitted singleton source")
+    data = json.loads(SINGLETON_PLAN.read_text())
+    fields = {"schema", "execution_mode", "source_sha", "feature_ancestor", "source_repository",
+              "files", "lib_tree", "runtime_files", "sdk", "macos_test", "groups"}
+    groups = [group for group in inventory if group != [MACOS_TEST]]
+    source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    if (not isinstance(data, dict) or set(data) != fields
+            or type(data["schema"]) is not int or data["schema"] != 1
+            or data["execution_mode"] != "singletons"
+            or data["source_repository"] != "onesyue/yuelink"
+            or data["source_sha"] != source
+            or not isinstance(data["feature_ancestor"], str)
+            or re.fullmatch(r"[0-9a-f]{40}", data["feature_ancestor"]) is None
+            or data["files"] != expected or data["lib_tree"] != tree
+            or data["runtime_files"] != lock or lock != grouped["runtime_files"]
+            or data["sdk"] != grouped["sdk"]
+            or data["macos_test"] != MACOS_TEST or MACOS_TEST not in expected
+            or data["groups"] != groups):
+        raise ValueError("reviewed singleton source/inventory/runtime plan mismatch")
+    subprocess.run(["git", "merge-base", "--is-ancestor", data["feature_ancestor"], source],
+                   cwd=root, check=True)
+    return data, groups, "singletons", SINGLETON_PLAN
 
 
 def relative(path: str, worker: Path, prefix: str) -> str:
@@ -308,7 +351,9 @@ def main() -> None:
     out = root / "coverage/source-gate"
     out.mkdir(parents=True, exist_ok=False)
     inventory = partition(root)
-    plan, groups = grouped_plan(root, inventory)
+    subprocess.run(["git", "diff", "--exit-code", "HEAD", "--", "test", "lib", "pubspec.lock"],
+                   cwd=root, check=True)
+    plan, groups, mode, plan_path = execution_plan(root, inventory)
     (out / "inventory.json").write_text(json.dumps(inventory, indent=2) + "\n")
     assignments = {path: ("macos_integration" if path == MACOS_TEST else "source_contract")
                    for group in inventory for path in group}
@@ -316,7 +361,10 @@ def main() -> None:
     resources = resource_snapshot()
     capacity = None
     receipt = {"schema": 1, "status": "INCOMPLETE", "groups": groups,
-               "plan_sha256": hashlib.sha256(PLAN.read_bytes()).hexdigest(),
+               "execution_mode": mode,
+               "union_comparison": ("reviewed_baseline" if mode == "reviewed_groups"
+                                    else "observed_singletons; no grouped equivalence claim"),
+               "plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
                "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                "resources_before": resources, "workers": capacity,
                "worker_memory_reservation_bytes": WORKER_MEMORY,
@@ -334,7 +382,6 @@ def main() -> None:
         raise
     receipt["workers"] = capacity
     source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root).decode().strip()
-    subprocess.run(["git", "diff", "--exit-code", "HEAD", "--", "test"], cwd=root, check=True)
     spec = importlib.util.spec_from_file_location(
         "machine_counter", Path(__file__).with_name("count-flutter-machine-tests.py")
     )
@@ -455,7 +502,7 @@ def main() -> None:
             receipt["union"] = summary
             (out / "case-union.json").write_text(json.dumps(case_rows, indent=2) + "\n")
             (out / "coverage-union.json").write_text(json.dumps(sorted(coverage_union)) + "\n")
-            if summary != plan["baseline_union"]:
+            if mode == "reviewed_groups" and summary != plan["baseline_union"]:
                 raise ValueError("full-corpus case/skip or coverage union differs from reviewed baseline")
             # Source-contract tests may execute no application library lines.
             # Flutter still emits their empty LCOV file; absent output refuses.

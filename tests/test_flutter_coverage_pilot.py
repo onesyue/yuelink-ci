@@ -284,11 +284,59 @@ if os.environ.get('PILOT_FAULT')!='coverage':
         self.assertEqual(worktrees.count("worktree "), 1)
 
 
+def historical_helper_context(case):
+    """Exercise frozen diagnostics with their actual accepted helper bytes.
+
+    The archive is byte-exact public 2128d5ff, not a maintained second runner.
+    A shallow offline policy checkout needs no historical Git fetch.
+    """
+    repository = ROOT
+    archived = repository / "tests/fixtures/run-flutter-coverage-2128d5ff.py"
+    fixture_names = ("flutter-coverage-group25-20261020.json",
+                     "flutter-coverage-contributors-20261021.json")
+    manifests = [json.loads((repository / "tests/fixtures" / name).read_text()) for name in fixture_names]
+    for data in manifests:
+        case.assertEqual(hashlib.sha256(archived.read_bytes()).hexdigest(),
+                         data["helper_sha256"]["scripts/run-flutter-coverage.py"])
+    tools = case.root / "historical-tools"
+    paths = {"scripts/flutter-coverage-pilot.py", *manifests[0]["helper_sha256"],
+             *("tests/fixtures/" + name for name in fixture_names),
+             "tests/fixtures/flutter-coverage-pilot-20261019.json",
+             "tests/fixtures/flutter-coverage-groups-20261020.json"}
+    for name in paths:
+        source = archived if name == "scripts/run-flutter-coverage.py" else repository / name
+        target = tools / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(source.read_bytes())
+    for data in manifests:
+        for name, expected in data["helper_sha256"].items():
+            case.assertEqual(hashlib.sha256((tools / name).read_bytes()).hexdigest(), expected)
+    historical_runner = pilot.module("historical_runner", tools / "scripts/run-flutter-coverage.py")
+    case.enterContext(patch.object(sys.modules[__name__], "ROOT", tools))
+    case.enterContext(patch.object(sys.modules[__name__], "RUNNER", historical_runner))
+    case.enterContext(patch.object(pilot, "ROOT", tools))
+    for field in ("DEFAULT_MANIFEST", "GROUP25_MANIFEST", "CONTRIBUTORS_MANIFEST"):
+        case.enterContext(patch.object(pilot, field, tools / "tests/fixtures" / getattr(pilot, field).name))
+
+
+class HistoricalHelperIdentityTests(unittest.TestCase):
+    def test_current_builder_refuses_both_frozen_experiments_for_helper_mismatch(self):
+        for flag, message in (("--group25", "group25 helper identity differs"),
+                              ("--contributors", "contributors helper identity differs")):
+            with self.subTest(experiment=flag):
+                result = subprocess.run([sys.executable, str(ROOT / "scripts/flutter-coverage-pilot.py"),
+                                         flag, "--describe"], capture_output=True, text=True, timeout=15)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertEqual(result.stdout, "")
+
+
 class Group25Tests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
+        historical_helper_context(self)
         self.data = pilot.group25_manifest()
 
     def test_fixed_describe_and_mutations_do_not_execute(self):
@@ -524,6 +572,7 @@ class ContributorsTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
+        historical_helper_context(self)
         self.data = pilot.contributors_manifest()
 
     def test_real_cli_fixed_describe_and_alternate_inputs_are_refused(self):

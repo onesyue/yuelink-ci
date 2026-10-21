@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import sys
+import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -479,6 +484,58 @@ class SourceAttestationContractTests(unittest.TestCase):
 
     def test_current_contract_is_complete(self) -> None:
         self.assertEqual(contract_issues(self.workflow, self.release, self.readme), [])
+
+    def test_actual_flutter_step_preserves_ratchet_failure_before_reuse_capture(self):
+        def step(name):
+            return self.workflow.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
+
+        gate = step("Run complete Flutter suite and enforce reviewed floor")
+        script = textwrap.dedent(gate.split("        run: |\n", 1)[1])
+        capture = step("Capture executed Flutter gate identities")
+        capture_script = re.search(r"^        run: (.+)$", capture, re.MULTILINE)[1]
+        self.assertNotIn("continue-on-error", gate + capture)
+        self.assertNotIn("if:", capture)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("python3", "dart", "lcov"):
+                target = root / name
+                target.write_text(f"#!{sys.executable}\n" + """import os,sys
+from pathlib import Path
+name=Path(sys.argv[0]).name
+args=sys.argv[1:]
+if name=='lcov': sys.exit(0)
+if name=='dart':
+    assert args==['run','tool/automation/coverage_ratchet.dart','--check']
+    stage='ratchet'
+elif args==['.source-attestation-tools/scripts/run-flutter-coverage.py']:
+    stage='runner'
+else:
+    assert args[:3]==['scripts/ci/attested_preflight.py','capture','--kind']
+    assert args[3]=='flutter'
+    stage='capture'
+with Path(os.environ['CONSUMER_TRACE']).open('a') as log: log.write(stage+'\\n')
+sys.exit(int(os.environ.get(stage.upper()+'_EXIT','0')))
+""")
+                target.chmod(0o755)
+            for runner, ratchet, expected in ((11, 0, ["runner"]),
+                                               (0, 12, ["runner", "ratchet"]),
+                                               (0, 0, ["runner", "ratchet", "capture"])):
+                with self.subTest(runner_exit=runner, ratchet_exit=ratchet):
+                    trace = root / "trace"
+                    trace.unlink(missing_ok=True)
+                    env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ["PATH"],
+                               CONSUMER_TRACE=str(trace), RUNNER_EXIT=str(runner),
+                               RATCHET_EXIT=str(ratchet), RUNNER_TEMP=directory)
+                    result = subprocess.run(["bash", "-c", script], cwd=root, env=env,
+                                            capture_output=True, text=True, timeout=15)
+                    self.assertEqual(result.returncode, runner or ratchet, result.stderr)
+                    # The next workflow step is eligible only after the exact
+                    # extracted gate shell succeeds, as enforced by Actions.
+                    if result.returncode == 0:
+                        result = subprocess.run(["bash", "-c", capture_script], cwd=root, env=env,
+                                                capture_output=True, text=True, timeout=15)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(trace.read_text().splitlines(), expected)
 
     def test_each_critical_workflow_gate_is_mutation_sensitive(self) -> None:
         for marker in WORKFLOW_MARKERS:
