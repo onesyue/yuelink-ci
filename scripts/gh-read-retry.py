@@ -98,8 +98,12 @@ def stop(process: subprocess.Popen) -> None:
 
 def execute(argv: list[str], timeout: float) -> tuple[int, bytes, bytes]:
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        # gh 2.102 opens one extra TLS session to cafe.github.com for telemetry.
+        # A release read keeps its retries on the API host only.
+        env = os.environ.copy()
+        env["GH_TELEMETRY"] = "disabled"
         process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=out,
-                                   stderr=err, start_new_session=True)
+                                   stderr=err, start_new_session=True, env=env)
         deadline = time.monotonic() + timeout
         try:
             while process.poll() is None:
