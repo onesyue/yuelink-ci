@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "execution_mode": "singletons",
-  "source_sha": "0aaf651d4b2762db058bb21f84a8fd74727ccdb6",
+  "source_sha": "3619fc33490d750931ed71f93de39c6bf395a6ce",
   "feature_ancestor": "8f529581cca54d862d99f153b85b9ff812db91b3",
   "source_repository": "onesyue/yuelink",
   "files": {
@@ -36,7 +36,7 @@
     "test/automation/emby_windows_retry_timeout_contract_test.dart": "b40e67c167c9bd618ab08279adae543ef9cf992fbc9b7ca60e7eedb7605f1e4b",
     "test/automation/flutter_toolchain_pin_contract_test.dart": "76274f59e2a495832245dc5dde286fe33c295dbbdb1b545c3185ae0c45002045",
     "test/automation/gitleaks_allowlist_contract_test.dart": "a244b81a44a2944173d304b87c20f4f0ddbd66bcd09e213286de871a5da0c76d",
-    "test/automation/go_toolchain_pin_contract_test.dart": "69a364c7befb3857c8d1648efcdb326fc7b4463cf42195a8929edf862a689f9f",
+    "test/automation/go_toolchain_pin_contract_test.dart": "8deb7862336916a84ab985998bf1202807340c699807800f43898e80ac1434bf",
     "test/automation/macos_manifest_floor_test.dart": "873c7a96d46261402134a942981b322ce214c09a42080a8c69209133d1d04b54",
     "test/automation/pii_redaction_guard_test.dart": "6c0a5de13e00cbc03c211c4568c8f4b42334e74aa73fb953ff59174f5051f51c",
     "test/automation/pii_redaction_production_shape_test.dart": "507544e5243468d082ded033dbf4aae1b5723b211b9097efc405084066f903f2",
