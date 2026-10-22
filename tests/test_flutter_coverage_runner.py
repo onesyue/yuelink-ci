@@ -241,7 +241,7 @@ m.main()
 
     def materialize_singletons(self):
         inventory = RUNNER.partition(self.root)
-        self.singleton_path = self.tools / "tests/fixtures/flutter-coverage-singletons-20261022-v148.json"
+        self.singleton_path = self.tools / "tests/fixtures/flutter-coverage-singletons-20261022-v149.json"
         self.singleton = {
             "schema": 1, "execution_mode": "singletons",
             "source_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root, text=True).strip(),

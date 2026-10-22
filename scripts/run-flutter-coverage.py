@@ -36,7 +36,7 @@ PLAN = Path(__file__).resolve().parents[1] / "tests/fixtures/flutter-coverage-gr
 # This accepted control is immutable. A corrupt plan must not select a different
 # execution mode merely because its source bindings no longer match.
 GROUPED_PLAN_SHA256 = "9addd367954bb8ed2cc4b6d18c21a50e1f82a211c72097386a154a4a113b0d28"
-SINGLETON_PLAN = PLAN.with_name("flutter-coverage-singletons-20261022-v148.json")
+SINGLETON_PLAN = PLAN.with_name("flutter-coverage-singletons-20261022-v149.json")
 GIB = 1024 ** 3
 # Scheduling headroom above the observed 1.53 GiB sample maximum, not a
 # full-corpus peak-memory claim. Unknown capacity admits only one worker.
