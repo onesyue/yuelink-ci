@@ -97,6 +97,86 @@ def grouped_plan(root: Path, inventory: list[list[str]]) -> tuple[dict, list[lis
     return data, groups
 
 
+UNION_COMPARISON = {
+    "reviewed_groups": "reviewed_baseline",
+    # A changed member leaves its reviewed neighbors together. Those neighbors
+    # already shared one process; the changed file is not paired with anything
+    # it was not already grouped with. This is not a new grouping experiment.
+    "reviewed_group_reuse": (
+        "reused exact reviewed groups or unchanged subsets; "
+        "changed and new files stay single; no old baseline relabel"
+    ),
+    "singletons": "observed_singletons; no grouped equivalence claim",
+}
+
+
+def reuse_reviewed_groups(root: Path, inventory: list[list[str]],
+                          grouped: dict) -> tuple[dict, list[list[str]]] | None:
+    """Reuse reviewed groups whose blobs are unchanged.
+
+    Lock mismatch returns None so the caller keeps the explicit singleton
+    admission. A lib-tree change does not dissolve an unchanged test group:
+    the coverage ratchet still judges the new tree, and the old union is not
+    relabeled as this run's baseline.
+    """
+    paths = [item[0] for item in inventory]
+    blobs = {path: hashlib.sha256((root / path).read_bytes()).hexdigest() for path in paths}
+    lock = {"pubspec.lock": hashlib.sha256((root / "pubspec.lock").read_bytes()).hexdigest()}
+    reviewed_groups = grouped.get("groups")
+    reviewed_files = grouped.get("files")
+    if (lock != grouped.get("runtime_files") or not isinstance(reviewed_files, dict)
+            or not isinstance(reviewed_groups, list)
+            or grouped.get("macos_test") != MACOS_TEST or MACOS_TEST not in blobs
+            or not ISOLATED.issubset(blobs)
+            or set(grouped.get("sdk") or {}) != {
+                "frameworkVersion", "frameworkRevision", "engineRevision", "dartSdkVersion"}):
+        return None
+    linux = [path for path in paths if path != MACOS_TEST]
+    commands: list[list[str]] = []
+    covered: list[str] = []
+    exact = 0
+    for group in reviewed_groups:
+        if (not isinstance(group, list) or not 1 <= len(group) <= 8
+                or any(path in ISOLATED and group != [path] for path in group)):
+            return None
+        unchanged = [path for path in group if blobs.get(path) == reviewed_files.get(path)]
+        changed = [path for path in group
+                   if path in blobs and blobs[path] != reviewed_files.get(path)]
+        if unchanged == group:
+            commands.append(list(group))
+            exact += 1
+        else:
+            if unchanged:
+                commands.append(unchanged)
+            commands.extend([path] for path in changed)
+        covered.extend([*unchanged, *changed])
+    for path in linux:
+        if path not in covered:
+            commands.append([path])
+            covered.append(path)
+    if (len(covered) != len(linux) or sorted(covered) != sorted(linux)
+            or any(len(command) < 1 or len(command) > 8 for command in commands)
+            or any(path in ISOLATED and command != [path]
+                   for command in commands for path in command)):
+        return None
+    for command in commands:
+        if len(command) == 1 or command in reviewed_groups:
+            continue
+        if not any(command == [path for path in original if path in command]
+                   and len(command) < len(original) for original in reviewed_groups):
+            return None
+    return {
+        "schema": 1,
+        "execution_mode": "reviewed_group_reuse",
+        "sdk": dict(grouped["sdk"]),
+        "reused_exact_groups": exact,
+        "subset_groups": sum(1 for command in commands
+                             if len(command) > 1 and command not in reviewed_groups),
+        "singleton_files": sum(1 for command in commands
+                               if len(command) == 1 and command not in reviewed_groups),
+    }, commands
+
+
 def execution_plan(root: Path, inventory: list[list[str]]) -> tuple[dict, list[list[str]], str, Path]:
     """Select only an explicitly admitted corpus, never retry a failed mode."""
     if hashlib.sha256(PLAN.read_bytes()).hexdigest() != GROUPED_PLAN_SHA256:
@@ -110,6 +190,10 @@ def execution_plan(root: Path, inventory: list[list[str]]) -> tuple[dict, list[l
             and grouped["runtime_files"] == lock):
         data, groups = grouped_plan(root, inventory)
         return data, groups, "reviewed_groups", PLAN
+    reused = reuse_reviewed_groups(root, inventory, grouped)
+    if reused is not None:
+        data, groups = reused
+        return data, groups, "reviewed_group_reuse", PLAN
 
     if not SINGLETON_PLAN.is_file() or SINGLETON_PLAN.is_symlink():
         raise ValueError("reviewed corpus plan mismatch; no admitted singleton source")
@@ -362,8 +446,10 @@ def main() -> None:
     capacity = None
     receipt = {"schema": 1, "status": "INCOMPLETE", "groups": groups,
                "execution_mode": mode,
-               "union_comparison": ("reviewed_baseline" if mode == "reviewed_groups"
-                                    else "observed_singletons; no grouped equivalence claim"),
+               "union_comparison": UNION_COMPARISON[mode],
+               "reused_exact_groups": plan.get("reused_exact_groups"),
+               "subset_groups": plan.get("subset_groups"),
+               "singleton_files": plan.get("singleton_files"),
                "plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
                "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                "resources_before": resources, "workers": capacity,

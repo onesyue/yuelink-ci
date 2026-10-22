@@ -272,23 +272,42 @@ m.main()
     def run_singletons(self, **overrides):
         return self.run_gate(**({"FIXTURE_GROUPS": str(len(self.singleton["groups"]))} | overrides))
 
-    def test_admitted_final_source_executes_complete_singletons_once(self):
+    def predict(self):
+        with patch.object(RUNNER, "PLAN", self.plan_path), \
+             patch.object(RUNNER, "GROUPED_PLAN_SHA256", self.grouped_digest):
+            return RUNNER.execution_plan(self.root, RUNNER.partition(self.root))
+
+    def run_reuse(self, **overrides):
+        _, groups, mode, _ = self.predict()
+        self.assertEqual(mode, "reviewed_group_reuse")
+        return self.run_gate(**({"FIXTURE_GROUPS": str(len(groups))} | overrides))
+
+    def test_admitted_final_source_reuses_exact_groups_and_isolates_the_new_file(self):
         self.admitted_singleton_corpus()
         self.assertNotEqual(self.singleton["source_sha"], self.feature_ancestor)
-        result = self.run_singletons()
+        # The v148-style singleton document still matches this tree. It must
+        # not force one compiler process per unchanged reviewed group.
+        _, predicted, mode, _ = self.predict()
+        self.assertEqual(mode, "reviewed_group_reuse")
+        result = self.run_reuse()
         self.assertEqual(result.returncode, 0, result.stderr)
         out = self.root / "coverage/source-gate"
         receipt = json.loads((out / "execution.json").read_text())
-        self.assertEqual(receipt["execution_mode"], "singletons")
-        self.assertEqual(receipt["union_comparison"], "observed_singletons; no grouped equivalence claim")
-        self.assertEqual(receipt["plan_sha256"], hashlib.sha256(self.singleton_path.read_bytes()).hexdigest())
+        self.assertEqual(receipt["execution_mode"], "reviewed_group_reuse")
+        self.assertEqual(receipt["union_comparison"], RUNNER.UNION_COMPARISON["reviewed_group_reuse"])
+        self.assertEqual(receipt["plan_sha256"], self.grouped_digest)
         self.assertEqual(receipt["source_sha"], self.singleton["source_sha"])
         self.assertEqual(receipt["status"], "COMPLETE")
         self.assertTrue(receipt["tests_complete"] and receipt["cleanup_complete"])
         self.assertEqual(receipt["cleanup_errors"], [])
-        self.assertEqual(len(receipt["groups"]), 509)
-        expected = self.singleton["groups"]
-        self.assertTrue(all(len(group) == 1 for group in expected))
+        self.assertEqual(receipt["reused_exact_groups"], 109)
+        self.assertEqual(receipt["subset_groups"], 0)
+        self.assertEqual(receipt["singleton_files"], 1)
+        self.assertEqual(len(receipt["groups"]), 110)
+        self.assertEqual(predicted, receipt["groups"])
+        expected = receipt["groups"]
+        self.assertTrue(all(command in self.plan["groups"] or len(command) == 1 for command in expected))
+        self.assertIn(["test/modules/auth_login_single_submission_test.dart"], expected)
         executed, workers = [], set()
         for index, group in enumerate(expected):
             command = json.loads((out / f"{index}.execution.json").read_text())
@@ -300,7 +319,8 @@ m.main()
                 if row["type"] == "suite":
                     executed.append(str(Path(row["suite"]["path"]).relative_to(row["worker"])))
                     workers.add(row["worker"])
-        self.assertEqual(sorted(executed), sorted(group[0] for group in expected))
+        self.assertEqual(sorted(executed), sorted(path for group in expected for path in group))
+        self.assertEqual(sorted(executed), sorted(group[0] for group in self.singleton["groups"]))
         self.assertEqual(len(set(executed)), 509)
         self.assertIn("test/modules/auth_login_single_submission_test.dart", executed)
         assignments = json.loads((out / "platform-assignments.json").read_text())
@@ -313,50 +333,44 @@ m.main()
         self.assertTrue(all(not Path(worker).exists() for worker in workers))
         self.assertEqual(hashlib.sha256(self.plan_path.read_bytes()).hexdigest(), self.grouped_digest)
 
-    def test_singleton_plan_unknown_corrupt_and_stale_inputs_refuse_before_commands(self):
+    def test_corrupt_singleton_sidecar_cannot_select_execution(self):
         self.admitted_singleton_corpus()
-        original = self.singleton_path.read_bytes()
-        unrelated = subprocess.check_output(
-            ["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
-             "-c", "commit.gpgsign=false", "commit-tree", "HEAD^{tree}", "-m", "unrelated root"],
-            cwd=self.root, text=True).strip()
-        for fault in ("missing", "schema", "extra", "source", "ancestor", "blob", "lib", "lock", "sdk",
-                      "missing_file", "duplicate", "empty", "multi", "order", "grouped_control"):
-            with self.subTest(fault=fault):
-                data = json.loads(original)
-                if fault == "schema": data["schema"] = True
-                elif fault == "extra": data["baseline_union"] = self.plan["baseline_union"]
-                elif fault == "source": data["source_sha"] = self.feature_ancestor
-                elif fault == "ancestor": data["feature_ancestor"] = unrelated
-                elif fault == "blob": data["files"][next(iter(data["files"]))] = "0" * 64
-                elif fault == "lib": data["lib_tree"] = "0" * 40
-                elif fault == "lock": data["runtime_files"]["pubspec.lock"] = "0" * 64
-                elif fault == "sdk": data["sdk"]["frameworkVersion"] = "other"
-                elif fault == "missing_file": data["groups"].pop()
-                elif fault == "duplicate": data["groups"].append(data["groups"][0])
-                elif fault == "empty": data["groups"][0] = []
-                elif fault == "multi": data["groups"][0].extend(data["groups"].pop(1))
-                elif fault == "order": data["groups"].reverse()
-                self.singleton_path.write_text(json.dumps(data))
-                if fault == "missing": self.singleton_path.unlink()
-                if fault == "grouped_control": self.plan_path.write_text("{}")
-                shutil.rmtree(self.root / "coverage", ignore_errors=True)
-                result = self.run_singletons()
-                self.assertNotEqual(result.returncode, 0)
-                self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
-                self.singleton_path.write_bytes(original)
-                self.plan_path.write_text(json.dumps(self.plan))
+        self.singleton_path.write_text("{")
+        result = self.run_reuse()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
+        self.assertEqual(receipt["execution_mode"], "reviewed_group_reuse")
+        self.assertEqual(receipt["reused_exact_groups"], 109)
+        self.assertEqual(receipt["singleton_files"], 1)
 
-        (self.root / "pubspec.yaml").write_text("version: 2.0.1+3\n")
-        subprocess.run(["git", "add", "pubspec.yaml"], cwd=self.root, check=True)
-        self.commit_fixture(self.root, "later metadata invalidates source binding")
+    def test_lock_mismatch_and_broken_grouped_control_refuse_before_commands(self):
+        self.admitted_singleton_corpus()
+        self.plan_path.write_text("{}")
         shutil.rmtree(self.root / "coverage", ignore_errors=True)
-        result = self.run_singletons()
+        result = self.run_gate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("reviewed grouping control digest mismatch", result.stderr)
+        self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
+        self.plan_path.write_text(json.dumps(self.plan))
+        (self.root / "pubspec.lock").write_text("unbound lock\n")
+        subprocess.run(["git", "add", "pubspec.lock"], cwd=self.root, check=True)
+        self.commit_fixture(self.root, "lock no longer matches the reviewed groups")
+        shutil.rmtree(self.root / "coverage", ignore_errors=True)
+        result = self.run_gate()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("singleton source/inventory/runtime plan mismatch", result.stderr)
         self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
-        self.materialize_singletons()
-        shutil.rmtree(self.root / "coverage", ignore_errors=True)
+
+    def test_version_metadata_keeps_the_full_reused_corpus(self):
+        self.admitted_singleton_corpus()
+        before = [path for group in self.predict()[1] for path in group]
+        (self.root / "pubspec.yaml").write_text("version: 2.0.1+3\n")
+        subprocess.run(["git", "add", "pubspec.yaml"], cwd=self.root, check=True)
+        self.commit_fixture(self.root, "later version metadata")
+        result = self.run_reuse()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
+        self.assertEqual([path for group in receipt["groups"] for path in group], before)
         # Reach an intentionally failed first engine command after explicit
         # rematerialization. This is not another full-corpus pass claim.
         result = self.run_singletons(FAIL_GROUP="0")
@@ -382,9 +396,18 @@ m.main()
                     subprocess.run(["git", "add", "test", "lib", "pubspec.lock"], cwd=self.root, check=True)
                     self.commit_fixture(self.root, "unbound source drift")
                 shutil.rmtree(self.root / "coverage", ignore_errors=True)
-                result = self.run_singletons()
-                self.assertNotEqual(result.returncode, 0)
-                self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
+                if fault in ("lib", "test"):
+                    result = self.run_reuse()
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
+                    flat = [path for group in receipt["groups"] for path in group]
+                    linux = [path for (path,) in RUNNER.partition(self.root) if path != RUNNER.MACOS_TEST]
+                    self.assertEqual(sorted(flat), sorted(linux))
+                    self.assertEqual(len(flat), len(linux))
+                else:
+                    result = self.run_gate()
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
                 subprocess.run(["git", "reset", "--hard", source], cwd=self.root, check=True, capture_output=True)
                 (test.parent / "untracked_test.dart").unlink(missing_ok=True)
 
@@ -407,13 +430,13 @@ m.main()
 
     def test_singletons_record_actual_union_and_skips_without_old_baseline_relabeling(self):
         self.admitted_singleton_corpus()
-        result = self.run_singletons(SKIP_ONE="1", COVERAGE_LOSS="1")
+        result = self.run_reuse(SKIP_ONE="1", COVERAGE_LOSS="1")
         self.assertEqual(result.returncode, 0, result.stderr)
         out = self.root / "coverage/source-gate"
         receipt = json.loads((out / "execution.json").read_text())
         self.assertEqual(receipt["union"]["visible_skips"], 1)
         self.assertNotEqual(receipt["union"], self.plan["baseline_union"])
-        self.assertEqual(receipt["union_comparison"], "observed_singletons; no grouped equivalence claim")
+        self.assertEqual(receipt["union_comparison"], RUNNER.UNION_COMPARISON["reviewed_group_reuse"])
         rows = json.loads((out / "case-union.json").read_text())
         self.assertEqual(sum(row[-1] for row in rows if row[-2]), 1)
         self.assertEqual(sum(row[-1] for row in rows if not row[-2]), 2544)
@@ -423,7 +446,7 @@ m.main()
         self.admitted_singleton_corpus()
         self.add_recursive_native_fixture()
         self.materialize_singletons()
-        result = self.run_singletons(SUBMODULE_REQUIRED="1", SUBMODULE_MUTATION="1")
+        result = self.run_reuse(SUBMODULE_REQUIRED="1", SUBMODULE_MUTATION="1")
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual((self.root / "core/mihomo/go.mod").read_text(), "module fixture\n")
         shutil.rmtree(self.root / "coverage", ignore_errors=True)
@@ -432,7 +455,7 @@ m.main()
 if sys.argv[1:3]==['worktree','remove']: sys.exit(19)
 os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
 """)
-        result = self.run_singletons(SUBMODULE_REQUIRED="1")
+        result = self.run_reuse(SUBMODULE_REQUIRED="1")
         self.assertNotEqual(result.returncode, 0)
         receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
         self.assertEqual(receipt["status"], "INCOMPLETE")
@@ -484,6 +507,30 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
             hashlib.sha256((json.dumps(plan, indent=2) + "\n").encode()).hexdigest(),
             "c7ec33a96ff89f22c8bad3a55b200231324b27bd7d4e010205a45aa21208252e",
         )
+
+    def test_changed_member_stays_single_and_neighbors_remain_a_subset(self):
+        self.reviewed_filename_corpus()
+        original = [list(group) for group in json.loads(self.plan_path.read_text())["groups"]]
+        group = next(item for item in original
+                     if len(item) > 1 and all(path not in RUNNER.ISOLATED for path in item))
+        changed = group[0]
+        path = self.root / changed
+        path.write_text(path.read_text() + "void changedMember() {}\n")
+        subprocess.run(["git", "add", "--", changed], cwd=self.root, check=True)
+        self.commit_fixture(self.root, "one reviewed member changed")
+        _, commands, mode, _ = self.predict()
+        self.assertEqual(mode, "reviewed_group_reuse")
+        self.assertIn(group[1:], commands)
+        self.assertIn([changed], commands)
+        self.assertNotIn(group, commands)
+        self.assertTrue(all(changed not in command or command == [changed] for command in commands))
+        for item in original:
+            if item != group:
+                self.assertIn(item, commands)
+        flat = [item for command in commands for item in command]
+        linux = [item for (item,) in RUNNER.partition(self.root) if item != RUNNER.MACOS_TEST]
+        self.assertEqual(sorted(flat), sorted(linux))
+        self.assertEqual(len(flat), len(set(flat)))
 
     def test_contributor_isolation_contract_and_actual_order_refusal(self):
         self.reviewed_filename_corpus()
