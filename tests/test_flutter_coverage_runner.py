@@ -173,15 +173,16 @@ m.main()
         path.write_text(f"#!{sys.executable}\n" + body)
         path.chmod(0o755)
 
-    def run_gate(self, **overrides):
+    def run_gate(self, args=(), timeout=40, **overrides):
         env = dict(os.environ, PATH=str(self.bin) + os.pathsep + os.environ["PATH"],
                    FIXTURE_GROUPS=str(len(self.plan["groups"])),
                    FIXTURE_GROUPED_PLAN_SHA256=self.grouped_digest,
                    FIXTURE_RESOURCES=json.dumps({"effective_cpus": 4, "available_memory_bytes": 16 * RUNNER.GIB, "capacity_status": "VISIBLE_BOUNDS", "missing_interfaces": []}))
         env.pop("YUELINK_COVERAGE_MAX_WORKERS", None)
+        env.pop("YUELINK_COVERAGE_SHARD", None)
         env.update(overrides)
-        return subprocess.run([sys.executable, str(self.entry)],
-                              cwd=self.root, env=env, text=True, capture_output=True, timeout=40, check=False)
+        return subprocess.run([sys.executable, str(self.entry), *args],
+                              cwd=self.root, env=env, text=True, capture_output=True, timeout=timeout, check=False)
 
     def reviewed_filename_corpus(self):
         # Use every formal filename and group with source-bound fixture bytes.
@@ -681,7 +682,70 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
         workflow = (ROOT / ".github/workflows/source-attestation.yml").read_text()
         self.assertIn("ref: $" + "{{ github.sha }}", workflow)
         self.assertIn("python3 .source-attestation-tools/scripts/run-flutter-coverage.py", workflow)
+        self.assertIn("python3 .source-attestation-tools/scripts/run-flutter-coverage.py --join coverage-shards", workflow)
         self.assertIn("dart run tool/automation/coverage_ratchet.dart --check", workflow)
+
+    def test_parse_shard_accepts_only_a_bounded_index(self):
+        self.assertIsNone(RUNNER.parse_shard(None))
+        self.assertIsNone(RUNNER.parse_shard(""))
+        self.assertEqual(RUNNER.parse_shard("0/8"), (0, 8))
+        self.assertEqual(RUNNER.parse_shard("7/8"), (7, 8))
+        for value in ("8/8", "1/0", "-1/4", "1/33", "all", "1/8/2", "01/8 "):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    RUNNER.parse_shard(value)
+
+    def test_unset_shard_env_is_refused_before_a_gate_directory(self):
+        result = self.run_gate(YUELINK_COVERAGE_SHARD="nope")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("index/count", result.stderr)
+        self.assertFalse((self.root / "coverage/source-gate").exists())
+        result = self.run_gate(args=["--join", "coverage-shards"], YUELINK_COVERAGE_SHARD="0/2")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("only --join", result.stderr)
+
+    def test_two_shards_join_once_and_refuse_overlap_or_a_finished_receipt(self):
+        groups = self.plan["groups"]
+        shards = self.root / "coverage-shards"
+        shards.mkdir()
+        seen = []
+        for index in (0, 1):
+            result = self.run_gate(YUELINK_COVERAGE_SHARD=f"{index}/2", timeout=90)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            evidence = self.root / "coverage/source-gate"
+            receipt = json.loads((evidence / "execution.json").read_text())
+            self.assertEqual(receipt["status"], "SHARD_COMPLETE")
+            self.assertIs(receipt["tests_complete"], False)
+            self.assertEqual(receipt["shard_index"], index)
+            self.assertFalse((self.root / "coverage/lcov.info").exists())
+            executed = sorted(
+                json.loads(path.read_text())["index"]
+                for path in evidence.glob("*.execution.json")
+                if path.name != "execution.json"
+            )
+            self.assertEqual(executed, [i for i in range(len(groups)) if i % 2 == index])
+            seen.extend(executed)
+            shutil.move(evidence, shards / str(index))
+        self.assertEqual(sorted(seen), list(range(len(groups))))
+        result = self.run_gate(args=["--join", "coverage-shards"], timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        joined = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
+        self.assertEqual(joined["status"], "COMPLETE")
+        self.assertIs(joined["tests_complete"], True)
+        self.assertTrue((self.root / "coverage/lcov.info").is_file())
+        self.assertIn("Flutter tests observed:", result.stdout)
+        shutil.copytree(shards / "0", shards / "extra")
+        refused = self.run_gate(args=["--join", "coverage-shards"], timeout=30)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("overlap", refused.stderr)
+        shutil.rmtree(shards / "extra")
+        receipt_path = shards / "0" / "execution.json"
+        forged = json.loads(receipt_path.read_text())
+        forged["tests_complete"] = True
+        receipt_path.write_text(json.dumps(forged))
+        refused = self.run_gate(args=["--join", "coverage-shards"], timeout=30)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("partial", refused.stderr)
 
     def test_missing_required_case_fails_even_when_file_floor_is_met(self):
         path = self.root / "test/services/user_custom_rules_test.dart"

@@ -190,6 +190,55 @@ jobs:
       - name: Manifest schema self-check
         run: dart run tool/automation/manifest_guard.dart --self-check
 
+  # Analyze and the release contracts stay in source_contract. The Flutter
+  # corpus is the hour-scale step: compiler startup dominated one 4-vCPU job
+  # (run 39698478865, 85m47s). Eight runners execute disjoint reviewed groups.
+  # The join is the only place that merges lcov, enforces the 2044 floor and
+  # runs the coverage ratchet. A shard is not a green corpus.
+  flutter_shard:
+    name: Flutter coverage shard ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["0", "1", "2", "3", "4", "5", "6", "7"]
+    steps:
+      - name: Validate source SHA input
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::source_sha must be exactly 40 lowercase hexadecimal characters"
+            exit 1
+          fi
+
+      - name: Checkout exact private source with full history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ inputs.source_sha }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up Flutter
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@25d71e2ab4d5c16695e569c6011ddbdc66ab221f # pinned installer v1
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Restore pub cache (lockfile-verified)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.pub-cache
+          key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+
+      - name: Resolve locked Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+
       - name: Checkout exact attestation parser
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -198,20 +247,94 @@ jobs:
           path: .source-attestation-tools
           persist-credentials: false
 
-      - name: Run complete Flutter suite and enforce reviewed floor
+      - name: Run Flutter coverage shard
         shell: bash
         # Run 39165220054 reached ~390/507 isolated files in 60 minutes.
-        # Allow the complete corpus plus headroom; each file still has a 5m cap.
+        # Keep the corpus cap until a sharded run is measured. Each command
+        # still has its own 300s cap inside the runner.
         timeout-minutes: 100
+        env:
+          YUELINK_COVERAGE_SHARD: ${{ matrix.shard }}/8
+        run: |
+          set -euo pipefail
+          # Preserve every test and the fresh compiler cache. This job does
+          # not enforce the floor and does not compare the old baseline.
+          python3 .source-attestation-tools/scripts/run-flutter-coverage.py
+
+      - name: Upload Flutter coverage shard
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flutter-coverage-shard-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: coverage/source-gate/
+          if-no-files-found: ignore
+
+  flutter_join:
+    name: Join Flutter coverage
+    needs: [flutter_shard]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate source SHA input
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::source_sha must be exactly 40 lowercase hexadecimal characters"
+            exit 1
+          fi
+
+      - name: Checkout exact private source with full history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ inputs.source_sha }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up Flutter
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@25d71e2ab4d5c16695e569c6011ddbdc66ab221f # pinned installer v1
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Restore pub cache (lockfile-verified)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.pub-cache
+          key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+
+      - name: Resolve locked Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Checkout exact attestation join tools
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.sha }}
+          path: .source-attestation-tools
+          persist-credentials: false
+
+      - name: Download Flutter coverage shards
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: flutter-coverage-shard-${{ github.run_id }}-${{ github.run_attempt }}-*
+          path: coverage-shards
+          merge-multiple: false
+
+      - name: Run complete Flutter suite and enforce reviewed floor
+        shell: bash
+        timeout-minutes: 30
         run: |
           set -euo pipefail
           if ! command -v lcov >/dev/null; then
             sudo apt-get update -qq
             sudo apt-get install -y lcov
           fi
-          # Preserve every test and the native coverage union. The two files
-          # pass in a fresh compiler session but crash after the full-suite prefix.
-          python3 .source-attestation-tools/scripts/run-flutter-coverage.py
+          python3 .source-attestation-tools/scripts/run-flutter-coverage.py --join coverage-shards
           dart run tool/automation/coverage_ratchet.dart --check
 
       - name: Retain complete Flutter execution evidence
@@ -498,7 +621,7 @@ jobs:
 
   attest:
     name: Bind green gates to source SHA
-    needs: [source_contract, gitleaks, govulncheck, macos_integration, windows_durability]
+    needs: [source_contract, flutter_join, gitleaks, govulncheck, macos_integration, windows_durability]
     runs-on: ubuntu-24.04
     permissions:
       contents: read

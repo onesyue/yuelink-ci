@@ -10,6 +10,7 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -175,6 +176,160 @@ def reuse_reviewed_groups(root: Path, inventory: list[list[str]],
         "singleton_files": sum(1 for command in commands
                                if len(command) == 1 and command not in reviewed_groups),
     }, commands
+
+
+def parse_shard(value: str | None) -> tuple[int, int] | None:
+    """Return index/count, or None when this process owns the whole plan.
+
+    Eight hosted runners are the wall-clock cut. One runner's four workers
+    cannot hide compiler startup. The count stays bounded so a typo cannot
+    fan out without a reviewed workflow change.
+    """
+    if value is None or value == "":
+        return None
+    matched = re.fullmatch(r"([0-9]+)/([1-9][0-9]*)", value)
+    if matched is None:
+        raise ValueError("coverage shard must be index/count")
+    index, count = int(matched.group(1)), int(matched.group(2))
+    if count > 32 or index >= count:
+        raise ValueError("coverage shard index is outside its count")
+    return index, count
+
+
+def load_counter():
+    spec = importlib.util.spec_from_file_location(
+        "machine_counter", Path(__file__).with_name("count-flutter-machine-tests.py")
+    )
+    counter = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(counter)
+    return spec, counter
+
+
+def union_summary(case_union: Counter, coverage_union: set) -> tuple[list, dict]:
+    case_rows = [[*identity, count] for identity, count in sorted(case_union.items())]
+    summary = {"cases_sha256": digest(case_rows), "coverage_sha256": digest(sorted(coverage_union)),
+               "visible_cases": sum(case_union.values()),
+               "visible_skips": sum(count for (_, _, skipped), count in case_union.items() if skipped),
+               "coverage_rows": len(coverage_union)}
+    return case_rows, summary
+
+
+def accept_union(root: Path, plan: dict, mode: str, groups: list[list[str]], completed, counter,
+                 case_union: Counter, coverage_union: set, out: Path) -> tuple[int, dict]:
+    """Floor, baseline and lcov belong to the full corpus, never to one shard."""
+    if len(groups) != len({index for index, _, _ in completed}):
+        raise ValueError("complete test corpus did not execute")
+    observed = sum(count for _, count, _ in completed)
+    counter.enforce_floor(observed, MINIMUM_TESTS)
+    case_rows, summary = union_summary(case_union, coverage_union)
+    (out / "case-union.json").write_text(json.dumps(case_rows, indent=2) + "\n")
+    (out / "coverage-union.json").write_text(json.dumps(sorted(coverage_union)) + "\n")
+    if mode == "reviewed_groups" and summary != plan["baseline_union"]:
+        raise ValueError("full-corpus case/skip or coverage union differs from reviewed baseline")
+    nonempty = [path for _, _, path in sorted(completed) if path.stat().st_size]
+    if not nonempty:
+        raise ValueError("no application coverage collected from the complete corpus")
+    arguments = [argument for path in nonempty for argument in ("--add-tracefile", str(path))]
+    subprocess.run(["lcov", *arguments, "--output-file", "coverage/lcov.info"], cwd=root, check=True)
+    return observed, summary
+
+
+def join_shards(root: Path, shard_root: Path) -> None:
+    """Merge shard receipts. A missing, overlapping or partial shard is not green."""
+    if not shard_root.is_dir() or shard_root.is_symlink():
+        raise ValueError("coverage shard directory is missing")
+    directories = []
+    for path in sorted(shard_root.iterdir()):
+        if path.is_symlink() or not path.is_dir():
+            raise ValueError("coverage shard path escaped its directory")
+        directories.append(path)
+    if not directories:
+        raise ValueError("coverage join found no shards")
+    loaded = []
+    for directory in directories:
+        receipt_path = directory / "execution.json"
+        if not receipt_path.is_file() or receipt_path.is_symlink():
+            raise ValueError("coverage shard receipt is missing")
+        receipt = json.loads(receipt_path.read_text())
+        if (receipt.get("status") != "SHARD_COMPLETE" or receipt.get("tests_complete") is not False
+                or type(receipt.get("shard_index")) is not int
+                or type(receipt.get("shard_count")) is not int):
+            raise ValueError("coverage shard is not a partial execution")
+        loaded.append((directory, receipt))
+    counts = {item["shard_count"] for _, item in loaded}
+    shard_indexes = [item["shard_index"] for _, item in loaded]
+    if len(counts) != 1 or len(shard_indexes) != len(set(shard_indexes)):
+        raise ValueError("coverage shards disagree or overlap")
+    count = counts.pop()
+    if count < 1 or count > 32 or sorted(shard_indexes) != list(range(count)) or len(loaded) != count:
+        raise ValueError("coverage shards are missing or overlapping")
+    inventory = partition(root)
+    subprocess.run(["git", "diff", "--exit-code", "HEAD", "--", "test", "lib", "pubspec.lock"],
+                   cwd=root, check=True)
+    plan, groups, mode, plan_path = execution_plan(root, inventory)
+    source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    plan_sha = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+    owned: dict[int, tuple[Path, dict]] = {}
+    for directory, receipt in loaded:
+        if (receipt.get("source_sha") != source or receipt.get("plan_sha256") != plan_sha
+                or receipt.get("execution_mode") != mode or receipt.get("shard_count") != count):
+            raise ValueError("coverage shard does not match this source plan")
+        for index, group in enumerate(groups):
+            if index % count != receipt["shard_index"]:
+                continue
+            execution_path = directory / f"{index}.execution.json"
+            report = directory / f"{index}.jsonl"
+            lcov = directory / f"{index}.info"
+            if (not execution_path.is_file() or execution_path.is_symlink()
+                    or not report.is_file() or report.is_symlink()
+                    or not lcov.is_file() or lcov.is_symlink()):
+                raise ValueError("coverage shard is missing a group result")
+            execution = json.loads(execution_path.read_text())
+            worker = Path(str(execution.get("worker_path") or ""))
+            if (execution.get("index") != index or execution.get("files") != group
+                    or execution.get("exit_code") != 0 or index in owned
+                    or not worker.is_absolute()):
+                raise ValueError("coverage shard group does not match the plan")
+            owned[index] = (directory, execution)
+    if sorted(owned) != list(range(len(groups))):
+        raise ValueError("coverage join is missing a planned group")
+    sdk = json.loads(subprocess.check_output(
+        ["flutter", "--version", "--machine"], cwd=root, text=True, timeout=30))
+    if any(sdk.get(key) != value for key, value in plan["sdk"].items()):
+        raise ValueError("grouping SDK differs from reviewed baseline")
+    _, counter = load_counter()
+    case_union: Counter = Counter()
+    coverage_union: set = set()
+    completed = []
+    for index in range(len(groups)):
+        directory, execution = owned[index]
+        worker = Path(execution["worker_path"])
+        report = directory / f"{index}.jsonl"
+        lcov = directory / f"{index}.info"
+        observed, visible = cases(report, worker, groups[index], counter)
+        case_union.update(visible)
+        coverage_union.update(coverage_rows(lcov, worker))
+        completed.append((index, observed, lcov))
+    out = root / "coverage/source-gate"
+    out.mkdir(parents=True, exist_ok=False)
+    for index in range(len(groups)):
+        directory, _ = owned[index]
+        for suffix in (".jsonl", ".info", ".execution.json"):
+            shutil.copyfile(directory / f"{index}{suffix}", out / f"{index}{suffix}")
+    observed, summary = accept_union(
+        root, plan, mode, groups, completed, counter, case_union, coverage_union, out)
+    receipt = {
+        "schema": 1, "status": "COMPLETE", "tests_complete": True, "groups": groups,
+        "execution_mode": mode, "union_comparison": UNION_COMPARISON[mode],
+        "reused_exact_groups": plan.get("reused_exact_groups"),
+        "subset_groups": plan.get("subset_groups"),
+        "singleton_files": plan.get("singleton_files"),
+        "plan_sha256": plan_sha, "source_sha": source, "sdk": sdk,
+        "shard_count": count, "union": summary, "observed_tests": observed,
+        "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+    }
+    (out / "execution.json").write_text(json.dumps(receipt, indent=2) + "\n")
+    print(f"Flutter tests observed: {observed}; joined {count} shards/{len(groups)} groups", flush=True)
 
 
 def execution_plan(root: Path, inventory: list[list[str]]) -> tuple[dict, list[list[str]], str, Path]:
@@ -431,6 +586,16 @@ def add_gitlinks(source: Path, worker: Path, revision: str,
 
 
 def main() -> None:
+    if len(sys.argv) > 1:
+        if (sys.argv[1] == "--join" and len(sys.argv) == 3
+                and not os.environ.get("YUELINK_COVERAGE_SHARD")):
+            shard_root = Path(sys.argv[2])
+            if not shard_root.is_absolute():
+                shard_root = Path.cwd() / shard_root
+            join_shards(Path.cwd(), shard_root)
+            return
+        raise ValueError("coverage runner accepts only --join <directory>")
+    shard = parse_shard(os.environ.get("YUELINK_COVERAGE_SHARD"))
     root = Path.cwd()
     out = root / "coverage/source-gate"
     out.mkdir(parents=True, exist_ok=False)
@@ -438,6 +603,10 @@ def main() -> None:
     subprocess.run(["git", "diff", "--exit-code", "HEAD", "--", "test", "lib", "pubspec.lock"],
                    cwd=root, check=True)
     plan, groups, mode, plan_path = execution_plan(root, inventory)
+    selected = [(index, group) for index, group in enumerate(groups)
+                if shard is None or index % shard[1] == shard[0]]
+    if not selected:
+        raise ValueError("coverage shard selected no groups")
     (out / "inventory.json").write_text(json.dumps(inventory, indent=2) + "\n")
     assignments = {path: ("macos_integration" if path == MACOS_TEST else "source_contract")
                    for group in inventory for path in group}
@@ -458,6 +627,10 @@ def main() -> None:
                "worker_selection": "CONSERVATIVE_UNKNOWN" if resources["capacity_status"] == "UNKNOWN" else "VISIBLE_BOUNDS",
                "aggregate_owned_job_peak_bytes": None,
                "aggregate_peak_scope": "UNKNOWN; group RSS is not concurrent job peak"}
+    if shard is not None:
+        receipt["shard_index"] = shard[0]
+        receipt["shard_count"] = shard[1]
+        receipt["tests_complete"] = False
     receipt_path = out / "execution.json"
     receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
     try:
@@ -506,6 +679,7 @@ def main() -> None:
                 ]
                 print(f"Flutter coverage group {index + 1}/{len(groups)}: {len(tests)} files", flush=True)
                 group_receipt = {"index": index, "files": tests, "worker": worker.name,
+                                 "worker_path": str(worker),
                                  "command": command, "started_at": time.time(), "exit_code": None}
                 start = time.monotonic()
                 try:
@@ -568,7 +742,7 @@ def main() -> None:
                 add_gitlinks(root, worker, source, gitlinks)
                 subprocess.run(["flutter", "pub", "get", "--offline", "--enforce-lockfile"],
                                cwd=worker, check=True, timeout=120)
-            assignments = list(enumerate(groups))
+            assignments = selected
             with ThreadPoolExecutor(max_workers=capacity) as pool:
                 futures = [pool.submit(execute, worker, assignments[index::capacity])
                            for index, worker in enumerate(workers)]
@@ -576,30 +750,25 @@ def main() -> None:
                     completed.extend(future.result())
             for _, target in gitlinks:
                 subprocess.run(["git", "diff", "--exit-code", "HEAD"], cwd=target, check=True)
-            if sorted(index for index, _, _ in completed) != list(range(len(groups))):
-                raise ValueError("complete test corpus did not execute")
-            observed = sum(count for _, count, _ in completed)
-            counter.enforce_floor(observed, MINIMUM_TESTS)
-            case_rows = [[*identity, count] for identity, count in sorted(case_union.items())]
-            summary = {"cases_sha256": digest(case_rows), "coverage_sha256": digest(sorted(coverage_union)),
-                       "visible_cases": sum(case_union.values()),
-                       "visible_skips": sum(count for (_, _, skipped), count in case_union.items() if skipped),
-                       "coverage_rows": len(coverage_union)}
-            receipt["union"] = summary
-            (out / "case-union.json").write_text(json.dumps(case_rows, indent=2) + "\n")
-            (out / "coverage-union.json").write_text(json.dumps(sorted(coverage_union)) + "\n")
-            if mode == "reviewed_groups" and summary != plan["baseline_union"]:
-                raise ValueError("full-corpus case/skip or coverage union differs from reviewed baseline")
-            # Source-contract tests may execute no application library lines.
-            # Flutter still emits their empty LCOV file; absent output refuses.
-            nonempty = [path for _, _, path in sorted(completed) if path.stat().st_size]
-            if not nonempty:
-                raise ValueError("no application coverage collected from the complete corpus")
-            coverage = [argument for path in nonempty
-                        for argument in ("--add-tracefile", str(path))]
-            subprocess.run(["lcov", *coverage, "--output-file", "coverage/lcov.info"],
-                           cwd=root, check=True)
-            receipt["tests_complete"] = True
+            expected = [index for index, _ in selected]
+            if sorted(index for index, _, _ in completed) != expected:
+                raise ValueError("complete test corpus did not execute" if shard is None
+                                 else "assigned coverage groups did not execute")
+            if shard is None:
+                # Source-contract tests may execute no application library lines.
+                # Flutter still emits their empty LCOV file; absent output refuses.
+                observed, summary = accept_union(
+                    root, plan, mode, groups, completed, counter, case_union, coverage_union, out)
+                receipt["union"] = summary
+                receipt["tests_complete"] = True
+            else:
+                case_rows, summary = union_summary(case_union, coverage_union)
+                observed = sum(count for _, count, _ in completed)
+                receipt["union"] = summary
+                receipt["observed_tests"] = observed
+                receipt["tests_complete"] = False
+                (out / "case-union.json").write_text(json.dumps(case_rows, indent=2) + "\n")
+                (out / "coverage-union.json").write_text(json.dumps(sorted(coverage_union)) + "\n")
         finally:
             receipt["resources_after"] = resource_snapshot()
             receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
@@ -615,10 +784,15 @@ def main() -> None:
             receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
             if cleanup_errors:
                 raise RuntimeError("owned worktree cleanup failed")
-    receipt["status"] = "COMPLETE"
+    receipt["status"] = "SHARD_COMPLETE" if shard is not None else "COMPLETE"
+    if shard is not None:
+        receipt["tests_complete"] = False
     receipt["cleanup_complete"] = True
     receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
-    print(f"Flutter tests observed: {observed}; complete file inventory: {len(groups)} groups/{len(inventory)} files", flush=True)
+    if shard is None:
+        print(f"Flutter tests observed: {observed}; complete file inventory: {len(groups)} groups/{len(inventory)} files", flush=True)
+    else:
+        print(f"Flutter coverage shard {shard[0]}/{shard[1]} observed {observed} tests", flush=True)
 
 
 if __name__ == "__main__":

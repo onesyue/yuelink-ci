@@ -74,7 +74,9 @@ WORKFLOW_MARKERS = (
     'python3 -m zipfile -c "$RUNNER_TEMP/yuelink-native-core.zip" core/build/windows-amd64/libclash.dll',
     'python3 scripts/performance/core_package_probe.py',
     '--artifact "$RUNNER_TEMP/yuelink-native-core.zip" --require-leases',
-    "needs: [source_contract, gitleaks, govulncheck, macos_integration, windows_durability]",
+    "needs: [source_contract, flutter_join, gitleaks, govulncheck, macos_integration, windows_durability]",
+    "YUELINK_COVERAGE_SHARD: ${{ matrix.shard }}/8",
+    "needs: [flutter_shard]",
     "- name: Upload source proof\n        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
     "actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32",
     '"flutter-tests-floor-2044"',
@@ -250,8 +252,8 @@ def source_flutter_issues(workflow: str) -> list[str]:
         "25d71e2ab4d5c16695e569c6011ddbdc66ab221f"
     )
     starts = [match.start() for match in re.finditer(re.escape(pin), workflow)]
-    if len(starts) != 3:
-        issues.append("source attestation must have exactly three installer usages")
+    if len(starts) != 5:
+        issues.append("source attestation must have exactly five installer usages")
     for index, start in enumerate(starts):
         end = workflow.find("\n      - ", start)
         if end < 0:
@@ -311,22 +313,40 @@ def contract_issues(
     for marker in WORKFLOW_MARKERS:
         if marker not in workflow:
             issues.append(f"source workflow missing {marker!r}")
-    # 2026-08-31 并行化后，SOURCE_SHA 输入校验从 source_contract 独有变成
-    # 五个 job（source_contract + 四个探针）逐 job 自带。存在性检查对
-    # "删掉其中一处"失明（其余四处仍命中 `in`），必须按精确计数钉住——
-    # 少一处 = 某个探针在未经校验的输入上跑，多一处 = 出现了未登记的 job。
+    # SOURCE_SHA validation is per job. A presence check stays green after one
+    # copy is deleted. The count is source_contract, the Flutter shard, the
+    # Flutter join, and the four probes.
     validation_marker = '[[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]'
     validation_count = workflow.count(validation_marker)
-    if validation_count != 5:
+    if validation_count != 7:
         issues.append(
-            "SOURCE_SHA validation must appear in exactly 5 jobs "
-            f"(source_contract + 4 probes), found {validation_count}"
+            "SOURCE_SHA validation must appear in exactly 7 jobs "
+            "(source_contract + flutter_shard + flutter_join + 4 probes), "
+            f"found {validation_count}"
         )
-    for job in ("source_contract", "macos_integration"):
+    for job in ("flutter_shard", "flutter_join", "macos_integration"):
         match = re.search(rf"(?ms)^  {job}:\n(.*?)(?=^  [a-z_]+:|\Z)", workflow)
         block = match.group(1) if match else ""
         if block.count("ref: ${{ github.sha }}") != 1:
             issues.append(f"{job} must checkout exactly one current attestation tool revision")
+    source_contract = re.search(r"(?ms)^  source_contract:\n(.*?)(?=^  [a-z_]+:|\Z)", workflow)
+    if source_contract and source_contract.group(1).count("ref: ${{ github.sha }}") != 0:
+        issues.append("source_contract must not checkout attestation tools")
+    join = re.search(r"(?ms)^  flutter_join:\n(.*?)(?=^  [a-z_]+:|\Z)", workflow)
+    if join is None or "YUELINK_COVERAGE_SHARD" in join.group(1):
+        issues.append("flutter join must not select a coverage shard")
+    runner_count = workflow.count(".source-attestation-tools/scripts/run-flutter-coverage.py")
+    if runner_count != 2:
+        issues.append(
+            "coverage runner must be invoked once per shard job and once by the join, "
+            f"found {runner_count}"
+        )
+    timeout_count = workflow.count("timeout-minutes: 100")
+    if timeout_count != 1:
+        issues.append(
+            "the 100 minute cap belongs only to the coverage shard, "
+            f"found {timeout_count}"
+        )
     for marker in RELEASE_MARKERS:
         if marker not in release:
             issues.append(f"release gate missing {marker!r}")
@@ -352,11 +372,14 @@ def contract_issues(
     source_checkouts = re.findall(
         r"(?m)^\s*repository:\s*onesyue/yuelink\s*$", workflow
     )
-    if len(source_checkouts) != 5:
-        issues.append("every one of the five source jobs must checkout yuelink")
-    if workflow.count("fetch-depth: 0") != 5:
+    if len(source_checkouts) != 7:
+        issues.append(
+            "every one of the seven source jobs must checkout yuelink "
+            "(source_contract + flutter_shard + flutter_join + 4 probes)"
+        )
+    if workflow.count("fetch-depth: 0") != 7:
         issues.append("every source checkout must use full history")
-    if workflow.count("submodules: recursive") != 5:
+    if workflow.count("submodules: recursive") != 7:
         issues.append("every source checkout must resolve recursive modules")
     if "write-all" in workflow:
         issues.append("source workflow may not use write-all")
@@ -507,7 +530,7 @@ if name=='lcov': sys.exit(0)
 if name=='dart':
     assert args==['run','tool/automation/coverage_ratchet.dart','--check']
     stage='ratchet'
-elif args==['.source-attestation-tools/scripts/run-flutter-coverage.py']:
+elif args==['.source-attestation-tools/scripts/run-flutter-coverage.py','--join','coverage-shards']:
     stage='runner'
 else:
     assert args[:3]==['scripts/ci/attested_preflight.py','capture','--kind']
@@ -697,7 +720,7 @@ sys.exit(int(os.environ.get(stage.upper()+'_EXIT','0')))
         starts = [
             match.start() for match in re.finditer(re.escape(pin), self.workflow)
         ]
-        self.assertEqual(len(starts), 3)
+        self.assertEqual(len(starts), 5)
         for index, start in enumerate(starts):
             cache = self.workflow.index("cache: true", start)
             with self.subTest(usage=index + 1):
