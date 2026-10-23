@@ -17,6 +17,7 @@ README = ROOT / "README.md"
 DEPENDABOT = ROOT / ".github/dependabot.yml"
 
 EXPECTED_ACTION_YAML = {
+    ".github/workflows/android-target-sdk-dry-run.yml",
     ".github/actions/setup-flutter/action.yml",
     ".github/workflows/backup-critical-workstation-keys.yml",
     ".github/workflows/build.yml",
@@ -184,7 +185,7 @@ def actions_policy_issues(automation: dict[str, str], readme: str) -> list[str]:
     issues: list[str] = []
     if set(automation) != EXPECTED_ACTION_YAML:
         issues.append(
-            "public automation inventory must remain nine workflows plus one composite action"
+            "public automation inventory must match the reviewed exact path set"
         )
 
     repositories: set[str] = set()
