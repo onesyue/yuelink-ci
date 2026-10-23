@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.151",
+  "channel": "stable",
+  "publishedAt": "2026-10-23T01:51:44Z",
+  "expiresAt": "2026-11-27T01:51:44Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "首页会保留订阅准备失败的提示。\n\n- 账户或订阅准备失败时，临时消息消失后仍可在首页查看提示。\n- 可通过提示或连接按钮重试，准备成功后提示自动消失。\n- 已缓存的配置仍可用于连接。\n",
+  "notesEn": "Subscription preparation failures stay visible on Home.\n\n- If account or subscription preparation fails, the reminder stays available after a temporary message disappears.\n- Retry from the reminder or Connect action; successful preparation clears it.\n- Cached configurations remain available for connection.\n",
+  "sourceCommit": "fd3fa01e77465208423d4ee22e987df692903aa1",
+  "sha256SumsSha256": "d129dfdfdd66c764a356aa7cbb354d8f5c345a2dad82994a96f4cdb75b072d8a",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.151/YueLink-1.3.151-android-arm64-v8a.apk",
+      "sha256": "310642d859d48c232db2a5066d73369cc7451289f57e699615787502272e6277"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.151/YueLink-1.3.151-android-armeabi-v7a.apk",
+      "sha256": "6a25a26e2b9369b0938186ac6dffe3911864d175003567f68dc746f044adbd5c"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.151/YueLink-1.3.151-android-x86_64.apk",
+      "sha256": "6b3f528b468b4a4b7fcb43452e6054e0a2b8a9521bfa3223a4e5cf19539b635e"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.151/YueLink-1.3.151-android-universal.apk",
+      "sha256": "def1d364f7f39db6904b63cf6d010c6d933923a47df5f619a2cb993e4d13979e"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.151/YueLink-1.3.151-ios.ipa",
+      "sha256": "2f27cc38bee8c51b4674f5fb846de4e7aee9376af843b074e327c1da65995e6a"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.151/YueLink-1.3.151-macos-universal.dmg",
+      "sha256": "2b1043b89b3d97337079e7785f0b516d1bb797fb952aa907c3be0ed537a8940c",
+      "minimumSystemVersion": "13.0"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.151/YueLink-1.3.151-windows-amd64-setup.exe",
+      "sha256": "75af2a2ab74f7a0de18de2719722f0b4722bd3ad79b94d5ae47b4c466a5298e5"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.151/YueLink-1.3.151-windows-amd64-portable.zip",
+      "sha256": "e6523ec0612472249e2b0c85e672ad40dea63e7dc1af563cf38e1d1aaa82c374"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.151/YueLink-1.3.151-linux-amd64.AppImage",
+      "sha256": "053c6bb0a79ac62bc2fc11a8d420f72bcd7c922fdaceadddaff36a53183cb3e6"
+    }
+  },
+  "compatibility": {
+    "schemaVersion": 1,
+    "policyRevision": 1,
+    "effectiveAt": "2026-10-15T00:00:00Z",
+    "transitionDays": 90,
+    "enforcement": "observe",
+    "unknownClient": "unverified",
+    "releases": [
+      {
+        "product": "sing-box",
+        "version": "1.13.21",
+        "releasedAt": "2026-08-30T11:24:04Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.13.21/sing-box-1.13.21-linux-arm64.tar.gz",
+          "sha256": "3e30b876c9a93c19e503e2a2d6249cf05e6a26766553d4b61e1daf48223f304f"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      },
+      {
+        "product": "sing-box",
+        "version": "1.14.3",
+        "releasedAt": "2026-10-09T05:35:00Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-linux-arm64.tar.gz",
+          "sha256": "29dae24d76bea3bc62d07dd3e60cfc12003de7debbd6b768df9be9c68360174e"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      }
+    ],
+    "policySourceSha256": "f1a12d625595963fb3c16b69ac216101c733fd21f18aad8b95c7ccdefada58b4"
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "7605b910c935f13713d329ea12ddec29b8791432b2997a6dc54b5affbb85c758",
+    "sha256SumsSha256": "d129dfdfdd66c764a356aa7cbb354d8f5c345a2dad82994a96f4cdb75b072d8a",
+    "payloadBundleSha256": "fe26e0d179938a7725febae50d3b8fcfe520499290a9100c34efb0677bd685f4",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:h13panUlzeoSFN44N3BlbeSqrFbXyPbDqYYWFKGc3sPSCEEj/utbhro5T3ZqfxiFJiNWBwk1uHFvmP4CfiV7CA=="
+}
