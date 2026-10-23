@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.150",
+  "channel": "stable",
+  "publishedAt": "2026-10-22T17:13:59Z",
+  "expiresAt": "2026-11-26T17:13:59Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "导航栏改用统一的磨砂玻璃。\n\n- 底部导航和顶栏在支持实时模糊时使用共享的 tinted 玻璃。\n- 系统要求降低透明度，或设备没有实时模糊时，导航保持实色。\n",
+  "notesEn": "Navigation uses the shared tinted glass.\n\n- Bottom and top bars use the shared tinted glass when live blur is available.\n- When reduced transparency is on, or the device has no live blur, the bars stay solid.\n",
+  "sourceCommit": "142f4a833caf3a6815ff3bc2065056ad8d1a6786",
+  "sha256SumsSha256": "ceadd2944240c55574e7c6e8edd9ecf05b03fc4ee6a605679ed2181c4cc671ef",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.150/YueLink-1.3.150-android-arm64-v8a.apk",
+      "sha256": "9d7dced9afa36241c33c47d2dd06dbee10eb89dff0dc9d75ea438bc8b7ece7aa"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.150/YueLink-1.3.150-android-armeabi-v7a.apk",
+      "sha256": "b59cd3b7219768e3b0291115fab03746bf2fd8020068b935d0ce152f33336ff6"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.150/YueLink-1.3.150-android-x86_64.apk",
+      "sha256": "56ca35d94fec474ec4f0b949ac3ce65e4751dc0e7b379f489eaa92ecbaa915a0"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.150/YueLink-1.3.150-android-universal.apk",
+      "sha256": "cd723c2d6992c03ef2b5000762b5ddce588fc3e05294e923419150a80617ce38"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.150/YueLink-1.3.150-ios.ipa",
+      "sha256": "a31d478aeafffd112543e2e7e2669f1cf9094fa262268939945b6ddd74756fa9"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.150/YueLink-1.3.150-macos-universal.dmg",
+      "sha256": "cc411c7b3c98772eb5e754db4428d3bc7e650bcd773c268b1d0989d0d984f7c2",
+      "minimumSystemVersion": "13.0"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.150/YueLink-1.3.150-windows-amd64-setup.exe",
+      "sha256": "ea1b1dfec6b80684f08f8885dc9cf879c8ed275bd184e1dc88e5dc107c9597e5"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.150/YueLink-1.3.150-windows-amd64-portable.zip",
+      "sha256": "58c324451a4810f1bf341c98a05becf64228c4abdac7382dac180439d825fb2a"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.150/YueLink-1.3.150-linux-amd64.AppImage",
+      "sha256": "f9650bf8cedd52987a4c2ce530a8e212319cdcb3c65b02bbe32df261a34e907a"
+    }
+  },
+  "compatibility": {
+    "schemaVersion": 1,
+    "policyRevision": 1,
+    "effectiveAt": "2026-10-15T00:00:00Z",
+    "transitionDays": 90,
+    "enforcement": "observe",
+    "unknownClient": "unverified",
+    "releases": [
+      {
+        "product": "sing-box",
+        "version": "1.13.21",
+        "releasedAt": "2026-08-30T11:24:04Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.13.21/sing-box-1.13.21-linux-arm64.tar.gz",
+          "sha256": "3e30b876c9a93c19e503e2a2d6249cf05e6a26766553d4b61e1daf48223f304f"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      },
+      {
+        "product": "sing-box",
+        "version": "1.14.3",
+        "releasedAt": "2026-10-09T05:35:00Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-linux-arm64.tar.gz",
+          "sha256": "29dae24d76bea3bc62d07dd3e60cfc12003de7debbd6b768df9be9c68360174e"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      }
+    ],
+    "policySourceSha256": "f1a12d625595963fb3c16b69ac216101c733fd21f18aad8b95c7ccdefada58b4"
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "70f9e42872e7d471e1ed2c51aa01c354a84e4e1dbdf13a92280228fbd060b5ae",
+    "sha256SumsSha256": "ceadd2944240c55574e7c6e8edd9ecf05b03fc4ee6a605679ed2181c4cc671ef",
+    "payloadBundleSha256": "81bb8db65e5814b7c7f985156469b2c1e7ba2ab52d542be6392134fe9bf7ebcd",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:5vutp6EmKpTZVjkibyll2+0FYodtMZLQH7EdTXbV8w2eknG+m8sPKmV95iAIJRBIC8RMweBlqJiLmrP/GGEjBg=="
+}
