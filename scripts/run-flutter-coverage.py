@@ -112,7 +112,18 @@ def execution_plan(root: Path, inventory: list[list[str]]) -> tuple[dict, list[l
         return data, groups, "reviewed_groups", PLAN
 
     if not SINGLETON_PLAN.is_file() or SINGLETON_PLAN.is_symlink():
-        raise ValueError("reviewed corpus plan mismatch; no admitted singleton source")
+        grouped_body = json.loads(PLAN.read_text())
+        sdk = frozen_sdk(grouped_body)
+        groups = directory_groups(inventory)
+        assert_directory_groups(groups, inventory)
+        data = {
+            "schema": 1,
+            "execution_mode": "directory_groups",
+            "sdk": sdk,
+            "macos_test": MACOS_TEST,
+            "groups": groups,
+        }
+        return data, groups, "directory_groups", PLAN
     data = json.loads(SINGLETON_PLAN.read_text())
     fields = {"schema", "execution_mode", "source_sha", "feature_ancestor", "source_repository",
               "files", "lib_tree", "runtime_files", "sdk", "macos_test", "groups"}
@@ -134,6 +145,56 @@ def execution_plan(root: Path, inventory: list[list[str]]) -> tuple[dict, list[l
     subprocess.run(["git", "merge-base", "--is-ancestor", data["feature_ancestor"], source],
                    cwd=root, check=True)
     return data, groups, "singletons", SINGLETON_PLAN
+
+
+def directory_groups(inventory: list[list[str]]) -> list[list[str]]:
+    """Group a live tree by parent directory. Do not write a plan file."""
+    buckets: dict[str, list[str]] = {}
+    order: list[str] = []
+    for (path,) in inventory:
+        if path == MACOS_TEST:
+            continue
+        parent = str(Path(path).parent)
+        if parent not in buckets:
+            order.append(parent)
+            buckets[parent] = []
+        buckets[parent].append(path)
+    groups: list[list[str]] = []
+    for parent in order:
+        ordinary: list[str] = []
+        for path in buckets[parent]:
+            if path in ISOLATED:
+                if ordinary:
+                    groups.append(ordinary)
+                    ordinary = []
+                groups.append([path])
+            else:
+                ordinary.append(path)
+                if len(ordinary) == 8:
+                    groups.append(ordinary)
+                    ordinary = []
+        if ordinary:
+            groups.append(ordinary)
+    return groups
+
+
+def assert_directory_groups(groups: list[list[str]], inventory: list[list[str]]) -> None:
+    expected = [path for (path,) in inventory if path != MACOS_TEST]
+    covered = [path for group in groups for path in group]
+    if any(path in ISOLATED and group != [path] for group in groups for path in group):
+        raise ValueError("isolated path inside a multi-file group")
+    if (sorted(covered) != sorted(expected) or len(covered) != len(set(covered))
+            or any(not group or len(group) > 8 for group in groups)):
+        raise ValueError("PLAN_INCOMPLETE")
+
+
+def frozen_sdk(grouped: dict) -> dict:
+    sdk = grouped.get("sdk")
+    required = {"frameworkVersion", "frameworkRevision", "engineRevision", "dartSdkVersion"}
+    if (not isinstance(sdk, dict) or set(sdk) != required
+            or any(not isinstance(sdk[key], str) or not sdk[key] for key in required)):
+        raise ValueError("frozen grouped plan is missing the reviewed Flutter SDK")
+    return sdk
 
 
 def relative(path: str, worker: Path, prefix: str) -> str:
@@ -363,6 +424,8 @@ def main() -> None:
     receipt = {"schema": 1, "status": "INCOMPLETE", "groups": groups,
                "execution_mode": mode,
                "union_comparison": ("reviewed_baseline" if mode == "reviewed_groups"
+                                    else "directory_groups; no frozen-snapshot equivalence claim"
+                                    if mode == "directory_groups"
                                     else "observed_singletons; no grouped equivalence claim"),
                "plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
                "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -400,50 +463,106 @@ def main() -> None:
 
     def execute(worker: Path, assignments: list[tuple[int, list[str]]]) -> list[tuple[int, int, Path]]:
         completed = []
+
+        def clear_compiler_cache() -> None:
+            cache = worker / "build/test_cache"
+            if cache.is_symlink() or cache.parent.is_symlink():
+                raise ValueError("worker compiler cache escaped its owned directory")
+            if cache.exists():
+                shutil.rmtree(cache)
+
+        def invoke(index: int, tests: list[str], report: Path, lcov: Path) -> subprocess.CompletedProcess:
+            # Directory groups keep a successful ordinary compiler. Isolated files
+            # and the reviewed/singleton modes still start from an empty cache.
+            if mode != "directory_groups" or (len(tests) == 1 and tests[0] in ISOLATED):
+                clear_compiler_cache()
+            command = [
+                "timeout", "--signal=TERM", "--kill-after=30s", "300",
+                "flutter", "test", "--no-pub", "--coverage", "--machine",
+                "--concurrency=1", "--coverage-path", str(lcov), *tests,
+            ]
+            print(f"Flutter coverage group {index + 1}/{len(groups)}: {len(tests)} files", flush=True)
+            group_receipt = {"index": index, "files": tests, "worker": worker.name,
+                             "command": command, "started_at": time.time(), "exit_code": None}
+            start = time.monotonic()
+            result = None
+            try:
+                with report.open("w") as log:
+                    result = subprocess.run(timed_command(command, out / f"{index}.resource.txt"),
+                                            cwd=worker, stdout=log, stderr=subprocess.STDOUT, timeout=350, check=False)
+                group_receipt["exit_code"] = result.returncode
+            finally:
+                raw_resource = read_text(out / f"{index}.resource.txt")
+                metrics = {}
+                for key, pattern in {
+                    "user_cpu_seconds": r"User time \(seconds\): ([0-9.]+)",
+                    "system_cpu_seconds": r"System time \(seconds\): ([0-9.]+)",
+                    "max_rss_kib": r"Maximum resident set size \(kbytes\): ([0-9]+)",
+                }.items():
+                    matched = re.search(pattern, raw_resource or "")
+                    metrics[key] = float(matched[1]) if matched else None
+                group_receipt.update(elapsed_seconds=time.monotonic() - start, finished_at=time.time(),
+                                     resources=metrics,
+                                     resource_status="OBSERVED" if all(v is not None for v in metrics.values()) else "UNKNOWN",
+                                     resource_scope="per-command process tree; not concurrent job peak")
+                (out / f"{index}.execution.json").write_text(json.dumps(group_receipt, indent=2) + "\n")
+            if result is None:
+                raise RuntimeError("flutter group produced no result")
+            return result
+
+        def stitch(index: int, tests: list[str], report: Path, lcov: Path) -> None:
+            """Split one timed-out directory group in half and retry each half once."""
+            mid = len(tests) // 2
+            parts: list[str] = []
+            coverage: list[str] = []
+            offset = 0
+            for part, half in enumerate((tests[:mid], tests[mid:])):
+                half_report = out / f"{index}.half{part}.jsonl"
+                half_lcov = out / f"{index}.half{part}.info"
+                half_result = invoke(index, half, half_report, half_lcov)
+                if half_result.returncode:
+                    clear_compiler_cache()
+                    raise subprocess.CalledProcessError(half_result.returncode, half_result.args)
+                rewritten = []
+                for line in half_report.read_text().splitlines():
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        rewritten.append(line)
+                        continue
+                    if isinstance(event, dict) and event.get("type") == "suite":
+                        event["suite"]["id"] += offset
+                    elif isinstance(event, dict) and event.get("type") == "testStart":
+                        event["test"]["id"] += offset
+                        event["test"]["suiteID"] += offset
+                    elif isinstance(event, dict) and event.get("type") == "testDone":
+                        event["testID"] += offset
+                    elif isinstance(event, dict) and event.get("type") == "done" and part == 0:
+                        continue
+                    elif isinstance(event, dict) and event.get("type") == "start" and part != 0:
+                        continue
+                    rewritten.append(json.dumps(event))
+                parts.append("\n".join(rewritten) + ("\n" if rewritten else ""))
+                if half_lcov.is_file():
+                    coverage.append(half_lcov.read_text())
+                offset += 100000
+            report.write_text("".join(parts))
+            lcov.write_text("".join(coverage))
+
         try:
             for index, tests in assignments:
                 if stop.is_set():
                     break
-                # A fresh flutter command can still initialize its compiler from
-                # this previous kernel. Remove only this disposable worker cache.
-                cache = worker / "build/test_cache"
-                if cache.is_symlink() or cache.parent.is_symlink():
-                    raise ValueError("worker compiler cache escaped its owned directory")
-                if cache.exists():
-                    shutil.rmtree(cache)
                 report = out / f"{index}.jsonl"
                 lcov = out / f"{index}.info"
-                command = [
-                    "timeout", "--signal=TERM", "--kill-after=30s", "300",
-                    "flutter", "test", "--no-pub", "--coverage", "--machine",
-                    "--concurrency=1", "--coverage-path", str(lcov), *tests,
-                ]
-                print(f"Flutter coverage group {index + 1}/{len(groups)}: {len(tests)} files", flush=True)
-                group_receipt = {"index": index, "files": tests, "worker": worker.name,
-                                 "command": command, "started_at": time.time(), "exit_code": None}
-                start = time.monotonic()
-                try:
-                    with report.open("w") as log:
-                        result = subprocess.run(timed_command(command, out / f"{index}.resource.txt"),
-                                                cwd=worker, stdout=log, stderr=subprocess.STDOUT, timeout=350, check=False)
-                    group_receipt["exit_code"] = result.returncode
-                finally:
-                    raw_resource = read_text(out / f"{index}.resource.txt")
-                    metrics = {}
-                    for key, pattern in {
-                        "user_cpu_seconds": r"User time \(seconds\): ([0-9.]+)",
-                        "system_cpu_seconds": r"System time \(seconds\): ([0-9.]+)",
-                        "max_rss_kib": r"Maximum resident set size \(kbytes\): ([0-9]+)",
-                    }.items():
-                        matched = re.search(pattern, raw_resource or "")
-                        metrics[key] = float(matched[1]) if matched else None
-                    group_receipt.update(elapsed_seconds=time.monotonic() - start, finished_at=time.time(),
-                                         resources=metrics,
-                                         resource_status="OBSERVED" if all(v is not None for v in metrics.values()) else "UNKNOWN",
-                                         resource_scope="per-command process tree; not concurrent job peak")
-                    (out / f"{index}.execution.json").write_text(json.dumps(group_receipt, indent=2) + "\n")
-                if result.returncode:
-                    raise subprocess.CalledProcessError(result.returncode, command)
+                result = invoke(index, tests, report, lcov)
+                if result.returncode == 124 and mode == "directory_groups" and len(tests) > 1:
+                    clear_compiler_cache()
+                    stitch(index, tests, report, lcov)
+                elif result.returncode:
+                    if mode == "directory_groups":
+                        clear_compiler_cache()
+                    raise subprocess.CalledProcessError(result.returncode, result.args)
                 observed, visible = cases(report, worker, tests, counter)
                 if not lcov.is_file():
                     raise ValueError(f"coverage report missing for file {index}")
