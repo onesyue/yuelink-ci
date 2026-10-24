@@ -68,12 +68,29 @@ if os.environ.get('SUBMODULE_REQUIRED'):
     if os.environ.get('SUBMODULE_MUTATION'):
         Path('core/mihomo/go.mod').write_text('mutated')
 cache=Path('build/test_cache')
-assert not cache.exists(), 'prior compiler kernel was reused'
+isolated={
+ 'test/services/user_custom_rules_test.dart','test/services/subscription_parser_test.dart',
+ 'test/core/storage/persisted_schema_test.dart','test/core/storage/settings_service_schema_test.dart',
+ 'test/governance/mihomo_fork_ledger_test.dart','test/core/storage/subscription_reset_operation_store_test.dart',
+ 'test/core/storage/tun_datapath_accel_latch_test.dart',
+}
+ordinary=bool(files) and all(path not in isolated for path in files)
+if os.environ.get('CACHE_LOG'):
+    Path(os.environ['CACHE_LOG']).open('a').write(('1' if cache.exists() else '0')+' '+str(len(files))+' '+' '.join(files)+chr(10))
+if os.environ.get('SPLIT_TIMEOUT')=='always' and len(files)>1:
+    sys.exit(124)
+if os.environ.get('SPLIT_TIMEOUT')=='once' and len(files)>1:
+    marker=Path('split-once')
+    if not marker.exists():
+        marker.write_text('1')
+        sys.exit(124)
+if not (os.environ.get('ALLOW_ORDINARY_CACHE') and ordinary):
+    assert not cache.exists(), 'prior compiler kernel was reused'
 cache.parent.mkdir(exist_ok=True)
 if os.environ.get('CACHE_ESCAPE'):
     cache.symlink_to(os.environ['SENTINEL'])
 else:
-    cache.mkdir()
+    cache.mkdir(exist_ok=True)
     (cache/'kernel').write_text('previous compilation')
 report=Path(args[args.index('--coverage-path')+1])
 if os.environ.get('TRACKED_MUTATION'):
@@ -341,9 +358,17 @@ m.main()
                 if fault == "missing": self.singleton_path.unlink()
                 if fault == "grouped_control": self.plan_path.write_text("{}")
                 shutil.rmtree(self.root / "coverage", ignore_errors=True)
-                result = self.run_singletons()
-                self.assertNotEqual(result.returncode, 0)
-                self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
+                if fault == "missing":
+                    groups = RUNNER.directory_groups(RUNNER.partition(self.root))
+                    result = self.run_singletons(ALLOW_ORDINARY_CACHE="1", FIXTURE_GROUPS=str(len(groups)))
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
+                    self.assertEqual(receipt["execution_mode"], "directory_groups")
+                    self.assertFalse(self.singleton_path.exists())
+                else:
+                    result = self.run_singletons()
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
                 self.singleton_path.write_bytes(original)
                 self.plan_path.write_text(json.dumps(self.plan))
 
@@ -666,10 +691,12 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
                 subprocess.run(["git", "add", "-A", "test"], cwd=self.root, check=True)
                 self.commit_fixture(self.root, change)
                 shutil.rmtree(self.root / "coverage", ignore_errors=True)
-                result = self.run_gate()
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn("plan mismatch", result.stderr)
-                self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
+                groups = RUNNER.directory_groups(RUNNER.partition(self.root))
+                result = self.run_gate(ALLOW_ORDINARY_CACHE="1", FIXTURE_GROUPS=str(len(groups)))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
+                self.assertEqual(receipt["execution_mode"], "directory_groups")
+                self.assertFalse((self.tools / "tests/fixtures/flutter-coverage-singletons-20261023-v153.json").exists())
                 # This repository is an owned temporary test fixture only.
                 subprocess.run(["git", "reset", "--hard", baseline], cwd=self.root, check=True, capture_output=True)
 
@@ -817,6 +844,64 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
             with self.assertRaisesRegex(ValueError, "insufficient visible memory"):
                 RUNNER.worker_count(result)
 
+
+    def test_directory_groups_are_stable_and_refuse_a_dropped_or_mixed_file(self):
+        reviewed = json.loads(RUNNER.PLAN.read_text())
+        self.assertEqual(reviewed["sdk"]["frameworkVersion"], "3.47.7")
+        inventory = RUNNER.partition(self.root)
+        groups = RUNNER.directory_groups(inventory)
+        self.assertEqual(groups, RUNNER.directory_groups(inventory))
+        RUNNER.assert_directory_groups(groups, inventory)
+        trimmed = []
+        removed = False
+        for group in groups:
+            current = list(group)
+            if not removed:
+                for index, path in enumerate(current):
+                    if path.endswith("case_10_test.dart"):
+                        del current[index]
+                        removed = True
+                        break
+            if current:
+                trimmed.append(current)
+        self.assertTrue(removed)
+        with self.assertRaisesRegex(ValueError, "PLAN_INCOMPLETE"):
+            RUNNER.assert_directory_groups(trimmed, inventory)
+        mixed = [["test/governance/mihomo_fork_ledger_test.dart", "test/services/case_0_test.dart"]]
+        with self.assertRaisesRegex(ValueError, "isolated path inside a multi-file group"):
+            RUNNER.assert_directory_groups(mixed, inventory)
+
+    def test_ordinary_directory_groups_keep_the_compiler_cache(self):
+        (self.root / "test/services/case_0_test.dart").write_text("void main() { /* live */ }\n")
+        subprocess.run(["git", "add", "test"], cwd=self.root, check=True)
+        self.commit_fixture(self.root, "live tree")
+        groups = RUNNER.directory_groups(RUNNER.partition(self.root))
+        log = self.root / "cache-log.txt"
+        result = self.run_gate(
+            ALLOW_ORDINARY_CACHE="1", CACHE_LOG=str(log),
+            FIXTURE_GROUPS=str(len(groups)), YUELINK_COVERAGE_MAX_WORKERS="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
+        self.assertEqual(receipt["execution_mode"], "directory_groups")
+        rows = [line.split() for line in log.read_text().splitlines()]
+        ordinary = [row for row in rows if all(path not in RUNNER.ISOLATED for path in row[2:])]
+        self.assertTrue(any(left[0] == "1" or right[0] == "1" for left, right in zip(ordinary, ordinary[1:])))
+        self.assertTrue(any(right[0] == "1" for left, right in zip(ordinary, ordinary[1:])))
+
+    def test_directory_group_timeout_splits_once_and_a_second_failure_stops(self):
+        (self.root / "test/services/case_0_test.dart").write_text("void main() { /* live */ }\n")
+        subprocess.run(["git", "add", "test"], cwd=self.root, check=True)
+        self.commit_fixture(self.root, "live tree")
+        groups = RUNNER.directory_groups(RUNNER.partition(self.root))
+        refused = self.run_gate(
+            ALLOW_ORDINARY_CACHE="1", SPLIT_TIMEOUT="always",
+            FIXTURE_GROUPS=str(len(groups)), YUELINK_COVERAGE_MAX_WORKERS="1")
+        self.assertNotEqual(refused.returncode, 0)
+        shutil.rmtree(self.root / "coverage", ignore_errors=True)
+        accepted = self.run_gate(
+            ALLOW_ORDINARY_CACHE="1", SPLIT_TIMEOUT="once",
+            FIXTURE_GROUPS=str(len(groups)), YUELINK_COVERAGE_MAX_WORKERS="1")
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
 
 if __name__ == "__main__":
     unittest.main()
