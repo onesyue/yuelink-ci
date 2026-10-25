@@ -216,7 +216,7 @@ jobs:
 
       - name: Retain complete Flutter execution evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: flutter-coverage-execution-${{ github.run_id }}
           path: coverage/source-gate/
@@ -226,7 +226,7 @@ jobs:
         run: python3 scripts/ci/attested_preflight.py capture --kind flutter --output "$RUNNER_TEMP/flutter-reuse.json"
 
       - name: Retain executed Flutter gate receipt
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: source-reuse-flutter-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/flutter-reuse.json
@@ -352,7 +352,7 @@ jobs:
 
       - name: Retain executed service race receipt
         if: matrix.module == 'service'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: source-reuse-service-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/service-reuse.json
@@ -582,7 +582,7 @@ jobs:
           cat source-attestation.json
 
       - name: Upload source proof
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: yuelink-source-attestation-${{ needs.source_contract.outputs.source_sha }}
           path: source-attestation.json
