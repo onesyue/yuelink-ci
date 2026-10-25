@@ -481,11 +481,13 @@ jobs:
           test -d "$DEVELOPER_DIR" || { echo "::error::pinned Xcode 26.6 is absent"; exit 1; }
           version="$(xcodebuild -version | sed -n '1p')"
           test "$version" = 'Xcode 26.6' || { echo "::error::unexpected Xcode: $version"; exit 1; }
-          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
-          echo "COMPILATION_CACHE_ENABLE_CACHING=YES" >> "$GITHUB_ENV"
-          echo "COMPILATION_CACHE_PREFIX_MAP=${GITHUB_WORKSPACE}=." >> "$GITHUB_ENV"
           mkdir -p "$HOME/Library/Developer/Xcode/DerivedData/CompilationCache.noindex"
-          echo "COMPILATION_CACHE_CAS_PATH=$HOME/Library/Developer/Xcode/DerivedData/CompilationCache.noindex" >> "$GITHUB_ENV"
+          {
+            echo "DEVELOPER_DIR=$DEVELOPER_DIR"
+            echo "COMPILATION_CACHE_ENABLE_CACHING=YES"
+            echo "COMPILATION_CACHE_PREFIX_MAP=${GITHUB_WORKSPACE}=."
+            echo "COMPILATION_CACHE_CAS_PATH=$HOME/Library/Developer/Xcode/DerivedData/CompilationCache.noindex"
+          } >> "$GITHUB_ENV"
 
       - name: Restore Xcode compilation cache
         id: xcode_cache_restore
