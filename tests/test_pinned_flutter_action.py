@@ -4,6 +4,7 @@ import importlib.util
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,15 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 ACTION = ROOT / ".github/actions/setup-flutter/action.yml"
 INSTALLER = ROOT / ".github/actions/setup-flutter/install_flutter_sdk.py"
+HELPER = ROOT.parent / "yuelink" / "scripts" / "ci" / "link_platform_cache.py"
+
+
+def _step_body(workflow: str, name: str) -> str:
+    marker = f"- name: {name}\n"
+    start = workflow.index(marker)
+    rest = workflow[start + len(marker) :]
+    match = re.search(r"\n      - (?:name|uses):", rest)
+    return marker + (rest[: match.start()] if match else rest)
 
 
 def _installer_module():
@@ -287,3 +297,133 @@ class PinnedFlutterActionTests(unittest.TestCase):
                 "dd9da574c3168460550117eb0e8dd0313ae934fabf64a82a6d557fff5fd1422e",
             ),
         }
+
+
+class LinkPlatformCacheTests(unittest.TestCase):
+    def test_generated_workflow_splits_go_cache_and_bounds_apt(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "build.yml").read_text(
+            encoding="utf-8"
+        )
+        starts = [
+            match.start()
+            for match in re.finditer(r"- uses: actions/setup-go@", workflow)
+        ]
+        assert len(starts) == 2
+        for start in starts:
+            end = workflow.find("\n      - ", start)
+            block = workflow[start:end]
+            assert "cache: false" in block
+            assert "cache: true" not in block
+            assert "cache-dependency-path" not in block
+        java = workflow.index("- name: Set up Java for native ownership tests")
+        restore = workflow.index("- name: Restore Go module cache\n")
+        assert java < starts[1] < restore
+
+        for name in (
+            "Restore Go module cache",
+            "Restore Go module cache (Windows)",
+            "Restore Go compiler cache",
+            "Restore Go compiler cache (Windows)",
+            "Restore Gradle dependency caches",
+        ):
+            assert "continue-on-error: true" in _step_body(workflow, name)
+        core = _step_body(workflow, "Build & install Go core")
+        assert "cache-hit" not in core
+
+        linux = _step_body(workflow, "Install Linux build dependencies")
+        assert "timeout --signal=TERM 180 sudo apt-get" in linux
+        assert "apt_bounded update -q" in linux
+        assert "apt_bounded install -y --no-install-recommends" in linux
+        assert "link_platform_cache.py apt-result" in linux
+        assert workflow.count("apt_bounded()") == 1
+
+        gradle = _step_body(workflow, "Restore Gradle dependency caches")
+        assert workflow.index("- name: Restore Gradle dependency caches") < workflow.index(
+            "- name: Decode Android keystore"
+        )
+        paths = [
+            line.strip()
+            for line in gradle.splitlines()
+            if line.strip().startswith("~/") or "github.workspace" in line.lower()
+        ]
+        assert paths == ["~/.gradle/caches", "~/.gradle/wrapper"]
+        assert "configuration-cache" not in workflow
+        assert "android/gradle/wrapper/gradle-wrapper.properties" in gradle
+
+        assert "COMPILATION_CACHE_ENABLE_CACHING=YES" in workflow
+        assert "COMPILATION_CACHE_PREFIX_MAP=${GITHUB_WORKSPACE}=." in workflow
+        key = (
+            "yue-xcode-cc-v1-${{ runner.os }}-${{ runner.arch }}"
+            "-${{ matrix.platform }}-${{ github.sha }}"
+        )
+        prefix = (
+            "yue-xcode-cc-v1-${{ runner.os }}-${{ runner.arch }}"
+            "-${{ matrix.platform }}-"
+        )
+        restore_xcode = _step_body(workflow, "Restore Xcode compilation cache")
+        save = _step_body(workflow, "Save Xcode compilation cache")
+        decide = _step_body(workflow, "Decide Xcode compilation cache save")
+        assert key in restore_xcode and key in save
+        assert prefix in restore_xcode
+        assert "actions/cache/save@" in save
+        assert "steps.xcode_cache_save.outputs.save == 'true'" in save
+        script = decide.split("run: |", 1)[1]
+        assert "${{" not in script
+        assert "xcode-save --bytes" in script
+
+        gomod = _step_body(workflow, "Restore Go module cache")
+        assert "path: ~/go/pkg/mod" in gomod
+        assert (
+            "yue-gomod-v1-${{ runner.os }}-${{ runner.arch }}"
+            "-${{ matrix.platform }}-${{ env.GO_VERSION }}-${{ github.sha }}"
+        ) in gomod
+        assert (
+            "yue-gomod-v1-${{ runner.os }}-${{ runner.arch }}"
+            "-${{ matrix.platform }}-${{ env.GO_VERSION }}-"
+        ) in gomod
+        windows_mod = _step_body(workflow, "Restore Go module cache (Windows)")
+        assert "path: ~\\go\\pkg\\mod" in windows_mod
+        compiler = _step_body(workflow, "Restore Go compiler cache")
+        assert "path: ~/.cache/go-build" in compiler
+        windows_compiler = _step_body(workflow, "Restore Go compiler cache (Windows)")
+        assert "path: ~\\AppData\\Local\\go-build" in windows_compiler
+        assert "runner.os" in compiler
+
+        pin = (
+            "onesyue/yuelink-ci/.github/actions/setup-flutter@"
+            "25d71e2ab4d5c16695e569c6011ddbdc66ab221f"
+        )
+        flutter_starts = [
+            match.start() for match in re.finditer(re.escape(pin), workflow)
+        ]
+        assert len(flutter_starts) == 3
+        for start in flutter_starts:
+            end = workflow.find("\n      - ", start)
+            block = workflow[start:end]
+            assert re.search(r"(?m)^\s+cache: true\s*$", block)
+            assert re.search(r"(?m)^\s+cache: false\s*$", block) is None
+
+    @unittest.skipUnless(
+        HELPER.is_file(), "private helper is absent from this checkout"
+    )
+    def test_second_apt_timeout_and_xcode_size_gate(self) -> None:
+        def run(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, str(HELPER), *args],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        timeout = run("apt-result", "--attempt", "2", "--status", "124")
+        assert timeout.returncode == 2
+        assert timeout.stdout.strip() == "APT_TIMEOUT"
+        retry = run("apt-result", "--attempt", "1", "--status", "124")
+        assert retry.returncode == 1
+        assert "APT_TIMEOUT" not in retry.stdout
+        assert run("apt-result", "--attempt", "1", "--status", "0").returncode == 0
+        two_gib = 2 * 1024 * 1024 * 1024
+        assert run("xcode-save", "--bytes", str(two_gib)).returncode == 0
+        over = run("xcode-save", "--bytes", str(two_gib + 1))
+        assert over.returncode == 3
+        assert "skip Xcode cache save" in over.stdout
