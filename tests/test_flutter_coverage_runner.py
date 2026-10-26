@@ -258,7 +258,7 @@ m.main()
 
     def materialize_singletons(self):
         inventory = RUNNER.partition(self.root)
-        self.singleton_path = self.tools / "tests/fixtures/flutter-coverage-singletons-20261025-v154.json"
+        self.singleton_path = self.tools / "tests/fixtures/flutter-coverage-singletons-20261026-v155.json"
         self.singleton = {
             "schema": 1, "execution_mode": "singletons",
             "source_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root, text=True).strip(),
@@ -696,7 +696,7 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
                 self.assertEqual(result.returncode, 0, result.stderr)
                 receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
                 self.assertEqual(receipt["execution_mode"], "directory_groups")
-                self.assertFalse((self.tools / "tests/fixtures/flutter-coverage-singletons-20261025-v154.json").exists())
+                self.assertFalse((self.tools / "tests/fixtures/flutter-coverage-singletons-20261026-v155.json").exists())
                 # This repository is an owned temporary test fixture only.
                 subprocess.run(["git", "reset", "--hard", baseline], cwd=self.root, check=True, capture_output=True)
 
