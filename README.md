@@ -79,6 +79,15 @@ two-second pauses; an exhausted transport failure never counts as absence.
 Only the read is retried, not the tag mutation. New and existing tags are both
 polled for GitHub verification, and the script
 never deletes, overwrites or re-tags a failed immutable name.
+The 1.3.155 feedback successor uses the reviewed Flutter 3.47.8 / Dart
+3.13.7 security hotfix. Its complete singleton plan is a separate source-bound
+fixture; the earlier 3.47.7 grouped and singleton receipts remain unchanged.
+The runner selects the new plan only for that exact private-workflow SDK pin
+and refuses a missing, symlinked or mismatched plan before executing tests.
+The final source commit, every test blob, runtime tree, lockfile and four SDK
+identity fields must match; local test output still cannot replace hosted
+source attestation or package provenance.
+
 Before any push, a retained local annotated tag must also match the complete
 expected annotation bytes; matching only the builder commit is insufficient.
 Both repositories therefore authenticate the selected source and builder

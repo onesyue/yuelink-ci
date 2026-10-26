@@ -248,7 +248,7 @@ def source_flutter_issues(workflow: str) -> list[str]:
     issues: list[str] = []
     pin = (
         "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-        "25d71e2ab4d5c16695e569c6011ddbdc66ab221f"
+        "d6c9eb965b79818ed944b3e2df168905b535ff49"
     )
     starts = [match.start() for match in re.finditer(re.escape(pin), workflow)]
     if len(starts) != 3:
@@ -669,7 +669,7 @@ sys.exit(int(os.environ.get(stage.upper()+'_EXIT','0')))
             )
             self.assertEqual(installer_lane_drift_issues(fake), [])
             stale = self.workflow.replace(
-                "25d71e2ab4d5c16695e569c6011ddbdc66ab221f",
+                "d6c9eb965b79818ed944b3e2df168905b535ff49",
                 "77737f79d3011a27d82e23e56be5b8112d824f51",
             )
             (fake / ".github/workflows/source-attestation.yml").write_text(
@@ -678,7 +678,7 @@ sys.exit(int(os.environ.get(stage.upper()+'_EXIT','0')))
             issues = installer_lane_drift_issues(fake)
             self.assertTrue(any("different installer commits" in i for i in issues))
             (fake / ".github/workflows/source-attestation.yml").write_text(
-                self.workflow.replace("FLUTTER_VERSION: '3.47.7'", "FLUTTER_VERSION: '3.47.9'"),
+                self.workflow.replace("FLUTTER_VERSION: '3.47.8'", "FLUTTER_VERSION: '3.47.9'"),
                 encoding="utf-8",
             )
             issues = installer_lane_drift_issues(fake)
@@ -693,7 +693,7 @@ sys.exit(int(os.environ.get(stage.upper()+'_EXIT','0')))
         # state is `cache: true`; a quiet flip back to `false` must go red.
         pin = (
             "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-            "25d71e2ab4d5c16695e569c6011ddbdc66ab221f"
+            "d6c9eb965b79818ed944b3e2df168905b535ff49"
         )
         starts = [
             match.start() for match in re.finditer(re.escape(pin), self.workflow)

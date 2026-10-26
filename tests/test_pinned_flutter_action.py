@@ -119,6 +119,18 @@ class PinnedFlutterActionTests(unittest.TestCase):
                 "stable/windows/flutter_windows_3.47.7-stable.zip",
                 "c2c875da25a1a1448d18ee4e8f398b2f6fce888b4775d8f9130538e16d826cb4",
             ),
+            ("3.47.8", "Linux"): (
+                "stable/linux/flutter_linux_3.47.8-stable.tar.xz",
+                "baf7dcc5a3dbba60fe863bf493a6cf203195621f7786eaa5a1bba02cd0d87dd2",
+            ),
+            ("3.47.8", "Darwin"): (
+                "stable/macos/flutter_macos_3.47.8-stable.zip",
+                "b8a3c255a51a8c0c0943a4d5bdf9b26008c34f02febf69640c8aab413afd896f",
+            ),
+            ("3.47.8", "Windows"): (
+                "stable/windows/flutter_windows_3.47.8-stable.zip",
+                "11e19ea3409808fe3b3765ea8149640c299e58cce6eda7c9f38fc1b4a193eb6e",
+            ),
         }
 
     def test_archive_member_validation_rejects_traversal_and_absolute_paths(self) -> None:
@@ -296,6 +308,10 @@ class PinnedFlutterActionTests(unittest.TestCase):
                 "stable/macos/flutter_macos_arm64_3.47.7-stable.zip",
                 "dd9da574c3168460550117eb0e8dd0313ae934fabf64a82a6d557fff5fd1422e",
             ),
+            ("3.47.8", "Darwin", "ARM64"): (
+                "stable/macos/flutter_macos_arm64_3.47.8-stable.zip",
+                "6114edc2dae3636cfefb7e4456a4510399ee856e324149b34dbacb509e329d05",
+            ),
         }
 
 
@@ -391,7 +407,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
 
         pin = (
             "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-            "25d71e2ab4d5c16695e569c6011ddbdc66ab221f"
+            "d6c9eb965b79818ed944b3e2df168905b535ff49"
         )
         flutter_starts = [
             match.start() for match in re.finditer(re.escape(pin), workflow)

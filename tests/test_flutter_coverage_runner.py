@@ -289,6 +289,38 @@ m.main()
     def run_singletons(self, **overrides):
         return self.run_gate(**({"FIXTURE_GROUPS": str(len(self.singleton["groups"]))} | overrides))
 
+    def test_feedback_sdk_admission_is_exact_and_keeps_historical_plan(self):
+        self.admitted_singleton_corpus()
+        workflow = self.root / ".github/workflows/ci.yml"
+        workflow.parent.mkdir(parents=True)
+        workflow.write_text("env:\n  FLUTTER_VERSION: '3.47.8'\n")
+        feedback_path = self.singleton_path.with_name(RUNNER.FEEDBACK_SINGLETON_PLAN.name)
+        feedback = dict(self.singleton, sdk=dict(RUNNER.FEEDBACK_SDK))
+        feedback_path.write_text(json.dumps(feedback))
+        historical_bytes = self.singleton_path.read_bytes()
+        with patch.object(RUNNER, "PLAN", self.plan_path), \
+                patch.object(RUNNER, "GROUPED_PLAN_SHA256", self.grouped_digest), \
+                patch.object(RUNNER, "SINGLETON_PLAN", self.singleton_path), \
+                patch.object(RUNNER, "FEEDBACK_SINGLETON_PLAN", feedback_path):
+            inventory = RUNNER.partition(self.root)
+            plan, groups, mode, path = RUNNER.execution_plan(self.root, inventory)
+            self.assertEqual((plan, groups, mode, path),
+                             (feedback, feedback["groups"], "singletons", feedback_path))
+            for field in ("source_sha", "lib_tree", "files", "groups", "runtime_files", "sdk"):
+                changed: dict[str, object] = dict(feedback)
+                changed[field] = {} if isinstance(feedback[field], dict) else [] if field == "groups" else "0" * 40
+                feedback_path.write_text(json.dumps(changed))
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    RUNNER.execution_plan(self.root, inventory)
+            feedback_path.unlink()
+            with self.assertRaisesRegex(ValueError, "plan missing"):
+                RUNNER.execution_plan(self.root, inventory)
+            feedback_path.symlink_to(self.singleton_path)
+            with self.assertRaisesRegex(ValueError, "plan missing or symlinked"):
+                RUNNER.execution_plan(self.root, inventory)
+        self.assertEqual(self.singleton_path.read_bytes(), historical_bytes)
+        self.assertEqual(hashlib.sha256(self.plan_path.read_bytes()).hexdigest(), self.grouped_digest)
+
     def test_admitted_final_source_executes_complete_singletons_once(self):
         self.admitted_singleton_corpus()
         self.assertNotEqual(self.singleton["source_sha"], self.feature_ancestor)

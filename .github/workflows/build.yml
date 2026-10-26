@@ -58,11 +58,11 @@ permissions:
 env:
   # Private template fallback only; public runs use their exact builder SHA.
   COVERAGE_TOOLS_SHA: '07856de8be832ceed6e4daeff7bf840c2269d8dc'
-  # Flutter 3.47.7 / Dart 3.13.5 (2026-10-08): iOS VoiceOver semantics
-  # parent fix (flutter/182604, flutter/100946) on top of the 3.47.6 Windows
-  # release-app hang fix (flutter/192513) and the 3.47.5 iOS 27 debugger,
-  # widget-preview and DDS fixes. Exact archives are pinned in setup-flutter.
-  FLUTTER_VERSION: '3.47.7'
+  # Flutter 3.47.8 / Dart 3.13.7 (2026-10-23): BoringSSL distrusts the
+  # compromised eMudhra intermediates (GHSA-frr6-h895-5pxp) and Android 14+
+  # reads the updatable Conscrypt root store. Embedder renderer files are
+  # unchanged from 3.47.7. Exact archives are verified by setup-flutter.
+  FLUTTER_VERSION: '3.47.8'
   # Go 1.27.1 (2026-09-01): 跨 minor 从 1.26.8 升上来，与 yue-node/Xray-core
   # fork 的发布工具链对齐。拿到 1.27 的小对象分配优化（<80B 分配路径约 -30%，
   # 分配密集程序整体约 1%）；Green Tea GC 在 1.26 就已默认、不是本次新增。
@@ -279,7 +279,7 @@ jobs:
           python3 scripts/ci/verify_gradle_wrapper_supply_chain.py
           python3 scripts/ci/test_gradle_wrapper_supply_chain.py
 
-      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@25d71e2ab4d5c16695e569c6011ddbdc66ab221f # pinned installer v1
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           # 2026-08-31 reviewed decision — verified-artifact caches are ON in
@@ -552,7 +552,7 @@ jobs:
           restore-keys: |
             yue-gocache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-
 
-      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@25d71e2ab4d5c16695e569c6011ddbdc66ab221f # pinned installer v1
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
@@ -1846,7 +1846,7 @@ jobs:
 
       - name: Set up Flutter for release-candidate verification
         if: needs.preflight.outputs.tag_kind == 'stable'
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@25d71e2ab4d5c16695e569c6011ddbdc66ab221f # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           # Cache ON — reviewed 2026-08-31 decision, see the preflight
