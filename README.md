@@ -108,6 +108,14 @@ verifies both public signing identities and emits only two-recipient age
 ciphertext to its recovery bucket and one-day encrypted artifact; no PR trigger
 or plaintext upload is permitted.
 
+In the full Yue.to workspace, use the maintained
+[client recovery procedure](../yuelink/docs/ops/runbook.md#5-rollback-a-stable-release)
+for interrupted release jobs and forward repair. This relative link assumes
+`yuelink` and `yuelink-ci` are sibling checkouts. The normal publication authority
+remains this repository's exact public run; the linked procedure does not
+authorize a second signer, root downgrade, or extra workstation package-download
+acceptance.
+
 The manifest watchdog's reviewed signed floor is
 [update-manifest-v1.json](tests/fixtures/update-manifest-v1.json). It rejects
 older semantic versions or `publishedAt`, even with valid signatures/expiry.
