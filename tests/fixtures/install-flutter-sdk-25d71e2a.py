@@ -1,0 +1,382 @@
+#!/usr/bin/env python3
+"""Install an official Flutter SDK from a version-and-hash closed set."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.request
+import uuid
+from pathlib import Path, PurePosixPath
+from zipfile import ZipFile
+import tarfile
+
+
+BASE_URL = "https://storage.googleapis.com/flutter_infra_release/releases/"
+RELEASES = {
+    ("3.47.2", "Linux"): (
+        "stable/linux/flutter_linux_3.47.2-stable.tar.xz",
+        "447878859d01ca9bfdb99a85f245af07ed8a15fedcd9d189c4749e8e92d1f185",
+    ),
+    ("3.47.2", "Darwin"): (
+        "stable/macos/flutter_macos_3.47.2-stable.zip",
+        "b6fd6ba98c8503d5ee06a6670627b5b1c36167ece3427435ec83b66e9b28c6b5",
+    ),
+    ("3.47.2", "Windows"): (
+        "stable/windows/flutter_windows_3.47.2-stable.zip",
+        "37934f2128a55d77a38baba12fd611157ed23a47bf7d2b7d17e9e84da118409d",
+    ),
+    ("3.47.3", "Linux"): (
+        "stable/linux/flutter_linux_3.47.3-stable.tar.xz",
+        "988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1",
+    ),
+    ("3.47.3", "Darwin"): (
+        "stable/macos/flutter_macos_3.47.3-stable.zip",
+        "cd1e1a877db74b8928251225d38469077994e904b1b5bb359f3376c43ac0495c",
+    ),
+    ("3.47.3", "Windows"): (
+        "stable/windows/flutter_windows_3.47.3-stable.zip",
+        "44822ab53afb543c6fb446c078ba4f495e3eeddaafb88d879bde606447ddce24",
+    ),
+    ("3.47.4", "Linux"): (
+        "stable/linux/flutter_linux_3.47.4-stable.tar.xz",
+        "5b45f0ceda99b9bebdc873e7e69f6450aeb4c30f454b505e2e62fc9255a907d3",
+    ),
+    ("3.47.5", "Linux"): (
+        "stable/linux/flutter_linux_3.47.5-stable.tar.xz",
+        "2132e990f236f8d22e7c6314b29a191a95b10d7cbcfec9b4e2e303d996652cbb",
+    ),
+    ("3.47.6", "Linux"): (
+        "stable/linux/flutter_linux_3.47.6-stable.tar.xz",
+        "f1631b9c2c8b3529323db412b0d1beacf4a748f8783b0d7cf599a8fd5f461675",
+    ),
+    ("3.47.7", "Linux"): (
+        "stable/linux/flutter_linux_3.47.7-stable.tar.xz",
+        "af7455f540df951184c7953fbe3cf884766e7541dacf8571f9f582db03dd6230",
+    ),
+    ("3.47.4", "Darwin"): (
+        "stable/macos/flutter_macos_3.47.4-stable.zip",
+        "72ced0f81a5ea48f30d221699fa45378cdd1fa15426512444f32e4e1bee9db8b",
+    ),
+    ("3.47.5", "Darwin"): (
+        "stable/macos/flutter_macos_3.47.5-stable.zip",
+        "a7893bb0feecd8bd066f4f7e850356f896a6fc3b862e6c506d21c76691a66b72",
+    ),
+    ("3.47.6", "Darwin"): (
+        "stable/macos/flutter_macos_3.47.6-stable.zip",
+        "f1f68c777b2b34153e1631670445efbeb218f42a398be32bba2051476719b0a4",
+    ),
+    ("3.47.7", "Darwin"): (
+        "stable/macos/flutter_macos_3.47.7-stable.zip",
+        "17d39b000a5d0681e3f7b61a105a36f6f31dd41ab9073f625fd466f38035f901",
+    ),
+    ("3.47.4", "Windows"): (
+        "stable/windows/flutter_windows_3.47.4-stable.zip",
+        "31173300481bd06e377fd55ee84214689648b1817563efd7b450b7b78bdf351a",
+    ),
+    ("3.47.5", "Windows"): (
+        "stable/windows/flutter_windows_3.47.5-stable.zip",
+        "0ccd71931f49c2fbe394b1eeb6d79af3d624058a043ea0d03d34160581624fb8",
+    ),
+    ("3.47.6", "Windows"): (
+        "stable/windows/flutter_windows_3.47.6-stable.zip",
+        "a01bb0d26de91bc23c97cd9ccfaad281a612fb8304213fdd5df1119a09404796",
+    ),
+    ("3.47.7", "Windows"): (
+        "stable/windows/flutter_windows_3.47.7-stable.zip",
+        "c2c875da25a1a1448d18ee4e8f398b2f6fce888b4775d8f9130538e16d826cb4",
+    ),
+}
+ARCH_RELEASES = {
+    ("3.47.3", "Darwin", "ARM64"): (
+        "stable/macos/flutter_macos_arm64_3.47.3-stable.zip",
+        "66144a7cd691059c8c73bfce24178fb9ea2c95d798db8d56d1e2411e760f6583",
+    ),
+    ("3.47.4", "Darwin", "ARM64"): (
+        "stable/macos/flutter_macos_arm64_3.47.4-stable.zip",
+        "c6af6fa1d64946167b8637ba4c5a7bb3b8574729a1ebe931decd4924dbab7061",
+    ),
+    ("3.47.5", "Darwin", "ARM64"): (
+        "stable/macos/flutter_macos_arm64_3.47.5-stable.zip",
+        "d4dd908b5f8f65515831b6d68ae33307a813f2b68947dded7a1994ee5ea7cead",
+    ),
+    ("3.47.6", "Darwin", "ARM64"): (
+        "stable/macos/flutter_macos_arm64_3.47.6-stable.zip",
+        "a1946d3b6b3de15ce247dc89649df9035ce29e6b4e7ebe91919a25890ea2e79a",
+    ),
+    ("3.47.7", "Darwin", "ARM64"): (
+        "stable/macos/flutter_macos_arm64_3.47.7-stable.zip",
+        "dd9da574c3168460550117eb0e8dd0313ae934fabf64a82a6d557fff5fd1422e",
+    ),
+}
+RECEIPT_NAME = ".yue-flutter-sdk.json"
+
+
+def fail(message: str) -> "NoReturn":
+    raise SystemExit(f"pinned Flutter installer: {message}")
+
+
+def _safe_member(name: str) -> bool:
+    normalized = name.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    return (
+        bool(normalized)
+        and not path.is_absolute()
+        and re.match(r"^[A-Za-z]:/", normalized) is None
+        and ".." not in path.parts
+    )
+
+
+def _safe_tar_link(member_name: str, link_name: str, *, hard_link: bool) -> bool:
+    """Accept relative links only when their lexical target stays in the archive.
+
+    Symlink targets are relative to the directory containing the link. Tar hard
+    link targets, in contrast, are archive-root-relative. Flutter's official
+    Linux archive contains legitimate ``../`` symlinks, so rejecting every
+    parent component is too strict; what matters is whether resolving those
+    components would escape the verified extraction root.
+    """
+
+    normalized_link = link_name.replace("\\", "/")
+    link_path = PurePosixPath(normalized_link)
+    if (
+        not normalized_link
+        or link_path.is_absolute()
+        or re.match(r"^[A-Za-z]:/", normalized_link) is not None
+    ):
+        return False
+
+    base = PurePosixPath() if hard_link else PurePosixPath(member_name).parent
+    resolved: list[str] = []
+    for part in (base / link_path).parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if not resolved:
+                return False
+            resolved.pop()
+            continue
+        resolved.append(part)
+    return bool(resolved)
+
+
+def inspect_archive(archive: Path) -> None:
+    if archive.suffix == ".zip":
+        with ZipFile(archive) as bundle:
+            for item in bundle.infolist():
+                if not _safe_member(item.filename):
+                    fail(f"unsafe zip member {item.filename!r}")
+        return
+
+    with tarfile.open(archive, mode="r:xz") as bundle:
+        for item in bundle.getmembers():
+            if not _safe_member(item.name):
+                fail(f"unsafe tar member {item.name!r}")
+            if item.ischr() or item.isblk() or item.isfifo():
+                fail(f"special tar member {item.name!r}")
+            if item.issym() or item.islnk():
+                if not _safe_tar_link(
+                    item.name, item.linkname, hard_link=item.islnk()
+                ):
+                    fail(f"unsafe tar link {item.name!r} -> {item.linkname!r}")
+
+
+def download(url: str, destination: Path, expected_sha256: str) -> None:
+    digest = hashlib.sha256()
+    request = urllib.request.Request(url, headers={"User-Agent": "yuelink-ci/1"})
+    with urllib.request.urlopen(request, timeout=60) as response, destination.open(
+        "wb"
+    ) as output:
+        if response.geturl() != url:
+            fail(f"unexpected SDK redirect to {response.geturl()!r}")
+        while chunk := response.read(1024 * 1024):
+            digest.update(chunk)
+            output.write(chunk)
+        output.flush()
+        os.fsync(output.fileno())
+    actual = digest.hexdigest()
+    if actual != expected_sha256:
+        fail(f"SDK SHA-256 mismatch: got {actual}, expected {expected_sha256}")
+
+
+def extract(archive: Path, destination: Path, system: str) -> None:
+    inspect_archive(archive)
+    if system == "Linux":
+        command = [
+            "tar",
+            "--extract",
+            "--xz",
+            "--file",
+            str(archive),
+            "--directory",
+            str(destination),
+            "--no-same-owner",
+            "--no-same-permissions",
+        ]
+    elif system == "Darwin":
+        command = ["/usr/bin/ditto", "-x", "-k", str(archive), str(destination)]
+    elif system == "Windows":
+        command = ["tar", "-xf", str(archive), "-C", str(destination)]
+    else:  # pragma: no cover - selected before download
+        fail(f"unsupported operating system {system!r}")
+    subprocess.run(command, check=True)
+
+
+def receipt(version: str, system: str, runner_arch: str, sha256: str) -> dict[str, str]:
+    return {
+        "schema": "yue-flutter-sdk-v1",
+        "version": version,
+        "system": system,
+        "runner_arch": runner_arch,
+        "archive_sha256": sha256,
+    }
+
+
+def valid_cached_sdk(target: Path, expected: dict[str, str], system: str) -> bool:
+    executable = target / "bin" / ("flutter.bat" if system == "Windows" else "flutter")
+    record = target / RECEIPT_NAME
+    if not executable.is_file() or not record.is_file():
+        return False
+    try:
+        return json.loads(record.read_text(encoding="utf-8")) == expected
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
+def parse_machine_document(output: str) -> dict[str, object]:
+    """Extract Flutter's final machine document from first-run output.
+
+    A cold Windows SDK builds ``flutter_tools`` before answering the version
+    probe and writes dependency progress ahead of the JSON document.  Accept
+    exactly one object that starts on its own line and consumes the remainder
+    of stdout; arbitrary trailing output or a non-object stays fail-closed.
+    """
+
+    decoder = json.JSONDecoder()
+    parsed_objects: list[tuple[dict[str, object], int]] = []
+    for match in re.finditer(r"(?m)^[ \t]*\{", output):
+        start = output.find("{", match.start())
+        try:
+            document, end = decoder.raw_decode(output, start)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(document, dict):
+            parsed_objects.append((document, end))
+    if len(parsed_objects) != 1 or output[parsed_objects[0][1] :].strip():
+        raise ValueError(
+            f"expected one final JSON object, found {len(parsed_objects)}"
+        )
+    return parsed_objects[0][0]
+
+
+def verify_runtime(target: Path, version: str, system: str) -> None:
+    executable = target / "bin" / ("flutter.bat" if system == "Windows" else "flutter")
+    command = [str(executable), "--version", "--machine"]
+    if system == "Windows":
+        # CreateProcess does not define a stable direct-execution contract for
+        # batch files.  In particular, a .bat launched from Python can return
+        # success without forwarding its stdout on GitHub's Windows runner.
+        # Invoke the runner's command processor explicitly and use CALL so the
+        # Flutter batch file returns control and its real exit status/output.
+        command_processor = os.environ.get("COMSPEC", "")
+        if not command_processor or not Path(command_processor).is_file():
+            fail("Windows command processor is absent")
+        if re.search(r'[%!&|<>^()\r\n"]', str(executable)):
+            fail("Windows Flutter path contains command-processor metacharacters")
+        batch_command = "call " + subprocess.list2cmdline(command)
+        command = [command_processor, "/d", "/s", "/c", batch_command]
+    result = subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    try:
+        document = parse_machine_document(result.stdout)
+    except ValueError as exc:
+        stdout = result.stdout[-500:].replace("\r", "\\r").replace("\n", "\\n")
+        stderr = result.stderr[-500:].replace("\r", "\\r").replace("\n", "\\n")
+        fail(
+            "Flutter version probe was not JSON: "
+            f"{exc}; stdout_tail={stdout!r}; stderr_tail={stderr!r}"
+        )
+    if document.get("frameworkVersion") != version:
+        fail(
+            "Flutter runtime version mismatch: "
+            f"got {document.get('frameworkVersion')!r}, expected {version!r}"
+        )
+
+
+def append_line(path_text: str | None, value: str) -> None:
+    if not path_text:
+        fail("required GitHub Actions output path is absent")
+    with Path(path_text).open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(value + "\n")
+
+
+def main() -> int:
+    version = os.environ.get("YUE_FLUTTER_VERSION", "")
+    system = platform.system()
+    runner_os = os.environ.get("YUE_FLUTTER_RUNNER_OS", "")
+    runner_arch = os.environ.get("YUE_FLUTTER_RUNNER_ARCH", "")
+    tool_cache_text = os.environ.get("YUE_FLUTTER_TOOL_CACHE", "")
+    if not version or not runner_os or not runner_arch or not tool_cache_text:
+        fail("version or runner identity is absent")
+    tool_cache = Path(tool_cache_text).resolve()
+    release = ARCH_RELEASES.get((version, system, runner_arch)) or RELEASES.get((version, system))
+    if release is None:
+        fail(f"unsupported release tuple {(version, system)!r}")
+    archive_name, archive_sha256 = release
+    expected = receipt(version, system, runner_arch, archive_sha256)
+    target = tool_cache / "yue-flutter" / version / f"{runner_os}-{runner_arch}"
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    if not valid_cached_sdk(target, expected, system):
+        staging = Path(tempfile.mkdtemp(prefix=".flutter-sdk-", dir=target.parent))
+        archive = staging / Path(archive_name).name
+        try:
+            download(BASE_URL + archive_name, archive, archive_sha256)
+            extracted = staging / "extracted"
+            extracted.mkdir()
+            extract(archive, extracted, system)
+            sdk = extracted / "flutter"
+            executable = sdk / "bin" / (
+                "flutter.bat" if system == "Windows" else "flutter"
+            )
+            if not executable.is_file():
+                fail("official archive did not contain flutter/bin/flutter")
+            (sdk / RECEIPT_NAME).write_text(
+                json.dumps(expected, sort_keys=True, separators=(",", ":")) + "\n",
+                encoding="utf-8",
+            )
+            displaced: Path | None = None
+            if target.exists():
+                displaced = target.with_name(f"{target.name}.stale-{uuid.uuid4().hex}")
+                os.replace(target, displaced)
+            try:
+                os.replace(sdk, target)
+            except Exception:
+                if displaced is not None and not target.exists():
+                    os.replace(displaced, target)
+                raise
+            if displaced is not None:
+                shutil.rmtree(displaced)
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+
+    verify_runtime(target, version, system)
+    append_line(os.environ.get("GITHUB_PATH"), str(target / "bin"))
+    append_line(os.environ.get("GITHUB_OUTPUT"), f"flutter-root={target}")
+    print(f"Flutter {version} verified at {target}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

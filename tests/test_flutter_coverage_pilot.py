@@ -287,7 +287,8 @@ if os.environ.get('PILOT_FAULT')!='coverage':
 def historical_helper_context(case):
     """Exercise frozen diagnostics with their actual accepted helper bytes.
 
-    The archive is byte-exact public 2128d5ff, not a maintained second runner.
+    The archives are byte-exact public 2128d5ff and installer 25d71e2a,
+    not maintained second implementations.
     A shallow offline policy checkout needs no historical Git fetch.
     """
     repository = ROOT
@@ -304,7 +305,12 @@ def historical_helper_context(case):
              "tests/fixtures/flutter-coverage-pilot-20261019.json",
              "tests/fixtures/flutter-coverage-groups-20261020.json"}
     for name in paths:
-        source = archived if name == "scripts/run-flutter-coverage.py" else repository / name
+        archived_paths: dict[str, Path] = {
+            "scripts/run-flutter-coverage.py": archived,
+            ".github/actions/setup-flutter/install_flutter_sdk.py":
+                repository / "tests/fixtures/install-flutter-sdk-25d71e2a.py",
+        }
+        source = archived_paths[name] if name in archived_paths else repository / name
         target = tools / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(source.read_bytes())
