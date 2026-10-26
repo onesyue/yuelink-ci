@@ -407,7 +407,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
 
         pin = (
             "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-            "25d71e2ab4d5c16695e569c6011ddbdc66ab221f"
+            "d6c9eb965b79818ed944b3e2df168905b535ff49"
         )
         flutter_starts = [
             match.start() for match in re.finditer(re.escape(pin), workflow)
