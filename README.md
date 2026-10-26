@@ -1,132 +1,144 @@
 # YueLink public build mirror
 
-This repository contains no application source. Its workflow is generated
-from the private `onesyue/yuelink` release workflow by `sync-build.sh`; each
-public signed annotated tag carries an `ATTESTED_SOURCE_COMMIT=<40hex>` and
-`SOURCE_ATTESTATION_RUN_ID=<id>` machine binding. The public build checks out
-the exact builder revision's shared `verify-source-attestation.sh`, then
-independently authenticates the referenced run identity, exact proof artifact,
-full gate closure and GitHub provenance before it checks out that private
-commit. It refuses any `BUILT_SOURCE_COMMIT` mismatch. A same-named private tag
-is release-input validation, not build authority.
+Public build and release control for the private `onesyue/yuelink` application.
+This repository contains no application source. [sync-build.sh](sync-build.sh)
+generates the public build workflow from the private release workflow.
 
-Stable releases are fail-closed on the Android upgrade key, immutable R2
-credentials, and private-source deploy key before a public tag is created.
-Apple Developer ID/notarization and Windows Authenticode are optional for
-direct sideload distribution: each platform publishes its exact signing mode
-and install notice. Missing or failed platforms never borrow an older binary,
-and a partial release cannot produce or promote an updater manifest.
+## Release an exact source revision
 
-The public workflow publishes every successful current-tag platform
-independently with checksums, provenance, source-commit identity and truthful
-sideload notices. Only a complete five-platform / nine-artifact set can create
-an unsigned updater-manifest candidate. The updater signing seed is held in
-protected repository Secrets and exposed only to the protected promotion
-step, which authenticates the current signed root, signs the candidate,
-enforces a monotonic version transition, publishes the signed archive/root,
-and verifies the live artifacts. It is never stored in application source or
-published artifacts.
-
-Since 2026-09-03 that promotion runs **inside** the public build (`release`
-job, last step `Sign root manifest and promote (in-pipeline)` →
-`scripts/ci/promote_in_pipeline.sh`): a green stable build moves the signed
-root itself. The private signer workflow and the local/bastion wrapper remain
-only as fallback.
-
-The independent public manifest watchdog also keeps a reviewed, signed minimum
-root at `tests/fixtures/update-manifest-v1.json`. It rejects a live root whose
-semantic version or `publishedAt` predates that floor even when the old root's
-Ed25519 signature and expiry remain valid. After every stable promotion, copy
-the exact signed root into that fixture in a reviewed follow-up and retain the
-previous root as a replay regression fixture. Never discover the floor from
-the CDN being authenticated. This ratchet does not remove retained installers
-for manual recovery; publishing a decreasing updater root is already forbidden
-by the shared promoter's monotonic transition contract.
-
-From a clean, up-to-date `master` checkout:
+From a clean, current `master` checkout:
 
 ```bash
 ./sync-build.sh ../yuelink
 git diff -- .github/workflows/build.yml
 ./sync-build.sh --check ../yuelink
 
-# Before the private source tag is cut, attest its exact 40-character master
-# commit on public runners. This is the canonical source gate when private
-# Actions cannot start because of billing; local test output is never accepted.
 SOURCE_SHA=$(git -C ../yuelink rev-parse HEAD)
 gh workflow run source-attestation.yml -R onesyue/yuelink-ci \
   -f source_sha="$SOURCE_SHA"
 # Wait for every source gate and the final provenance job to succeed.
-
-# Then create/push the signed private source tag and mirror it. release.sh downloads
-# the proof, checks source/tag/builder/run/gate identity, and verifies its
-# GitHub artifact attestation before it can create the public tag.
+# Then create/push the signed private source tag and mirror it:
 ./release.sh vX.Y.Z
 ```
 
-`release.sh` verifies the private tag is a GitHub-verified signed annotated
-release input, the generated workflow exactly matches that source commit,
-every mandatory
-sideload secret is configured, and a successful source attestation from the
-exact current yuelink-ci workflow commit binds all canonical gates to the
-private tag's peeled commit. The builder commit itself must be signed and
-GitHub-verified before the script can create a signed annotated public tag.
-The remote tag namespace is handled idempotently: an existing name succeeds
-only when it is annotated, peels to the exact builder commit and has a
-GitHub `verified/valid` signature; an uncertain push is followed by a fresh
-remote read. Tag-existence reads retry at most three times with one- and
-two-second pauses; an exhausted transport failure never counts as absence.
-Only the read is retried, not the tag mutation. New and existing tags are both
-polled for GitHub verification, and the script
-never deletes, overwrites or re-tags a failed immutable name.
-The 1.3.155 feedback successor uses the reviewed Flutter 3.47.8 / Dart
-3.13.7 security hotfix. Its complete singleton plan is a separate source-bound
-fixture; the earlier 3.47.7 grouped and singleton receipts remain unchanged.
-The runner selects the new plan only for that exact private-workflow SDK pin
-and refuses a missing, symlinked or mismatched plan before executing tests.
-The final source commit, every test blob, runtime tree, lockfile and four SDK
-identity fields must match; local test output still cannot replace hosted
-source attestation or package provenance.
+Hosted source attestation is mandatory; local test output is never accepted.
+`release.sh` verifies the signed, GitHub-verified private source tag and builder
+commit, exact generated-workflow parity and required sideload
+secrets before creating the signed public tag. Its annotation binds
+`ATTESTED_SOURCE_COMMIT=<40hex>` and `SOURCE_ATTESTATION_RUN_ID=<id>`.
 
-Before any push, a retained local annotated tag must also match the complete
-expected annotation bytes; matching only the builder commit is insufficient.
-Both repositories therefore authenticate the selected source and builder
-revisions instead of relying on an unsigned ref name or a successful push exit
-status.
+The builder's [shared verifier](scripts/verify-source-attestation.sh)
+authenticates the run, exact proof artifact, complete gate closure and
+GitHub artifact attestation before private checkout. `BUILT_SOURCE_COMMIT` must match;
+a same-named private tag alone is not build authority. Before any push, a local
+annotated tag must match the complete expected annotation bytes.
 
-The other GitHub preflight reads and the shared source-attestation verifier
-use `scripts/gh-read-retry.py`. Each read gets at most three attempts, a
-60-second attempt budget and a 150-second total budget (plus at most one
-second to reap its process group). Only explicit HTTPS GET/HEAD transport
-failures such as EOF or a TLS handshake timeout are retried. HTTP rejection,
-certificate/signature rejection, malformed content and unknown failures stay
-fatal. Failed stdout is discarded; artifact attempts use separate private
-directories before the original exact-file, identity and provenance checks.
-The shared helper is included in the builder's existing full source checkout.
-This does not replay tag creation, pushes, workflow dispatches or promotion.
+An existing name succeeds only when it is annotated, peels to the exact builder
+commit and has a GitHub `verified/valid` signature; an uncertain push is followed by a fresh
+remote read. New and existing tags are polled for GitHub verification. The script
+never deletes, overwrites or re-tags a failed immutable name. Tag-existence reads
+have at most three attempts with one- and two-second pauses; transport failure
+is never interpreted as absence. Tag mutations are not retried.
 
-Every object below the R2 `v` prefix is now retained permanently under the
-live, enabled Cloudflare indefinite bucket-lock rule
-`yuelink-release-versioned-indefinite` (`prefix=v`). The historical
-`prune-r2.yml` filename now runs a read-only archive/lock audit; it contains no
-delete or overwrite path. There is no implicitly cleanable namespace. Any
-future ephemeral area must have a separate explicit prefix, age and ownership
-contract outside both locked `v` and `security/` prefixes.
+Other GitHub preflight reads use [gh-read-retry.py](scripts/gh-read-retry.py):
+three attempts, 60 seconds per attempt and 150 seconds total, plus at most one
+second to reap the process group. Only explicit HTTPS GET/HEAD transport failures
+retry. HTTP, certificate/signature, malformed-content and unknown failures are
+fatal. Failed stdout is discarded and artifact attempts use private directories.
+Dispatch, push, tag mutation and promotion are never replayed by this helper.
 
-The normal in-pipeline promoter checks the live bucket lock directly. For
-manual fallback promotion, `r2-lock-attestation.yml` instead reads that
-same live rule with the existing configuration-read-only Cloudflare token and
-emits a 30-minute proof bound to the exact stable version, private source,
-candidate SHA-256, candidate builder/run and a fresh 32-byte random challenge.
-The proof receives GitHub-hosted artifact provenance; it contains no
-Cloudflare token, R2 write key or updater signing seed. The proof workflow
-commit must be the exact same signed `master` commit named by the candidate's
-builder tag/run; a later control-plane commit is never accepted. The private
-promoter also pins the workflow identity and rechecks Sigstore provenance and
-expiry before immutable archive publication and again immediately before the
-root CAS. This is a short-lived point-in-time attestation rather than a second
-live Cloudflare query; promotion starts immediately and an expired proof is
-replaced, never extended or accepted.
+## Source gates and evidence reuse
+
+The exact-source attestation covers master ancestry, the complete unreleased
+Dart format delta, Android signing, Flutter analysis/import rules, CocoaPods
+residue, workflow policy, the full Flutter suite with a reviewed floor of 2044
+tests, security scanning, Wintun hashes, release metadata/schema, full-history
+Gitleaks, production-target govulncheck, real Linux TUN transfer, GSettings and
+missing-schema behavior, macOS integration/proxy IPC/preferences, service request
+and race tests, and Windows durability. Windows also builds/packages its DLL and
+runs three startup/traffic/shutdown cycles with engine leases. Real listening
+and closed sockets verify refusal/rebind; a timeout is not port-release evidence.
+
+Flutter coverage inventories every tracked test (at least 500 files). Its
+[runner](scripts/run-flutter-coverage.py) selects the admitted execution plan and
+up to four exact-source workers within CPU, memory and operator limits; unknown
+capacity permits only one compatibility worker. Dependencies remain locked and
+offline. Each group has a five-minute deadline and must emit a successful terminal
+event and LCOV report. Source-only reports may be empty, but aggregate application
+coverage must pass the unchanged ratchet. Missing execution/reports, engine errors,
+source mutation or merge failures fail the gate. Only directory-group timeouts
+may split into two halves, each attempted once; other failures are not retried.
+The complete step has a 100-minute deadline and retains the four known crash
+cases. Historical failures remain in Git and their original run receipts.
+
+Flutter 3.47.8 / Dart 3.13.7 uses a source-bound singleton plan and a fresh compiler
+cache per file. Selection requires the exact private-workflow SDK pin and rejects
+absent, symlinked or mismatched feedback plans. Source commit, test blobs, runtime
+tree, lockfile and all four SDK identity fields must match. Retained reviewed
+group plans also enforce their baseline case/skip and coverage union; the previous
+3.47.7 fixtures remain unchanged.
+
+The final source-SHA proof has GitHub build provenance. Schema2 additionally
+binds successful executed Flutter/service-race receipts to source, builder,
+run/attempt, SDK/compiler and lock hashes. Stable preflight repeats verification
+with the explicit OIDC issuer, predicate, exact workflow/builder policy and
+installed Linux x64 toolchains. Only Flutter analysis, full coverage tests and
+service Go race are reusable. A requested reuse failure aborts; stale proofs,
+changed runtimes, failed runs and bad signatures never authorize a skip. Core
+full Go race, fresh vulnerability scans, credentials, tag/environment checks,
+native artifacts and promotion remain mandatory. Branch dispatch keeps full
+preflight; local fixtures do not establish end-to-end release acceptance.
+
+## Packages, signing and promotion
+
+Stable preflight requires the Android upgrade key, immutable R2 credentials and
+private-source deploy key. Apple Developer ID/notarization and Windows
+Authenticode are optional for direct sideloading; each platform publishes its
+actual signing mode and installation notice. A missing platform never borrows
+an old binary. Successful current-tag platforms publish their own checksums,
+provenance and source identity, but only the complete five-platform/nine-artifact
+set can create an unsigned updater candidate.
+
+The protected final `release` step runs `scripts/ci/promote_in_pipeline.sh`:
+authenticate the current signed root, sign the complete candidate, enforce a
+monotonic version transition, publish the immutable archive/root and verify live
+artifacts. The updater seed stays in protected Secrets, never source or artifacts.
+Private/local promotion is recovery-only. The manual credential-recovery workflow
+verifies both public signing identities and emits only two-recipient age
+ciphertext to its recovery bucket and one-day encrypted artifact; no PR trigger
+or plaintext upload is permitted.
+
+In the full Yue.to workspace, use the maintained
+[client recovery procedure](../yuelink/docs/ops/runbook.md#5-rollback-a-stable-release)
+for interrupted release jobs and forward repair. This relative link assumes
+`yuelink` and `yuelink-ci` are sibling checkouts. The normal publication authority
+remains this repository's exact public run; the linked procedure does not
+authorize a second signer, root downgrade, or extra workstation package-download
+acceptance.
+
+The manifest watchdog's reviewed signed floor is
+[update-manifest-v1.json](tests/fixtures/update-manifest-v1.json). It rejects
+older semantic versions or `publishedAt`, even with valid signatures/expiry.
+After promotion, review the exact signed root into that fixture and retain the
+prior root as a replay regression. Never learn the floor from the CDN being
+verified. Retained installers remain available for manual recovery; the updater
+root may never decrease.
+
+Every R2 object below `v` is permanently retained by the live enabled indefinite
+bucket-lock rule `yuelink-release-versioned-indefinite` (`prefix=v`). The historical
+`prune-r2.yml` performs a read-only archive/lock audit; it cannot delete or overwrite.
+There is no implicitly cleanable namespace. Any future temporary namespace needs
+an explicit prefix, age and ownership contract outside locked `v` and `security/`.
+
+Normal promotion queries that live lock. Manual fallback uses
+`r2-lock-attestation.yml` and the configuration-read-only Cloudflare token to issue
+a 30-minute, GitHub-attested proof bound to version, private source, candidate
+SHA-256, builder/run and a fresh 32-byte challenge. Its workflow commit must be
+the candidate's exact signed master builder, not a later revision. It contains
+no Cloudflare token, R2 write key or signing seed. The private promoter checks
+workflow identity, provenance and expiry before archive publication and again
+before root CAS. Start immediately; replace an expired proof rather than extend
+it. This is point-in-time evidence, not a second live Cloudflare query.
 
 ```bash
 challenge=$(openssl rand -hex 32)
@@ -137,112 +149,32 @@ gh workflow run r2-lock-attestation.yml -R onesyue/yuelink-ci \
   -f challenge="$challenge"
 ```
 
-The source attestation is equal to or stronger than the private source jobs:
-it checks master ancestry, the complete unreleased Dart format delta, Android
-release-signing contract, Flutter analysis, architecture imports, CocoaPods
-residue, workflow policy, the full Flutter suite with a reviewed floor of 2044
-tests, the release security scanner, Wintun hashes, release metadata and
-manifest schema, full-history Gitleaks, core and service production-target
-govulncheck, a real Linux kernel TUN transfer in an isolated network namespace,
-Linux native GSettings with explicit desktop schemas and a missing-schema probe,
-macOS integration tests, native proxy IPC and root-only isolated preferences
-commit probes, service request/race tests, and the Windows durability probe. Before
-release tags, Windows also builds the native DLL, packages it as ZIP and runs
-three complete startup/traffic/shutdown cycles with required engine leases.
-Real listening and closed loopback sockets verify the refusal/rebind check;
-a timeout never counts as a released port. These 17 gates bind the exact source.
-The full Flutter coverage gate inventories every tracked test (at least500 files),
-runs each test file in its own compiler process, with four bounded workers in
-independent Git worktrees of the exact source. Each worker clears only its own
-temporary kernel cache before the next file; a fresh command alone can reuse
-that kernel. Locked dependencies come from the already populated offline cache.
-Every file has a five-minute process deadline and must produce a successful
-terminal machine event and an LCOV report. Every tracked test executes once;
-the combined count retains the2044 floor. Native lcov merges every normalized
-application report before the unchanged coverage ratchet. Any engine error,
-missing file/report, tracked source mutation or failed merge fails the gate.
-No failing file is automatically retried. The four observed crash cases remain
-mandatory members of the inventory.
-The complete step has a 100-minute deadline. Run 39165220054 was still making
-progress at approximately 390 of 507 files when its former 60-minute limit
-terminated it. The measured rate projects about 78 minutes for the full corpus;
-the total budget includes bounded headroom while retaining each file's existing
-five-minute deadline, mandatory terminal events and complete coverage checks.
-Runs39154488642 and39157297712 disproved large and32-file compiler batches.
-Diagnostic39158934095 reproduced the storage batch crash with coverage on both
-Flutter3.47.7 and3.47.5; the same32 files passed without coverage and the two
-affected files passed in isolation. Per-file compiler/cache isolation is a
-mitigation candidate until the full native gate passes; no SDK downgrade is
-inferred from these results.
-The final JSON proof is uploaded under the exact source SHA and receives GitHub
-build-provenance attestation. Updater signing material is never copied into
-Git. It remains in protected repository Secrets; the protected promotion step
-verifies the real key and remains independently mandatory. A manually
-dispatched recovery workflow may read those same canonical Android/updater
-Secrets, verifies both public signing identities, and emits only a
-two-recipient age ciphertext to the recovery bucket plus a one-day encrypted
-artifact. It has no pull-request trigger and no plaintext upload path.
+`minimumSystemVersion` is optional only for the `macos-universal` asset: one to
+three ASCII numeric components, each one to three digits, signed with the asset.
+Unknown fields and other-platform extensions are rejected. Install the compatible
+Ops/site verifier before using it. The producer derives the floor from the exact
+Runner target; a release-history link or old installer is not an OS fallback.
+The [isolated fixture](tests/fixtures/macos-system-floor-20261008) uses only a test key.
 
-The schema2 proof also signs executed Flutter and service race receipts, captured
-only after those gates pass. Receipts bind the exact source, builder, run/attempt,
-SDK/compiler identities and dependency lock hashes. Stable tag preflight invokes
-the same shared verifier again with an explicit GitHub OIDC issuer, provenance
-predicate and exact workflow/builder policy, then compares the installed Linux
-x64 toolchains. Only Flutter analysis, full Flutter tests with coverage ratchet,
-and service Go race may be reused. Old proofs, changed runtimes, failed runs or
-signature failures cannot authorize a skip; a requested reuse failure aborts.
-Core full Go race, fresh vulnerability scans, release credentials/tag/environment
-checks and every native artifact and promotion gate remain mandatory. Branch
-workflow dispatch keeps the full preflight. Local fixture tests exercise real
-consumer control flow but never substitute for the next normal signed workflow
-and release as end-to-end acceptance.
+## Policy checks and Actions permissions
 
-Every external `uses:` reference in all public workflows is pinned to a full
-40-character commit SHA. The repository-level Actions policy enforces that
-pinning, and `.github/dependabot.yml` maintains those
-immutable pins with reviewed weekly pull requests. Local or dynamically
-resolved actions are intentionally absent; adding one requires revisiting the
-repository policy before it can merge.
+Run `python3 -m unittest discover -s tests -p 'test_*.py' -v`. Cases must be
+`unittest.TestCase` methods; the discovery contract rejects silently omitted
+pytest functions. Policy CI also runs pinned actionlint, including ShellCheck of
+workflow `run:` blocks, and `shellcheck --severity=warning` on repository scripts.
 
-Policy CI runs the complete offline suite with Python's standard-library
-`unittest discover`. Every policy case must be a `unittest.TestCase` method:
-plain pytest functions are not discovered by that runner. The discovery
-contract rejects those silent omissions, including the runner, Xcode and
-Flutter installer checks; no third-party Python test dependency is required.
-It then runs the same pinned actionlint as yueto-ci (reviewed version and
-linux_amd64 SHA-256, which also ShellChecks every `run:` block) and
-`shellcheck --severity=warning` over the repository's own `*.sh`
-(`tests/test_policy_lint_contract.py`, 2026-09-28).
-
-The live repository policy was read back on **2026-08-21** as
-`allowed_actions=selected`, `sha_pinning_required=true`,
-`github_owned_allowed=true`, and `verified_allowed=false`. GitHub-owned actions
-are covered by that dedicated switch; the selected external patterns are the
-following exact closed set, with no unused allowance:
+All external `uses:` references require full 40-character SHAs. Dependabot
+maintains immutable pins through reviewed weekly PRs. Local or dynamically
+resolved actions are intentionally absent; adding one requires policy review.
+The dated 2026-08-21 repository readback records `allowed_actions=selected`,
+`sha_pinning_required=true`, `github_owned_allowed=true` and `verified_allowed=false`.
+GitHub-owned actions use their dedicated switch. External patterns are the
+following exact closed set:
 
 ```
 android-actions/setup-android@*
 onesyue/yuelink-ci@*
 ```
 
-The contract inventories all eight workflow files plus the composite Flutter
-action (nine action-bearing YAML definitions), checks every `uses:` against
-this policy, and rejects mutable refs, an unknown external repository, or a
-stale/extra documented pattern.
-
-The stable manifest additionally permits `minimumSystemVersion` only on the
-`macos-universal` asset (1–3 ASCII numeric components, each 1–3 digits). It is
-optional for authentic older manifests and signed as part of the asset;
-unknown fields and extensions on other platforms are rejected. Install the
-compatible Ops/site verifier before promoting a root with this field. The
-macOS producer reads its floor from the exact Runner deployment target; a
-release-history link or retained old installer is not a supported OS fallback.
-The isolated producer fixture under `tests/fixtures/macos-system-floor-20261008`
-uses an ephemeral test public key, never the production trust anchor.
-
-Source-only contract tests can legitimately produce an empty LCOV file. Each
-file must still finish with a successful machine protocol and create its own
-report; missing reports refuse. Only empty records are omitted from the LCOV
-merge, and the complete corpus must yield application coverage before the
-unchanged coverage ratchet runs. Native run39160526576 established this case
-for `deeplink_platform_registration_test.dart`; it did not pass the full gate.
+The contract checks every workflow/composite `uses:` against this closure and
+rejects mutable refs, unknown repositories and stale or extra documented patterns.
