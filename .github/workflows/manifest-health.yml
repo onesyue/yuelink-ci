@@ -25,6 +25,7 @@ jobs:
   manifest_check:
     name: Updater manifest freshness
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: read
       # Only the failure handler opens/comments on this repository's watchdog issue.
