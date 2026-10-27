@@ -37,7 +37,7 @@ PLAN = Path(__file__).resolve().parents[1] / "tests/fixtures/flutter-coverage-gr
 # execution mode merely because its source bindings no longer match.
 GROUPED_PLAN_SHA256 = "9addd367954bb8ed2cc4b6d18c21a50e1f82a211c72097386a154a4a113b0d28"
 SINGLETON_PLAN = PLAN.with_name("flutter-coverage-singletons-20261026-v155.json")
-FEEDBACK_SINGLETON_PLAN = PLAN.with_name("flutter-coverage-singletons-20261027-v156.json")
+FEEDBACK_SINGLETON_PLAN = PLAN.with_name("flutter-coverage-singletons-20261027-v157.json")
 FEEDBACK_SDK = {
     "frameworkVersion": "3.47.8",
     "frameworkRevision": "737ba8f885dc774b53b442759999a312c9461e4e",
