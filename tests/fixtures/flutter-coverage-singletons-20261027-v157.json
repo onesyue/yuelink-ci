@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "execution_mode": "singletons",
-  "source_sha": "364c9ead017eec17b4d50cd38d71ac771ec579e0",
+  "source_sha": "cf6e8d1216d02944fec45da527921fd4963cc9df",
   "feature_ancestor": "0f9a857939abe88ca6ba9e422f1045a4e51acffc",
   "source_repository": "onesyue/yuelink",
   "files": {
@@ -92,7 +92,7 @@
     "test/core/kernel/mark_running_toctou_test.dart": "c776598d9413259d28cff199a82849807f2d67f8c4acba042743c5920fcb17ad",
     "test/core/kernel/poll_proxies_ready_20261004_test.dart": "bb81e80c071e9f04fede88469a24d14bcf94b2524b7a3254bd413b4318ce0b5c",
     "test/core/kernel/recovery_failure_trace_test.dart": "a961330322c72e4f9562a3530864dfce7a828759a04222be7245abb24260efb6",
-    "test/core/kernel/ruleset_seed_service_test.dart": "04b40356d391a739fd4d895ed7847227727c97c3d3362d76681abccfa76acbde",
+    "test/core/kernel/ruleset_seed_service_test.dart": "1afbd18f33a5ffc0c52c5a821da413c8561cc1c3c9c40e875d6f57058dde97e5",
     "test/core/kernel/save_last_working_config_test.dart": "81c4476e7791b7b442c20367836b3940ebd6d0259cac3c32e3a79c10f8f51904",
     "test/core/kernel/tun_not_ready_surface_20261011_test.dart": "c2833e127d55cb12e37bcd1fd5c57fbd547e6ec90ccc249fa7e70ac2ea292bf6",
     "test/core/kernel/udp_probe_close_lifecycle_test.dart": "3d1d9fc2a4d464cab73d067d8e580f96c73b4b58463f074d3ebc6742554d0fca",
@@ -333,7 +333,7 @@
     "test/modules/nodes/ingest_history_delays_test.dart": "41e80bdf646727594b0b24c7735da44b1695183e63d1914e04834ca14d9d9feb",
     "test/modules/nodes/manual_selection_test.dart": "41d37519830005227a39fa474aad6008980415daed234f13f3e97b910f0a489d",
     "test/modules/nodes/node_list_rebuild_benchmark_test.dart": "db6a41174381930f7054a6abedf76267e4526dc6c8f56aadc4b7d3969a452095",
-    "test/modules/nodes/node_meta_test.dart": "f8492d9da9336cf71960aa7a93e2e13fa5b0470d2cbb282c185fa9ac1c163d84",
+    "test/modules/nodes/node_meta_test.dart": "89a7747e9dc38c460104ed5d5e5942fa00b32fae27ad84d8f63c005824a803d6",
     "test/modules/nodes/nodes_empty_graph_20261004_test.dart": "4ce0b9374b96119bd04ccafa53278ea2790aa6aa1c757fb6cef1ae6df7da3106",
     "test/modules/nodes/nodes_page_slivers_20261017_test.dart": "5d033d91685d6eebc3fac8e4356128559451fcf35cb6170b18f112f03d4c638f",
     "test/modules/nodes/probe_review_misc_20261011_test.dart": "380b684ea239dbe6ec42e063c4d51bdae573d2fb0cd522236edff70c139bae86",
@@ -552,7 +552,7 @@
     "test/widgets/yl_radius_token_usage_test.dart": "0054016c94899aeb16b2eeecbf9bf5662a46bf930b77aad3cb2c68531e948f82",
     "test/widgets/yl_scaffold_density_test.dart": "43ba88fc8d4a0cbad8ba3648bce88c44993c6f863fda2ef06cc87e64e9d6cc32"
   },
-  "lib_tree": "35f9b086e0101a6dec38661d910d0987bf0afc47",
+  "lib_tree": "4bf4fa67fc42db83c8d345c0feadfa54bae9a96a",
   "runtime_files": {
     "pubspec.lock": "9ecf042933ad80a2f592bd0742855ac841e95718c247fca8107a3992b987a0b3"
   },
