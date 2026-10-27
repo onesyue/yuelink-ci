@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "execution_mode": "singletons",
-  "source_sha": "965e18d46c32f430f772985a2279097a7a6b9b2f",
+  "source_sha": "364c9ead017eec17b4d50cd38d71ac771ec579e0",
   "feature_ancestor": "0f9a857939abe88ca6ba9e422f1045a4e51acffc",
   "source_repository": "onesyue/yuelink",
   "files": {
@@ -92,7 +92,7 @@
     "test/core/kernel/mark_running_toctou_test.dart": "c776598d9413259d28cff199a82849807f2d67f8c4acba042743c5920fcb17ad",
     "test/core/kernel/poll_proxies_ready_20261004_test.dart": "bb81e80c071e9f04fede88469a24d14bcf94b2524b7a3254bd413b4318ce0b5c",
     "test/core/kernel/recovery_failure_trace_test.dart": "a961330322c72e4f9562a3530864dfce7a828759a04222be7245abb24260efb6",
-    "test/core/kernel/ruleset_seed_service_test.dart": "b67ec9de72477f7db62a94fa75ad754bcc8b02d4be9013d3a860c0dfd1fa7a4f",
+    "test/core/kernel/ruleset_seed_service_test.dart": "04b40356d391a739fd4d895ed7847227727c97c3d3362d76681abccfa76acbde",
     "test/core/kernel/save_last_working_config_test.dart": "81c4476e7791b7b442c20367836b3940ebd6d0259cac3c32e3a79c10f8f51904",
     "test/core/kernel/tun_not_ready_surface_20261011_test.dart": "c2833e127d55cb12e37bcd1fd5c57fbd547e6ec90ccc249fa7e70ac2ea292bf6",
     "test/core/kernel/udp_probe_close_lifecycle_test.dart": "3d1d9fc2a4d464cab73d067d8e580f96c73b4b58463f074d3ebc6742554d0fca",
@@ -148,19 +148,21 @@
     "test/core/transport/transport_rum_consent_test.dart": "99f69274e1cd33eefb521a9f257a0676eaa1acb4c99e5eb9911e95f6d5f8afdd",
     "test/core/transport/transport_rum_test.dart": "e73319026ba43e6e73a4ad93400062dcf01b160578a83ec56d5eb52e8bb628a3",
     "test/domain/account/account_overview_presence_test.dart": "c275ea9b4f7d9a9955aa82ca94838d26d9b89f4d6116c3fc347c45cd94ba37c5",
-    "test/domain/account/account_overview_traffic_null_test.dart": "bc0bd1866dea3f09ef31c9667f18a8ad3101d3c85822cfc050b75d2fd236ac44",
-    "test/domain/account/device_summary_test.dart": "c6de430810751f8444f75dffddbe71a68558f626ed3f9580ca692e4d3e341dbe",
+    "test/domain/account/account_overview_traffic_null_test.dart": "0c5f1a1bdb69c337161eb2a3a9e8e0719ec6e77c6ff6b995f96ba6210f92b198",
+    "test/domain/account/device_summary_test.dart": "cdf7fc5af39b01a1ee1c78e7288338668ca6f37b2e0834c22867a5f326aeedbb",
     "test/domain/account/gift_card_test.dart": "d4d013eec101a17edb1646d17335feea48061c3990072842b819b53f75a83345",
     "test/domain/account/gift_ledger_test.dart": "70074989fbc42382160f98dff230418bd3ba0ff5823c2f2363ef52fe8f6e1be3",
     "test/domain/account/masking_test.dart": "ee42014451f41d588e74021cc81a083a39ed5ae65de550ab19d64d4cc0b03b20",
     "test/domain/account/subscription_reset_outcome_test.dart": "bbb270f67c1324774def00e74cbae04cae9fef59f04cceb3cbba59991b157fc5",
-    "test/domain/checkin_result_entity_test.dart": "f532d89099b2f0c9bd844ffc6a7dc031dc6002b7c1de9150b7f8937583709379",
+    "test/domain/account/wallet_copy_test.dart": "f55eda0edae15a4e6725a2339bdc0f8f57d98082b7363f322eaefed233f1f9be",
+    "test/domain/checkin_result_entity_test.dart": "2b6b713fe23ca0d563f10b62666a63c368fc6228460fd8de19e88c8f93b1c3df",
     "test/domain/emby_info_entity_test.dart": "0fa27559adf85617ee37766d0dc74e3bb1b54af5c524158912a95a03cf5b1fd1",
     "test/domain/growth/campaign_action_test.dart": "b6a703109f64c1b7eb524738a6872a787415aa59386746ef6f1c2061f5a8602e",
     "test/domain/growth_test.dart": "6e845560281db272e374b4eb3dac623f01e4186095ba9ab7ee3201363f3917b3",
     "test/domain/invite_mirror_link_20261004_test.dart": "f971c121acc412b4f886adf73382624a98f674664eaa5fee058606167cbfea43",
     "test/domain/log_ring_buffer_test.dart": "052fae22eb7c91f2566257f0e491654af3840cadf3572fa0153ec008a8e71644",
     "test/domain/message_item_test.dart": "8718362b5ba085f1cdf09fa93ce36c9242e78011026f9a8357293256ebe4d3c1",
+    "test/domain/models/server_fetch_notice_test.dart": "139c3c8a66c25091563723818fb66c920b078b10980f62bdcbdf3a46deede090",
     "test/domain/node_intelligence_test.dart": "39a6789cb647033edc3728ee4161b1ae25118f9820e2ff89a0889a31f9cbdd23",
     "test/domain/nodes/latency_score_test.dart": "ac1f7e6325e77df6e93e5795cafcb395ddf474c3ee967126326be67e02d88a9c",
     "test/domain/notice_window_test.dart": "c7dd5d57b3d283d240694565853d5b85bc57c46796f27bdb201fdff67cd08909",
@@ -190,7 +192,7 @@
     "test/infrastructure/datasources/panel_gift_card_history_wire_test.dart": "74fe91f9477a906a7d184422dc63126fcec3fae8318d30ae2b8e02784d40e67e",
     "test/infrastructure/datasources/panel_notice_wire_test.dart": "50029a2c1108fd2889f62fabab06b6273dfd39f093020e8b5aacf12051e03fdc",
     "test/infrastructure/datasources/panel_purchase_quote_wire_test.dart": "80dfaf7ca4022e4381590d048f86432204bc4a9475abe8b70015553fdaf51da5",
-    "test/infrastructure/datasources/panel_wire_contract_test.dart": "37647edc9bfeb89c1b17a7d5b4447eefc7b33dc5f420fb87d21ec1366ee35eff",
+    "test/infrastructure/datasources/panel_wire_contract_test.dart": "44b659158134ecd4b0db3003661cba4b9504388a69f50a9c62f3ff73c8ac73ff",
     "test/infrastructure/growth/growth_repository_test.dart": "486155eaca9b2228759f409da39636392d9e4e4a180eb9814a15469a27b5799e",
     "test/infrastructure/messages/message_feed_cache_account_test.dart": "9e3b85158ac0f58c2b92557ac96ae3ebef85e6faa8099603d91b64d552a03d03",
     "test/infrastructure/mihomo_connections_fallback_test.dart": "90525dc4e9fece5c87941bc5314b10958c3eadd6f5cfc3b40fb5b3d57aff255f",
@@ -219,9 +221,9 @@
     "test/infrastructure/subscription_identity_redirect_test.dart": "c35b41465b5d6298d3fa48c2db434a5f867191f572a23b7926aa0b1d151c04d8",
     "test/infrastructure/subscription_proxy_timeout_test.dart": "607035e0e197bc7825e4aea1171ba0d406c0361ed2f7182d0aa28eb2900be2f0",
     "test/infrastructure/subscription_wire_contract_test.dart": "91dbdf27d5d4c1e91edcb3b6a9a2172b1d09d82383c2335bb50111e2c198b33f",
-    "test/infrastructure/tickets/ticket_repository_test.dart": "0796574aa1b397c30e6fcb5881482f1fac1d474cf2be137b2432cc4a9c51c10f",
+    "test/infrastructure/tickets/ticket_repository_test.dart": "09fa093f602254bc7f8daa4f743f9fce4175debe54a21777a80f1e5f46af89a7",
     "test/infrastructure/transport/bootstrap_tls_socket_test.dart": "a84eef3f4e78ec7029e61b6be6eea63a302067a71044ed7dd832f9b5c986586c",
-    "test/infrastructure/transport/cn01_transport_final_test.dart": "11d5b5c4b1c40ec7326bfbc6e00e6a78c88f97c51afe387064fcd2bae7c54ac4",
+    "test/infrastructure/transport/cn01_transport_final_test.dart": "d12ebea99449a964a2d8fde1403d160ab0ecc1bc2baad9fc41d629c22382c58b",
     "test/infrastructure/transport/doh_resolver_test.dart": "4ce14aa9dbf494d23b5713fc3346a61c6cff7f6f8fda97905e0e3b08e1f6114b",
     "test/infrastructure/transport/edge_business_dns_test.dart": "8d483e22e392560dadcc37f7a33ec3dcf6664e62b095f1ee3ea3dd7aae6c8289",
     "test/infrastructure/transport/endpoint_pool_address_test.dart": "fc3b77fd147bc5b53eb18cdb8c0019ae925fc168986deab533a7c8179ebb85cd",
@@ -240,7 +242,7 @@
     "test/models/payment_method_test.dart": "1016182779c705507819a32327db1f740ee1e2701e77df14a4e024c0457ce728",
     "test/models/profile_test.dart": "277ae918d22c82e4400100b889d27542356ca74fae62e676549aec15fca016be",
     "test/models/proxy_test.dart": "b77f967920a6f7cd91919757dce76c158491e82bb13e58bcf709c7824e635b0f",
-    "test/models/store_models_test.dart": "1cf55bbd1b4d8f9a07751492a5baa017bfd20bb463da4c8ebfacf1bea685ab5a",
+    "test/models/store_models_test.dart": "55a9afda4ebebb789a5f0a4e0e0c5702b4227dca8da45cf81de4867c8751a1da",
     "test/models/traffic_history_test.dart": "9aa52fdfa019c90ba35fd822db4254218dabb5319f9df0ec04c59ca764f42895",
     "test/models/traffic_test.dart": "d6b432cd5899279898ab3e7c7d6295559d7887da0c1a8d4b3791014c06bb501c",
     "test/models/user_profile_device_limit_test.dart": "01b2b511fc78c78f15893a2313116881eed32c50e70dab38fed3150e6dc1e942",
@@ -280,6 +282,7 @@
     "test/modules/dashboard/live_stats_hidden_tab_test.dart": "906a5c849c3d660732798bbce35610cbafefcd0d85cea8f4d2fc27d239ba3ef0",
     "test/modules/dashboard/mode_actions_unmounted_20261011_test.dart": "22c4e5ae2b26bcb22dea28cea7c7cc534c4cde29654ca5910a8e7763de2d94da",
     "test/modules/dashboard/power_button_focus_ring_20260928_test.dart": "d26d69f23c801c3613c819d51e10de75119b7ecda076e0aef4d245d58a770d02",
+    "test/modules/dashboard/startup_error_banner_test.dart": "9ffe29126b19d200618b220d6f4b87b40f4dbeca84655befb3dc474a93f850e2",
     "test/modules/dashboard/traffic_stale_provider_test.dart": "66614ee7b6d28e3b4396332b431192ed94ea2dbd0a10f453b02fa91f6559cf89",
     "test/modules/dashboard_pill_tooltip_test.dart": "fafe6079c21859cfef9638377b0fd345ab70f994581e7fafd687be2700fc78d0",
     "test/modules/deep_upgrade_20260905_ux_batch2_test.dart": "f6184866b5794ba9b2ea35e5d2933418ccdb5b8c0ecbe7738670c6ed81c1abe0",
@@ -299,6 +302,7 @@
     "test/modules/help/help_pages_test.dart": "80b0e70596c367b346f12c0f161e4571562608670cb740ae20fec26b16cfa492",
     "test/modules/help/help_ref_test.dart": "77152aad4e16b77e11e0d72e00b727db055b2b2465f3feb98fb13c724a08e44e",
     "test/modules/ios_tun_egress_probe_test.dart": "b18e3837a57a97e74fd7f0731310fc8f060dbe28da6b8d52a9ea41d8b0b317ef",
+    "test/modules/login_device_limit_test.dart": "29eb5c99f237d909b225c5cd5347455d81e705b5fca1be7f2e08ffcbfe9ee92a",
     "test/modules/login_failed_split_20261017_test.dart": "e76b3580f43214899e8a91181b967821249fe406a8507d5a2b2979e255bab05e",
     "test/modules/login_previous_connection_test.dart": "9bcf9fe94e971700a4cfb1d4a0a7512e701f9fec3d2c903d494484484b31caff",
     "test/modules/login_second_factor_prompt_20260928_test.dart": "53e687f0bd4e64ff18e99c42d08fc363b93250a379ef42d0a922055cbc662c4a",
@@ -329,7 +333,7 @@
     "test/modules/nodes/ingest_history_delays_test.dart": "41e80bdf646727594b0b24c7735da44b1695183e63d1914e04834ca14d9d9feb",
     "test/modules/nodes/manual_selection_test.dart": "41d37519830005227a39fa474aad6008980415daed234f13f3e97b910f0a489d",
     "test/modules/nodes/node_list_rebuild_benchmark_test.dart": "db6a41174381930f7054a6abedf76267e4526dc6c8f56aadc4b7d3969a452095",
-    "test/modules/nodes/node_meta_test.dart": "9f88a33e35f01769d888d3deef2adb94d732ff350e04ca0b674bbe293ac3ebe4",
+    "test/modules/nodes/node_meta_test.dart": "f8492d9da9336cf71960aa7a93e2e13fa5b0470d2cbb282c185fa9ac1c163d84",
     "test/modules/nodes/nodes_empty_graph_20261004_test.dart": "4ce0b9374b96119bd04ccafa53278ea2790aa6aa1c757fb6cef1ae6df7da3106",
     "test/modules/nodes/nodes_page_slivers_20261017_test.dart": "5d033d91685d6eebc3fac8e4356128559451fcf35cb6170b18f112f03d4c638f",
     "test/modules/nodes/probe_review_misc_20261011_test.dart": "380b684ea239dbe6ec42e063c4d51bdae573d2fb0cd522236edff70c139bae86",
@@ -344,7 +348,7 @@
     "test/modules/profile_delete_stops_core_test.dart": "d80365a5920c207bcbe8148e76aed23bde3094e01907ba8414adb29a0d294c4b",
     "test/modules/profiles_dispose_guard_test.dart": "d1d7381d679d65ad3ce98641168b41994b792dd538f5f60ba9fb83fee6ab3a34",
     "test/modules/profiles_file_picker_contract_test.dart": "66d55102beb05a595fa88077c8c6192a803c8182f8776232c30d71857b7cb340",
-    "test/modules/renewal_reminder_banner_test.dart": "e460c0935a9948b46802683316ce2ae98d952c3064a4115f2be8eea629532f09",
+    "test/modules/renewal_reminder_banner_test.dart": "4892f3aa02f946b54587beed7b4efd8988ce660d7d8aa3b74ba37145714fe1a9",
     "test/modules/service_status/service_status_client_test.dart": "6d57975bbb5b2391b073647e8a2367899714336b05c8e1966ace46cb69fa9381",
     "test/modules/service_status/service_status_models_test.dart": "be4d705ee0704bb4164f2b6709b589ecfe2214bd37b88707f4b41981faa12dc6",
     "test/modules/service_status/service_status_page_test.dart": "1031a47fa52fc8f590758f8d771595ceeb55cd0e1bc5d10695b041434e72c4d1",
@@ -372,7 +376,7 @@
     "test/modules/tickets_refresh_keeps_list_20260928_test.dart": "4d3f638201a39179d2162122de25d20b102740984bbf45c55eec3e9764183e65",
     "test/modules/two_factor_page_test.dart": "ce5aa44c2bc8139614b81d69c5a4d858106e00c31fe421ce1f416518c1e3fd6d",
     "test/modules/updater/install_failure_message_20260926_test.dart": "cf9ca36fba643660c3ef4fae53f55145abeb4b0f3a4b24baeefc52285dbf50ee",
-    "test/modules/updater/macos_update_test.dart": "26ffd90ace29ffe30970ba237f2fb6e0d8634c4e57d1f89b45829d76fa29c0b1",
+    "test/modules/updater/macos_update_test.dart": "2c5b2926dc7768c7157ece30361bd3cc68b9db1f4d8381d3289df92231f1844c",
     "test/modules/updater/update_dialog_handoff_test.dart": "2e5cd93cc668744649d2a3de997af1a92647f5d7229af16548b550267e98fa76",
     "test/modules/updater/upgrade_handoff_arming_test.dart": "dc29eafffdef987c5621f9313d552ac252c85f392e1a565a61d9545171ac1ae7",
     "test/modules/ux_polish_20260928_test.dart": "988ff149b8c8387264acea840354beca4ed72a9da8b3bae975a3f4034a84302a",
@@ -386,7 +390,7 @@
     "test/modules/w16_settings_pages_test.dart": "7c540eed06c6066dc5c4597dc98ec96e4beef9484f04634bca0fa2e3d7f762ca",
     "test/modules/wallet_transfer_refresh_20260926_test.dart": "d90596597c7d67bfe5b9dae123f3cc5ab711d4d3131c99fc16816cf082851b46",
     "test/modules/withdraw_page_test.dart": "75d59e7c5af4ede52b07cc45630cd202c5c02b1d92219630e8d032aa0640292d",
-    "test/providers/account_providers_test.dart": "fa8d1277cf6537af40a0d54ad9d716d97b8c00770a897e533298272cadd94b6d",
+    "test/providers/account_providers_test.dart": "a1866ec3e5bb03178df6d24dda0149e6051d6e9bbbce792c5de8b6507db92e38",
     "test/providers/profile_provider_test.dart": "b3863330034d230c086cc0c05222b8d043f0f5d48d9d1db0c2b85d3ec0ad3167",
     "test/providers/proxy_groups_test.dart": "8c80c0429101983a967bdb4356d8367ba230fedf68898dd3bba8589153a8ada2",
     "test/providers/purchase_account_boundary_test.dart": "2b8b5851c53dadae790e2a9c1f81360ef899ed10654f9a7a70115a519472dbf8",
@@ -402,7 +406,7 @@
     "test/services/android_tile_stale_transition_contract_test.dart": "9271ee3875b0bf73b9e13be38fbede2e0848539f4214109dde2d1f8b514b8126",
     "test/services/android_vpn_service_static_test.dart": "ea1440fd76dab4748e64ebdd485d0d610b4b407ce5707c86ccfeb81cc8a103fb",
     "test/services/config_template_golden_test.dart": "bb49d9a83f42c53cd65512a2e8b8a77202944802fafad4f4c7c2156c2ba16dc2",
-    "test/services/config_template_test.dart": "e72f005001560e8caf4aa3e7826edb31554045bdbf92af20b5eefd136e14da42",
+    "test/services/config_template_test.dart": "759a0b532ca940a6f5f6a8881354f921db673f77b9da0b6b5aaeaaccaf23843c",
     "test/services/core_heartbeat_guard_static_test.dart": "77a10f897e9f907b096031a4279609824db023b065e2b36340a6a6d371fe5716",
     "test/services/core_heartbeat_interval_test.dart": "d3b2c583024ceaf655c67d14feadc71babc55302846caa610c9196ba448bc4fa",
     "test/services/core_heartbeat_outage_state_test.dart": "4c66fdc9ede1053dab4ef8ef9e9e22bd353b98484fac104f06c0c4165dc4716a",
@@ -526,7 +530,7 @@
     "test/widgets/mine_page_snapshot_test.dart": "15d92d844dbc59546c8eb4bb3120bba0ca6b6f911668d2eacd40b8914419e0ff",
     "test/widgets/mine_traffic_section_test.dart": "eface0756f32f06f17f540564175bb5493df137d6e6f1f3ec82ea12de43dabbe",
     "test/widgets/page_consistency_contract_test.dart": "a4babc3b426b0f95ad5e2d7812b4ad50c1532f6a7cb279c7adc01a2e08d0284f",
-    "test/widgets/plan_card_alignment_test.dart": "2e90f562a06b61c339a07604162ba55daa5a2eb335065627582f098732c746f5",
+    "test/widgets/plan_card_alignment_test.dart": "7cfb45d9c0164eed62ae4620c03cecf5893dcb6a607e419eb407e1ebba4b9893",
     "test/widgets/pre_auth_language_entry_test.dart": "84a8b8f4cffac37b6012dc86decf72d8b35d5a61940a2001d1b5ce046e4bc988",
     "test/widgets/profile_card_traffic_state_test.dart": "24b285b20620a66958eed479cfa8dabef3c672a7c8a44e4883f1a3f104624244",
     "test/widgets/purchase_quote_ui_test.dart": "4926a417d19375b5345ab998e8c12a5caa7c33678ee5b4b9a9c6a85825cdd8d3",
@@ -548,7 +552,7 @@
     "test/widgets/yl_radius_token_usage_test.dart": "0054016c94899aeb16b2eeecbf9bf5662a46bf930b77aad3cb2c68531e948f82",
     "test/widgets/yl_scaffold_density_test.dart": "43ba88fc8d4a0cbad8ba3648bce88c44993c6f863fda2ef06cc87e64e9d6cc32"
   },
-  "lib_tree": "b49f37f1b543732ccf398d3a2fd4ffecf0d57972",
+  "lib_tree": "35f9b086e0101a6dec38661d910d0987bf0afc47",
   "runtime_files": {
     "pubspec.lock": "9ecf042933ad80a2f592bd0742855ac841e95718c247fca8107a3992b987a0b3"
   },
@@ -1005,6 +1009,9 @@
       "test/domain/account/subscription_reset_outcome_test.dart"
     ],
     [
+      "test/domain/account/wallet_copy_test.dart"
+    ],
+    [
       "test/domain/checkin_result_entity_test.dart"
     ],
     [
@@ -1024,6 +1031,9 @@
     ],
     [
       "test/domain/message_item_test.dart"
+    ],
+    [
+      "test/domain/models/server_fetch_notice_test.dart"
     ],
     [
       "test/domain/node_intelligence_test.dart"
@@ -1383,6 +1393,9 @@
       "test/modules/dashboard/power_button_focus_ring_20260928_test.dart"
     ],
     [
+      "test/modules/dashboard/startup_error_banner_test.dart"
+    ],
+    [
       "test/modules/dashboard/traffic_stale_provider_test.dart"
     ],
     [
@@ -1438,6 +1451,9 @@
     ],
     [
       "test/modules/ios_tun_egress_probe_test.dart"
+    ],
+    [
+      "test/modules/login_device_limit_test.dart"
     ],
     [
       "test/modules/login_failed_split_20261017_test.dart"
