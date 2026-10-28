@@ -8,6 +8,8 @@
 
 当前证据：工作树基于 origin/master，同步时无差异。代码与负控已编写；Mac 未运行测试、构建或语义诊断。测试结论为 deferred，不能据此认定门禁通过。Serena 诊断按本轮只读/改代码限制交由后续验证，未将缺失诊断视作通过。
 
+独立只读审阅：R13 未发现阻塞缺陷；R9 指出 GNU timeout 可能向进程及进程组重复发送 TERM，使等待确认的 handler 重入。已将 handler 首条操作设为忽略后续 TERM，保留真实首次终止与各一次事件断言。运行验证仍等待 box。
+
 box 预检（Linux，GNU timeout 与 /usr/bin/time）：
 
 ```sh

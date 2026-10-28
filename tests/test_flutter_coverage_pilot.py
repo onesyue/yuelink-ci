@@ -444,6 +444,7 @@ class Group25Tests(unittest.TestCase):
         before = '{"type":"error","time":66683}\n'
         after = '{"type":"error","time":66684}\n'
         child = ("def term(*args):\n"
+                 " signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
                  " os.read(ack,1)\n"
                  f" sys.stdout.write({after!r}); sys.stdout.flush()\n"
                  " sys.exit(0)\n"
