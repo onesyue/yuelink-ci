@@ -32,10 +32,10 @@ ISOLATED = REQUIRED_TESTS | {
     "test/core/storage/subscription_reset_operation_store_test.dart",
     "test/core/storage/tun_datapath_accel_latch_test.dart",
 }
-PLAN = Path(__file__).resolve().parents[1] / "tests/fixtures/flutter-coverage-groups-20261020.json"
+PLAN = Path(__file__).resolve().parents[1] / "tests/fixtures/flutter-coverage-groups-20261028.json"
 # This accepted control is immutable. A corrupt plan must not select a different
 # execution mode merely because its source bindings no longer match.
-GROUPED_PLAN_SHA256 = "9addd367954bb8ed2cc4b6d18c21a50e1f82a211c72097386a154a4a113b0d28"
+GROUPED_PLAN_SHA256 = "818d2d37d03aa6666595fb4e8af16881c971d4d8865702e0543ab95a77fdd584"
 GIB = 1024 ** 3
 # Scheduling headroom above the observed 1.53 GiB sample maximum, not a
 # full-corpus peak-memory claim. Unknown capacity admits only one worker.
@@ -110,7 +110,7 @@ def execution_plan(root: Path, inventory: list[list[str]]) -> tuple[dict, list[l
         data, groups = grouped_plan(root, inventory)
         return data, groups, "reviewed_groups", PLAN
 
-    sdk = frozen_sdk(grouped)
+    sdk = frozen_sdk({"sdk": grouped.get("live_sdk")})
     groups = directory_groups(inventory)
     assert_directory_groups(groups, inventory)
     data = {

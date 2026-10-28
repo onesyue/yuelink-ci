@@ -137,7 +137,7 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
         (self.tools / "tests/fixtures").mkdir(parents=True)
         for name in ("run-flutter-coverage.py", "count-flutter-machine-tests.py"):
             shutil.copyfile(ROOT / "scripts" / name, self.tools / "scripts" / name)
-        self.plan_path = self.tools / "tests/fixtures/flutter-coverage-groups-20261020.json"
+        self.plan_path = self.tools / "tests/fixtures/flutter-coverage-groups-20261028.json"
         self.refresh_plan()
         # Only the expensive engine and resource capacity are fixture controls.
         # The runner, Git worktrees, plan/protocol/coverage checks execute unchanged.
@@ -182,6 +182,7 @@ m.main()
                                         "coverage_sha256": RUNNER.digest([
                                             ("lib/a.dart", "DA", "1", False), ("lib/a.dart", "DA", "1", True)]),
                                         "visible_cases": len(rows), "visible_skips": 0, "coverage_rows": 2}}
+        self.plan["live_sdk"] = dict(self.plan["sdk"])
         self.plan_path.write_text(json.dumps(self.plan))
         self.grouped_digest = hashlib.sha256(self.plan_path.read_bytes()).hexdigest()
 
@@ -215,6 +216,7 @@ m.main()
         self.commit_fixture(self.root, "complete reviewed filename corpus")
         self.refresh_plan()
         self.plan["groups"] = reviewed["groups"]
+        self.plan["live_sdk"] = dict(self.plan["sdk"])
         self.plan_path.write_text(json.dumps(self.plan))
         self.grouped_digest = hashlib.sha256(self.plan_path.read_bytes()).hexdigest()
         return reviewed
@@ -353,7 +355,7 @@ m.main()
         with patch.object(RUNNER, "PLAN", self.plan_path):
             inventory = RUNNER.partition(self.root)
             for sdk in (None, {}, {"frameworkVersion": "3.47.7"}):
-                data = dict(self.plan, sdk=sdk)
+                data = dict(self.plan, live_sdk=sdk)
                 self.plan_path.write_text(json.dumps(data))
                 with self.subTest(sdk=sdk), patch.object(
                         RUNNER, "GROUPED_PLAN_SHA256", hashlib.sha256(self.plan_path.read_bytes()).hexdigest()):
@@ -453,7 +455,8 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
         return plan
 
     def test_reviewed_singleton_splits_preserve_all_other_plan_inputs(self):
-        plan = self.rejoin_contributors(json.loads(RUNNER.PLAN.read_text()))
+        historical = ROOT / "tests/fixtures/flutter-coverage-groups-20261020.json"
+        plan = self.rejoin_contributors(json.loads(historical.read_text()))
         # Recover exact103: all99 other groups and every non-group field remain.
         self.assertEqual(
             hashlib.sha256((json.dumps(plan, indent=2) + "\n").encode()).hexdigest(),
@@ -816,6 +819,33 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
             with self.assertRaisesRegex(ValueError, "insufficient visible memory"):
                 RUNNER.worker_count(result)
 
+
+    def test_live_sdk_matches_release_and_workflows_without_rewriting_baseline(self):
+        reviewed = json.loads(RUNNER.PLAN.read_text())
+        historical = json.loads((ROOT / "tests/fixtures/flutter-coverage-groups-20261020.json").read_text())
+        self.assertEqual({k: reviewed[k] for k in historical}, historical)
+        self.assertEqual(hashlib.sha256(RUNNER.PLAN.read_bytes()).hexdigest(), RUNNER.GROUPED_PLAN_SHA256)
+        sdk = RUNNER.frozen_sdk({"sdk": reviewed["live_sdk"]})
+        self.assertEqual(sdk, {
+            "frameworkVersion": "3.47.8",
+            "frameworkRevision": "737ba8f885dc774b53b442759999a312c9461e4e",
+            "engineRevision": "cf636b1dfb818dd6a3ff16e390e93b1a036969c8",
+            "dartSdkVersion": "3.13.7",
+        })
+        for workflow in ("source-attestation.yml", "build.yml"):
+            self.assertIn("FLUTTER_VERSION: '" + sdk["frameworkVersion"] + "'",
+                          (ROOT / ".github/workflows" / workflow).read_text())
+        self.admitted_singleton_corpus()
+        self.plan["live_sdk"] = sdk
+        self.plan_path.write_text(json.dumps(self.plan))
+        with patch.object(RUNNER, "PLAN", self.plan_path), patch.object(
+                RUNNER, "GROUPED_PLAN_SHA256", hashlib.sha256(self.plan_path.read_bytes()).hexdigest()):
+            plan, _, mode, _ = RUNNER.execution_plan(self.root, RUNNER.partition(self.root))
+            self.assertEqual(mode, "directory_groups")
+            self.assertEqual(plan["sdk"], sdk)
+        with patch.object(RUNNER, "PLAN", self.plan_path):
+            with self.assertRaisesRegex(ValueError, "control digest mismatch"):
+                RUNNER.execution_plan(self.root, RUNNER.partition(self.root))
 
     def test_directory_groups_are_stable_and_refuse_a_dropped_or_mixed_file(self):
         reviewed = json.loads(RUNNER.PLAN.read_text())

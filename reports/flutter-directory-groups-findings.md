@@ -20,3 +20,16 @@ DONE：`~/.venvs/yueto/bin/python -m pytest -q tests/test_flutter_coverage_runne
 DONE：独立审阅提出的负例辅助函数提前抛错、超时拆分第一半报告可能被第二半掩盖两项问题已修复并复核。拆分后每半均验证事件完整性和 LCOV 文件存在，任一半缺失即失败。
 
 DONE：singleton 选择入口被移除；相关常量在 scripts/tests 的 Python 调用方检索无剩余引用，历史计划 JSON 保留。本批采用 `[skip ci]` 提交标记，避免 push/PR 自动运行；不调用 workflow dispatch。
+
+## sdk17 验收合同与车道
+
+验收：以最近已发布 v1.3.157 的签名源码证明及构建日志定版，活树 SDK
+完整四字段与证明一致；历史 SDK 与覆盖率基线保留原值，摘要、SDK 比对、
+2044 下限和目录分组不放宽。只跑 `tests/test_flutter_coverage_runner.py`，
+通过后签名提交、推送原 PR #17 分支并更新描述，不合并、不发布。
+
+主会话负责 runner、冻结 JSON、单文件测试及文档；sdk17_review 车道只读
+独立审阅上述差异，无文件写权限、不重复测试。证据见 `sdk17-evidence.md`。
+回滚为反向提交 sdk17 批次，恢复原计划引用与摘要。
+
+DONE：sdk17 `~/.venvs/yueto/bin/python -m pytest -q tests/test_flutter_coverage_runner.py`：36 passed、65 subtests passed，174.50 秒；独立审阅及修复复核通过。完整取证与首轮测试根因见 `sdk17-evidence.md`。
