@@ -36,14 +36,6 @@ PLAN = Path(__file__).resolve().parents[1] / "tests/fixtures/flutter-coverage-gr
 # This accepted control is immutable. A corrupt plan must not select a different
 # execution mode merely because its source bindings no longer match.
 GROUPED_PLAN_SHA256 = "9addd367954bb8ed2cc4b6d18c21a50e1f82a211c72097386a154a4a113b0d28"
-SINGLETON_PLAN = PLAN.with_name("flutter-coverage-singletons-20261026-v155.json")
-FEEDBACK_SINGLETON_PLAN = PLAN.with_name("flutter-coverage-singletons-20261027-v157.json")
-FEEDBACK_SDK = {
-    "frameworkVersion": "3.47.8",
-    "frameworkRevision": "737ba8f885dc774b53b442759999a312c9461e4e",
-    "engineRevision": "cf636b1dfb818dd6a3ff16e390e93b1a036969c8",
-    "dartSdkVersion": "3.13.7",
-}
 GIB = 1024 ** 3
 # Scheduling headroom above the observed 1.53 GiB sample maximum, not a
 # full-corpus peak-memory claim. Unknown capacity admits only one worker.
@@ -118,49 +110,17 @@ def execution_plan(root: Path, inventory: list[list[str]]) -> tuple[dict, list[l
         data, groups = grouped_plan(root, inventory)
         return data, groups, "reviewed_groups", PLAN
 
-    selected_plan, selected_sdk = SINGLETON_PLAN, grouped["sdk"]
-    workflow = root / ".github/workflows/ci.yml"
-    if workflow.is_file() and re.findall(
-            r"^  FLUTTER_VERSION: ['\"]([0-9.]+)['\"]$", workflow.read_text(), re.MULTILINE
-    ) == ["3.47.8"]:
-        selected_plan, selected_sdk = FEEDBACK_SINGLETON_PLAN, FEEDBACK_SDK
-        if not selected_plan.is_file() or selected_plan.is_symlink():
-            raise ValueError("reviewed feedback singleton plan missing or symlinked")
-
-    if not selected_plan.is_file() or selected_plan.is_symlink():
-        grouped_body = json.loads(PLAN.read_text())
-        sdk = frozen_sdk(grouped_body)
-        groups = directory_groups(inventory)
-        assert_directory_groups(groups, inventory)
-        data = {
-            "schema": 1,
-            "execution_mode": "directory_groups",
-            "sdk": sdk,
-            "macos_test": MACOS_TEST,
-            "groups": groups,
-        }
-        return data, groups, "directory_groups", PLAN
-    data = json.loads(selected_plan.read_text())
-    fields = {"schema", "execution_mode", "source_sha", "feature_ancestor", "source_repository",
-              "files", "lib_tree", "runtime_files", "sdk", "macos_test", "groups"}
-    groups = [group for group in inventory if group != [MACOS_TEST]]
-    source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
-    if (not isinstance(data, dict) or set(data) != fields
-            or type(data["schema"]) is not int or data["schema"] != 1
-            or data["execution_mode"] != "singletons"
-            or data["source_repository"] != "onesyue/yuelink"
-            or data["source_sha"] != source
-            or not isinstance(data["feature_ancestor"], str)
-            or re.fullmatch(r"[0-9a-f]{40}", data["feature_ancestor"]) is None
-            or data["files"] != expected or data["lib_tree"] != tree
-            or data["runtime_files"] != lock or lock != grouped["runtime_files"]
-            or data["sdk"] != selected_sdk
-            or data["macos_test"] != MACOS_TEST or MACOS_TEST not in expected
-            or data["groups"] != groups):
-        raise ValueError("reviewed singleton source/inventory/runtime plan mismatch")
-    subprocess.run(["git", "merge-base", "--is-ancestor", data["feature_ancestor"], source],
-                   cwd=root, check=True)
-    return data, groups, "singletons", selected_plan
+    sdk = frozen_sdk(grouped)
+    groups = directory_groups(inventory)
+    assert_directory_groups(groups, inventory)
+    data = {
+        "schema": 1,
+        "execution_mode": "directory_groups",
+        "sdk": sdk,
+        "macos_test": MACOS_TEST,
+        "groups": groups,
+    }
+    return data, groups, "directory_groups", PLAN
 
 
 def directory_groups(inventory: list[list[str]]) -> list[list[str]]:
@@ -200,7 +160,8 @@ def assert_directory_groups(groups: list[list[str]], inventory: list[list[str]])
     if any(path in ISOLATED and group != [path] for group in groups for path in group):
         raise ValueError("isolated path inside a multi-file group")
     if (sorted(covered) != sorted(expected) or len(covered) != len(set(covered))
-            or any(not group or len(group) > 8 for group in groups)):
+            or any(not group or len(group) > 8
+                   or len({str(Path(path).parent) for path in group}) != 1 for group in groups)):
         raise ValueError("PLAN_INCOMPLETE")
 
 
@@ -440,9 +401,7 @@ def main() -> None:
     receipt = {"schema": 1, "status": "INCOMPLETE", "groups": groups,
                "execution_mode": mode,
                "union_comparison": ("reviewed_baseline" if mode == "reviewed_groups"
-                                    else "directory_groups; no frozen-snapshot equivalence claim"
-                                    if mode == "directory_groups"
-                                    else "observed_singletons; no grouped equivalence claim"),
+                                    else "directory_groups; no frozen-snapshot equivalence claim"),
                "plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
                "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                "resources_before": resources, "workers": capacity,
@@ -488,9 +447,8 @@ def main() -> None:
                 shutil.rmtree(cache)
 
         def invoke(index: int, tests: list[str], report: Path, lcov: Path) -> subprocess.CompletedProcess:
-            # Directory groups keep a successful ordinary compiler. Isolated files
-            # and the reviewed/singleton modes still start from an empty cache.
-            if mode != "directory_groups" or (len(tests) == 1 and tests[0] in ISOLATED):
+            # Reuse successful ordinary compilations; isolate known crash cases.
+            if len(tests) == 1 and tests[0] in ISOLATED:
                 clear_compiler_cache()
             command = [
                 "timeout", "--signal=TERM", "--kill-after=30s", "300",
@@ -539,6 +497,9 @@ def main() -> None:
                 if half_result.returncode:
                     clear_compiler_cache()
                     raise subprocess.CalledProcessError(half_result.returncode, half_result.args)
+                cases(half_report, worker, half, counter)
+                if not half_lcov.is_file():
+                    raise ValueError(f"coverage report missing for group {index} half {part}")
                 rewritten = []
                 for line in half_report.read_text().splitlines():
                     try:
@@ -559,8 +520,7 @@ def main() -> None:
                         continue
                     rewritten.append(json.dumps(event))
                 parts.append("\n".join(rewritten) + ("\n" if rewritten else ""))
-                if half_lcov.is_file():
-                    coverage.append(half_lcov.read_text())
+                coverage.append(half_lcov.read_text())
                 offset += 100000
             report.write_text("".join(parts))
             lcov.write_text("".join(coverage))
@@ -576,8 +536,7 @@ def main() -> None:
                     clear_compiler_cache()
                     stitch(index, tests, report, lcov)
                 elif result.returncode:
-                    if mode == "directory_groups":
-                        clear_compiler_cache()
+                    clear_compiler_cache()
                     raise subprocess.CalledProcessError(result.returncode, result.args)
                 observed, visible = cases(report, worker, tests, counter)
                 if not lcov.is_file():

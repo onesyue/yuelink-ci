@@ -95,7 +95,7 @@ else:
 report=Path(args[args.index('--coverage-path')+1])
 if os.environ.get('TRACKED_MUTATION'):
     Path('lib/a.dart').write_text('changed source')
-if not os.environ.get('MISSING_COVERAGE'):
+if not (os.environ.get('MISSING_COVERAGE') or (os.environ.get('HALF_MISSING_COVERAGE') and report.stem.endswith('.half0'))):
     report.write_text('SF:'+('/outside/a.dart' if os.environ.get('COVERAGE_ESCAPE') else str(Path.cwd()/'lib/a.dart'))+'\\nDA:1,1\\nend_of_record\\n')
 if os.environ.get('COVERAGE_LOSS') and report.is_file(): report.write_text(report.read_text().replace('DA:1,1','DA:2,1'))
 if os.environ.get('ALL_EMPTY_COVERAGE') or (os.environ.get('EMPTY_COVERAGE') and report.stem=='7'):
@@ -117,7 +117,7 @@ for suite,path in enumerate(files):
         record={'type':'testDone','testID':i,'result':'failure' if os.environ.get('FAILED_TERMINAL') else 'success','hidden':bool(os.environ.get('HIDE_CASE')),'skipped':bool(os.environ.get('CHANGED_SKIP')) or bool(os.environ.get('SKIP_ONE') and report.stem=='0' and case==0)}
         if not os.environ.get('MISSING_TERMINAL'): print(json.dumps(record))
         if os.environ.get('DUPLICATE_TERMINAL'): print(json.dumps(record))
-if not os.environ.get('MISSING_DONE'): print(json.dumps({'type':'done','success':True}))
+if not (os.environ.get('MISSING_DONE') or (os.environ.get('HALF_MISSING_DONE') and report.stem.endswith('.half0'))): print(json.dumps({'type':'done','success':True}))
 if os.environ.get('CANCEL_ENGINE'): os.kill(os.getpid(),15)
 if os.environ.get('FLUTTER_FAILURE') or os.environ.get('FAIL_GROUP')==report.stem: sys.exit(7)
 ''')
@@ -192,6 +192,7 @@ m.main()
 
     def run_gate(self, **overrides):
         env = dict(os.environ, PATH=str(self.bin) + os.pathsep + os.environ["PATH"],
+                   ALLOW_ORDINARY_CACHE="1",
                    FIXTURE_GROUPS=str(len(self.plan["groups"])),
                    FIXTURE_GROUPED_PLAN_SHA256=self.grouped_digest,
                    FIXTURE_RESOURCES=json.dumps({"effective_cpus": 4, "available_memory_bytes": 16 * RUNNER.GIB, "capacity_status": "VISIBLE_BOUNDS", "missing_interfaces": []}))
@@ -272,6 +273,7 @@ m.main()
             "groups": [group for group in inventory if group != [RUNNER.MACOS_TEST]],
         }
         self.singleton_path.write_text(json.dumps(self.singleton))
+        self.live_groups = RUNNER.directory_groups(inventory)
 
     def admitted_singleton_corpus(self):
         self.reviewed_filename_corpus()
@@ -286,58 +288,42 @@ m.main()
         self.commit_fixture(self.root, "final version metadata")
         self.materialize_singletons()
 
-    def run_singletons(self, **overrides):
-        return self.run_gate(**({"FIXTURE_GROUPS": str(len(self.singleton["groups"]))} | overrides))
+    def run_directory_groups(self, **overrides):
+        return self.run_gate(**({"FIXTURE_GROUPS": str(len(self.live_groups))} | overrides))
 
-    def test_feedback_sdk_admission_is_exact_and_keeps_historical_plan(self):
+    def test_live_tree_ignores_historical_singletons_and_keeps_frozen_sdk(self):
         self.admitted_singleton_corpus()
         workflow = self.root / ".github/workflows/ci.yml"
         workflow.parent.mkdir(parents=True)
         workflow.write_text("env:\n  FLUTTER_VERSION: '3.47.8'\n")
-        feedback_path = self.singleton_path.with_name(RUNNER.FEEDBACK_SINGLETON_PLAN.name)
-        feedback = dict(self.singleton, sdk=dict(RUNNER.FEEDBACK_SDK))
-        feedback_path.write_text(json.dumps(feedback))
         historical_bytes = self.singleton_path.read_bytes()
         with patch.object(RUNNER, "PLAN", self.plan_path), \
-                patch.object(RUNNER, "GROUPED_PLAN_SHA256", self.grouped_digest), \
-                patch.object(RUNNER, "SINGLETON_PLAN", self.singleton_path), \
-                patch.object(RUNNER, "FEEDBACK_SINGLETON_PLAN", feedback_path):
+                patch.object(RUNNER, "GROUPED_PLAN_SHA256", self.grouped_digest):
             inventory = RUNNER.partition(self.root)
             plan, groups, mode, path = RUNNER.execution_plan(self.root, inventory)
-            self.assertEqual((plan, groups, mode, path),
-                             (feedback, feedback["groups"], "singletons", feedback_path))
-            for field in ("source_sha", "lib_tree", "files", "groups", "runtime_files", "sdk"):
-                changed: dict[str, object] = dict(feedback)
-                changed[field] = {} if isinstance(feedback[field], dict) else [] if field == "groups" else "0" * 40
-                feedback_path.write_text(json.dumps(changed))
-                with self.subTest(field=field), self.assertRaises(ValueError):
-                    RUNNER.execution_plan(self.root, inventory)
-            feedback_path.unlink()
-            with self.assertRaisesRegex(ValueError, "plan missing"):
-                RUNNER.execution_plan(self.root, inventory)
-            feedback_path.symlink_to(self.singleton_path)
-            with self.assertRaisesRegex(ValueError, "plan missing or symlinked"):
-                RUNNER.execution_plan(self.root, inventory)
+            self.assertEqual(mode, "directory_groups")
+            self.assertEqual(groups, RUNNER.directory_groups(inventory))
+            self.assertEqual(plan["sdk"], self.plan["sdk"])
+            self.assertEqual(path, self.plan_path)
         self.assertEqual(self.singleton_path.read_bytes(), historical_bytes)
-        self.assertEqual(hashlib.sha256(self.plan_path.read_bytes()).hexdigest(), self.grouped_digest)
 
-    def test_admitted_final_source_executes_complete_singletons_once(self):
+    def test_live_source_executes_complete_directory_groups_once(self):
         self.admitted_singleton_corpus()
         self.assertNotEqual(self.singleton["source_sha"], self.feature_ancestor)
-        result = self.run_singletons()
+        result = self.run_directory_groups()
         self.assertEqual(result.returncode, 0, result.stderr)
         out = self.root / "coverage/source-gate"
         receipt = json.loads((out / "execution.json").read_text())
-        self.assertEqual(receipt["execution_mode"], "singletons")
-        self.assertEqual(receipt["union_comparison"], "observed_singletons; no grouped equivalence claim")
-        self.assertEqual(receipt["plan_sha256"], hashlib.sha256(self.singleton_path.read_bytes()).hexdigest())
+        self.assertEqual(receipt["execution_mode"], "directory_groups")
+        self.assertEqual(receipt["union_comparison"], "directory_groups; no frozen-snapshot equivalence claim")
+        self.assertEqual(receipt["plan_sha256"], self.grouped_digest)
         self.assertEqual(receipt["source_sha"], self.singleton["source_sha"])
         self.assertEqual(receipt["status"], "COMPLETE")
         self.assertTrue(receipt["tests_complete"] and receipt["cleanup_complete"])
         self.assertEqual(receipt["cleanup_errors"], [])
-        self.assertEqual(len(receipt["groups"]), 509)
-        expected = self.singleton["groups"]
-        self.assertTrue(all(len(group) == 1 for group in expected))
+        expected = RUNNER.directory_groups(RUNNER.partition(self.root))
+        self.assertEqual(receipt["groups"], expected)
+        self.assertTrue(all(1 <= len(group) <= 8 for group in expected))
         executed, workers = [], set()
         for index, group in enumerate(expected):
             command = json.loads((out / f"{index}.execution.json").read_text())
@@ -349,7 +335,7 @@ m.main()
                 if row["type"] == "suite":
                     executed.append(str(Path(row["suite"]["path"]).relative_to(row["worker"])))
                     workers.add(row["worker"])
-        self.assertEqual(sorted(executed), sorted(group[0] for group in expected))
+        self.assertEqual(sorted(executed), sorted(path for group in expected for path in group))
         self.assertEqual(len(set(executed)), 509)
         self.assertIn("test/modules/auth_login_single_submission_test.dart", executed)
         assignments = json.loads((out / "platform-assignments.json").read_text())
@@ -362,69 +348,28 @@ m.main()
         self.assertTrue(all(not Path(worker).exists() for worker in workers))
         self.assertEqual(hashlib.sha256(self.plan_path.read_bytes()).hexdigest(), self.grouped_digest)
 
-    def test_singleton_plan_unknown_corrupt_and_stale_inputs_refuse_before_commands(self):
+    def test_live_plan_requires_frozen_sdk_and_complete_groups(self):
         self.admitted_singleton_corpus()
-        original = self.singleton_path.read_bytes()
-        unrelated = subprocess.check_output(
-            ["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
-             "-c", "commit.gpgsign=false", "commit-tree", "HEAD^{tree}", "-m", "unrelated root"],
-            cwd=self.root, text=True).strip()
-        for fault in ("missing", "schema", "extra", "source", "ancestor", "blob", "lib", "lock", "sdk",
-                      "missing_file", "duplicate", "empty", "multi", "order", "grouped_control"):
-            with self.subTest(fault=fault):
-                data = json.loads(original)
-                if fault == "schema": data["schema"] = True
-                elif fault == "extra": data["baseline_union"] = self.plan["baseline_union"]
-                elif fault == "source": data["source_sha"] = self.feature_ancestor
-                elif fault == "ancestor": data["feature_ancestor"] = unrelated
-                elif fault == "blob": data["files"][next(iter(data["files"]))] = "0" * 64
-                elif fault == "lib": data["lib_tree"] = "0" * 40
-                elif fault == "lock": data["runtime_files"]["pubspec.lock"] = "0" * 64
-                elif fault == "sdk": data["sdk"]["frameworkVersion"] = "other"
-                elif fault == "missing_file": data["groups"].pop()
-                elif fault == "duplicate": data["groups"].append(data["groups"][0])
-                elif fault == "empty": data["groups"][0] = []
-                elif fault == "multi": data["groups"][0].extend(data["groups"].pop(1))
-                elif fault == "order": data["groups"].reverse()
-                self.singleton_path.write_text(json.dumps(data))
-                if fault == "missing": self.singleton_path.unlink()
-                if fault == "grouped_control": self.plan_path.write_text("{}")
-                shutil.rmtree(self.root / "coverage", ignore_errors=True)
-                if fault == "missing":
-                    groups = RUNNER.directory_groups(RUNNER.partition(self.root))
-                    result = self.run_singletons(ALLOW_ORDINARY_CACHE="1", FIXTURE_GROUPS=str(len(groups)))
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
-                    self.assertEqual(receipt["execution_mode"], "directory_groups")
-                    self.assertFalse(self.singleton_path.exists())
-                else:
-                    result = self.run_singletons()
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
-                self.singleton_path.write_bytes(original)
-                self.plan_path.write_text(json.dumps(self.plan))
+        with patch.object(RUNNER, "PLAN", self.plan_path):
+            inventory = RUNNER.partition(self.root)
+            for sdk in (None, {}, {"frameworkVersion": "3.47.7"}):
+                data = dict(self.plan, sdk=sdk)
+                self.plan_path.write_text(json.dumps(data))
+                with self.subTest(sdk=sdk), patch.object(
+                        RUNNER, "GROUPED_PLAN_SHA256", hashlib.sha256(self.plan_path.read_bytes()).hexdigest()):
+                    with self.assertRaisesRegex(ValueError, "missing the reviewed Flutter SDK"):
+                        RUNNER.execution_plan(self.root, inventory)
+            self.plan_path.write_text(json.dumps(self.plan))
+            with patch.object(RUNNER, "GROUPED_PLAN_SHA256", self.grouped_digest), \
+                    patch.object(RUNNER, "directory_groups", return_value=[]):
+                with self.assertRaisesRegex(ValueError, "PLAN_INCOMPLETE"):
+                    RUNNER.execution_plan(self.root, inventory)
 
-        (self.root / "pubspec.yaml").write_text("version: 2.0.1+3\n")
-        subprocess.run(["git", "add", "pubspec.yaml"], cwd=self.root, check=True)
-        self.commit_fixture(self.root, "later metadata invalidates source binding")
-        shutil.rmtree(self.root / "coverage", ignore_errors=True)
-        result = self.run_singletons()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("singleton source/inventory/runtime plan mismatch", result.stderr)
-        self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
-        self.materialize_singletons()
-        shutil.rmtree(self.root / "coverage", ignore_errors=True)
-        # Reach an intentionally failed first engine command after explicit
-        # rematerialization. This is not another full-corpus pass claim.
-        result = self.run_singletons(FAIL_GROUP="0")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertTrue((self.root / "coverage/source-gate/0.jsonl").is_file())
-
-    def test_singleton_actual_source_drift_never_selects_a_reduced_corpus(self):
+    def test_directory_actual_source_drift_never_selects_a_reduced_corpus(self):
         self.admitted_singleton_corpus()
         source = self.singleton["source_sha"]
         test = self.root / "test/modules/auth_login_single_submission_test.dart"
-        for fault in ("untracked", "required", "symlink", "annotation", "dirty_lib", "lib", "test", "lock"):
+        for fault in ("untracked", "required", "symlink", "annotation", "dirty_lib"):
             with self.subTest(fault=fault):
                 if fault == "untracked": (test.parent / "untracked_test.dart").write_text("void main() {}")
                 elif fault == "required": (self.root / sorted(RUNNER.REQUIRED_TESTS)[0]).unlink()
@@ -432,20 +377,15 @@ m.main()
                     test.unlink()
                     test.symlink_to(self.root / sorted(RUNNER.REQUIRED_TESTS)[0])
                 elif fault == "annotation": test.write_text("@TestOn('windows')\nlibrary;\nvoid main() {}")
-                elif fault in ("dirty_lib", "lib"): (self.root / "lib/a.dart").write_text("void unboundRuntime() {}")
-                elif fault == "test": test.write_text("void main() { /* unbound change */ }")
-                elif fault == "lock": (self.root / "pubspec.lock").write_text("unbound lock")
-                if fault in ("lib", "test", "lock"):
-                    subprocess.run(["git", "add", "test", "lib", "pubspec.lock"], cwd=self.root, check=True)
-                    self.commit_fixture(self.root, "unbound source drift")
+                elif fault == "dirty_lib": (self.root / "lib/a.dart").write_text("void unboundRuntime() {}")
                 shutil.rmtree(self.root / "coverage", ignore_errors=True)
-                result = self.run_singletons()
+                result = self.run_directory_groups()
                 self.assertNotEqual(result.returncode, 0)
                 self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
                 subprocess.run(["git", "reset", "--hard", source], cwd=self.root, check=True, capture_output=True)
                 (test.parent / "untracked_test.dart").unlink(missing_ok=True)
 
-    def test_singleton_engine_protocol_merge_and_sdk_failures_cannot_pass(self):
+    def test_directory_engine_protocol_merge_and_sdk_failures_cannot_pass(self):
         self.admitted_singleton_corpus()
         for fault in ("FLUTTER_FAILURE", "MISSING_DONE", "MISSING_COVERAGE", "LOW_COUNT", "MERGE_FAILURE",
                       "PUBGET_FAILURE", "COVERAGE_ESCAPE", "TRACKED_MUTATION", "ALL_EMPTY_COVERAGE",
@@ -453,7 +393,7 @@ m.main()
                       "MISSING_TERMINAL", "DUPLICATE_TERMINAL", "FAILED_TERMINAL", "HIDE_CASE", "WRONG_SDK"):
             with self.subTest(fault=fault):
                 shutil.rmtree(self.root / "coverage", ignore_errors=True)
-                result = self.run_singletons(**{fault: "1"})
+                result = self.run_directory_groups(**{fault: "1"})
                 self.assertNotEqual(result.returncode, 0, result.stdout)
                 self.assertNotIn("Flutter tests observed:", result.stdout)
                 out = self.root / "coverage/source-gate"
@@ -464,23 +404,23 @@ m.main()
 
     def test_singletons_record_actual_union_and_skips_without_old_baseline_relabeling(self):
         self.admitted_singleton_corpus()
-        result = self.run_singletons(SKIP_ONE="1", COVERAGE_LOSS="1")
+        result = self.run_directory_groups(SKIP_ONE="1", COVERAGE_LOSS="1")
         self.assertEqual(result.returncode, 0, result.stderr)
         out = self.root / "coverage/source-gate"
         receipt = json.loads((out / "execution.json").read_text())
         self.assertEqual(receipt["union"]["visible_skips"], 1)
         self.assertNotEqual(receipt["union"], self.plan["baseline_union"])
-        self.assertEqual(receipt["union_comparison"], "observed_singletons; no grouped equivalence claim")
+        self.assertEqual(receipt["union_comparison"], "directory_groups; no frozen-snapshot equivalence claim")
         rows = json.loads((out / "case-union.json").read_text())
         self.assertEqual(sum(row[-1] for row in rows if row[-2]), 1)
         self.assertEqual(sum(row[-1] for row in rows if not row[-2]), 2544)
         self.assertEqual(hashlib.sha256(self.plan_path.read_bytes()).hexdigest(), self.grouped_digest)
 
-    def test_singleton_cleanup_and_gitlink_failures_preserve_primary(self):
+    def test_directory_cleanup_and_gitlink_failures_preserve_primary(self):
         self.admitted_singleton_corpus()
         self.add_recursive_native_fixture()
         self.materialize_singletons()
-        result = self.run_singletons(SUBMODULE_REQUIRED="1", SUBMODULE_MUTATION="1")
+        result = self.run_directory_groups(SUBMODULE_REQUIRED="1", SUBMODULE_MUTATION="1")
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual((self.root / "core/mihomo/go.mod").read_text(), "module fixture\n")
         shutil.rmtree(self.root / "coverage", ignore_errors=True)
@@ -489,7 +429,7 @@ m.main()
 if sys.argv[1:3]==['worktree','remove']: sys.exit(19)
 os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
 """)
-        result = self.run_singletons(SUBMODULE_REQUIRED="1")
+        result = self.run_directory_groups(SUBMODULE_REQUIRED="1")
         self.assertNotEqual(result.returncode, 0)
         receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
         self.assertEqual(receipt["status"], "INCOMPLETE")
@@ -884,6 +824,9 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
         groups = RUNNER.directory_groups(inventory)
         self.assertEqual(groups, RUNNER.directory_groups(inventory))
         RUNNER.assert_directory_groups(groups, inventory)
+        self.assertTrue(all(1 <= len(group) <= 8 for group in groups))
+        self.assertTrue(all(len({str(Path(path).parent) for path in group}) == 1 for group in groups))
+        self.assertTrue(all(group == [path] for group in groups for path in group if path in RUNNER.ISOLATED))
         trimmed = []
         removed = False
         for group in groups:
@@ -917,8 +860,12 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
         self.assertEqual(receipt["execution_mode"], "directory_groups")
         rows = [line.split() for line in log.read_text().splitlines()]
         ordinary = [row for row in rows if all(path not in RUNNER.ISOLATED for path in row[2:])]
-        self.assertTrue(any(left[0] == "1" or right[0] == "1" for left, right in zip(ordinary, ordinary[1:])))
-        self.assertTrue(any(right[0] == "1" for left, right in zip(ordinary, ordinary[1:])))
+        self.assertGreater(len(ordinary), 2)
+        for left, right in zip(rows, rows[1:]):
+            if all(path not in RUNNER.ISOLATED for path in right[2:]):
+                self.assertEqual(right[0], "1")
+            else:
+                self.assertEqual(right[0], "0")
 
     def test_directory_group_timeout_splits_once_and_a_second_failure_stops(self):
         (self.root / "test/services/case_0_test.dart").write_text("void main() { /* live */ }\n")
@@ -934,6 +881,16 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
             ALLOW_ORDINARY_CACHE="1", SPLIT_TIMEOUT="once",
             FIXTURE_GROUPS=str(len(groups)), YUELINK_COVERAGE_MAX_WORKERS="1")
         self.assertEqual(accepted.returncode, 0, accepted.stderr)
+
+    def test_timeout_halves_must_each_have_terminal_and_coverage(self):
+        self.admitted_singleton_corpus()
+        for fault in ("HALF_MISSING_COVERAGE", "HALF_MISSING_DONE"):
+            with self.subTest(fault=fault):
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                result = self.run_directory_groups(SPLIT_TIMEOUT="once", YUELINK_COVERAGE_MAX_WORKERS="1", **{fault: "1"})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse((self.root / "coverage/lcov.info").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
