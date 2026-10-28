@@ -234,7 +234,6 @@ def actions_policy_issues(automation: dict[str, str], readme: str) -> list[str]:
 
 
 def source_flutter_issues(workflow: str) -> list[str]:
-    # 2026-08-31: two deliberate policy updates in one repair.
     #   1. The installer pin tracks the CURRENT approved commit. The previous
     #      value (17d69267…) went stale when the installer advanced to
     #      635b8e87…, which turned this guard permanently red — and that
