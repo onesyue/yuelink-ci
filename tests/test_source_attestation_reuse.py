@@ -112,6 +112,38 @@ sys.exit(9)
                 self.assertNotEqual(self.verify().returncode,0)
                 self.assertFalse((self.root/'export.json').exists())
 
+    def _write_signed(self, proof):
+        self.write_json('proof.json', proof)
+        self.env['SIGNED_DIGEST'] = hashlib.sha256((self.root/'proof.json').read_bytes()).hexdigest()
+
+    def test_b5_analyze_only_closure_is_exported(self):
+        # 2026-10-30 (plan B5): attestation no longer runs the full Flutter suite.
+        proof=copy.deepcopy(self.proof)
+        proof['gates']=[g for g in GATES if g!='flutter-tests-floor-2044']
+        proof['reuse']['flutter']['gates']=['flutter-analyze']
+        self._write_signed(proof)
+        result=self.verify(); self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root/'export.json').read_bytes(), (self.root/'proof.json').read_bytes())
+
+    def test_mixed_flutter_closures_never_export(self):
+        for floor, flutter in [(False, ['flutter-analyze', 'flutter-tests-coverage']),
+                               (True, ['flutter-analyze']),
+                               (False, ['flutter-tests-coverage']),
+                               (False, [])]:
+            with self.subTest(floor=floor, flutter=flutter):
+                proof=copy.deepcopy(self.proof)
+                if not floor: proof['gates']=[g for g in GATES if g!='flutter-tests-floor-2044']
+                proof['reuse']['flutter']['gates']=flutter
+                self._write_signed(proof)
+                self.assertNotEqual(self.verify().returncode,0)
+                self.assertFalse((self.root/'export.json').exists())
+
+    def test_legacy_identity_without_floor_is_rejected(self):
+        proof=copy.deepcopy(self.proof); proof['schemaVersion']=1; del proof['reuse']
+        proof['gates']=[g for g in GATES if g!='flutter-tests-floor-2044']
+        self._write_signed(proof)
+        self.assertNotEqual(self.verify(export=False).returncode,0)
+
     def test_valid_legacy_identity_can_be_verified_but_never_reused(self):
         proof=copy.deepcopy(self.proof); proof['schemaVersion']=1; del proof['reuse']
         self.write_json('proof.json',proof)
@@ -145,7 +177,7 @@ sys.exit(9)
 class ReuseWorkflowTests(unittest.TestCase):
     def test_receipts_follow_real_gates_and_are_required_before_signing(self):
         workflow=(ROOT/'.github/workflows/source-attestation.yml').read_text(encoding='utf-8')
-        self.assertLess(workflow.index('coverage_ratchet.dart --check'),
+        self.assertLess(workflow.index('flutter analyze --no-fatal-infos'),
                         workflow.index('attested_preflight.py capture --kind flutter'))
         self.assertLess(workflow.index('CGO_ENABLED=1 go test -mod=readonly -race ./...'),
                         workflow.index('attested_preflight.py capture --kind service'))

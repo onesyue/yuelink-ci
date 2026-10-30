@@ -129,7 +129,11 @@ jq -e \
         .workflowSha == $builder and .runId == $run and .runAttempt == $attempt and
         (.toolchain | type == "object" and length > 0))) and
       .reuse.flutter.kind == "flutter" and
-      .reuse.flutter.gates == ["flutter-analyze", "flutter-tests-coverage"] and
+      # B5 (2026-10-30): new proofs only attest flutter-analyze; proofs made
+      # before B5 still carry the executed full-suite receipt. Each proof must
+      # be one closure or the other, never a mix (checked again below).
+      (.reuse.flutter.gates == ["flutter-analyze"] or
+       .reuse.flutter.gates == ["flutter-analyze", "flutter-tests-coverage"]) and
       .reuse.service.kind == "service" and
       .reuse.service.gates == ["service-go-race"]
     )) and
@@ -137,7 +141,12 @@ jq -e \
     .releaseTag == $release and
     .builderRepository == "onesyue/yuelink-ci" and
     .workflowSha == $builder and .runId == $run and .runAttempt == $attempt and
-    (.gates | sort) == ([
+    ((.gates | sort) as $gates |
+     ($gates | index("flutter-tests-floor-2044")) as $floor |
+     (if .schemaVersion == 1 then $floor != null
+      else ($floor != null) == (.reuse.flutter.gates | index("flutter-tests-coverage") != null)
+      end) and
+     ($gates - ["flutter-tests-floor-2044"]) == ([
       "source-master-ancestry",
       "android-release-signing-contract",
       "unreleased-dart-format",
@@ -149,13 +158,13 @@ jq -e \
       "wintun-bundle",
       "release-metadata",
       "manifest-schema",
-      "flutter-tests-floor-2044",
       "gitleaks-full-history",
       "govulncheck-core-service",
       "macos-integration",
       "windows-durability",
       "windows-native-core-runtime"
-    ] | sort)
+    ] | sort) and
+     (($gates | length) == 16 or ($floor != null and ($gates | length) == 17)))
   ' "$proof" >/dev/null || {
   echo "::error::source-attestation proof is not the exact source/tag/builder/run/gate closure" >&2
   exit 1

@@ -190,38 +190,10 @@ jobs:
       - name: Manifest schema self-check
         run: dart run tool/automation/manifest_guard.dart --self-check
 
-      - name: Checkout exact attestation parser
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          repository: onesyue/yuelink-ci
-          ref: ${{ github.sha }}
-          path: .source-attestation-tools
-          persist-credentials: false
-
-      - name: Run complete Flutter suite and enforce reviewed floor
-        shell: bash
-        # Run 39165220054 reached ~390/507 isolated files in 60 minutes.
-        # Allow the complete corpus plus headroom; each file still has a 5m cap.
-        timeout-minutes: 100
-        run: |
-          set -euo pipefail
-          if ! command -v lcov >/dev/null; then
-            sudo apt-get update -qq
-            sudo apt-get install -y lcov
-          fi
-          # Preserve every test and the native coverage union. The two files
-          # pass in a fresh compiler session but crash after the full-suite prefix.
-          python3 .source-attestation-tools/scripts/run-flutter-coverage.py
-          dart run tool/automation/coverage_ratchet.dart --check
-
-      - name: Retain complete Flutter execution evidence
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: flutter-coverage-execution-${{ github.run_id }}
-          path: coverage/source-gate/
-          if-no-files-found: ignore
-
+      # 2026-10-30 Jim 决定（计划「耗时环节取消清单」B5）：发版 Source attestation
+      # 不再跑全量 Flutter 测试（实测 89m51s / 92m31s，run 40464318467）。保留
+      # analyze、gitleaks、govulncheck、macOS/Windows 探针和全部发版契约；
+      # Flutter 回执只证明 flutter-analyze。全量测试仍可在 PR/日常 CI 跑。
       - name: Capture executed Flutter gate identities
         run: python3 scripts/ci/attested_preflight.py capture --kind flutter --output "$RUNNER_TEMP/flutter-reuse.json"
 
@@ -568,7 +540,6 @@ jobs:
                 "wintun-bundle",
                 "release-metadata",
                 "manifest-schema",
-                "flutter-tests-floor-2044",
                 "gitleaks-full-history",
                 "govulncheck-core-service",
                 "macos-integration",
@@ -577,7 +548,7 @@ jobs:
               ]
             }' > source-attestation.json
           jq -e --arg sha "$SOURCE_SHA" \
-            '.sourceSha == $sha and (.gates | length) == 17' \
+            '.sourceSha == $sha and (.gates | length) == 16' \
             source-attestation.json >/dev/null
           cat source-attestation.json
 
