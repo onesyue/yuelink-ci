@@ -1,0 +1,14 @@
+# gitleaks configuration for yuelink-ci (read by scripts/scan-secrets-changed.sh
+# in the root repo, which honours each repo's own .gitleaks.toml).
+#
+# Extend the default ruleset; never replace it. Allowlists stay exact and narrow.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Flutter coverage singleton fixtures: JSON maps keyed by Dart test file paths (e.g. *_api_test.dart, *_token_*_test.dart) whose numeric/hash values trip generic-api-key. Not credentials. 负责人 decision 2026-10-31 06:33 SGT: exempt by exact path pattern tests/fixtures/flutter-coverage-singletons-*.json only, generic-api-key only."
+targetRules = ["generic-api-key"]
+paths = [
+  '''^tests/fixtures/flutter-coverage-singletons-[^/]+\.json$''',
+]
