@@ -12,3 +12,10 @@ targetRules = ["generic-api-key"]
 paths = [
   '''^tests/fixtures/flutter-coverage-singletons-[^/]+\.json$''',
 ]
+
+[[allowlists]]
+description = "Flutter coverage group fixtures: same shape as the singleton fixtures (JSON maps keyed by Dart test file paths whose numeric/hash values trip generic-api-key). Not credentials. 负责人 decision D9 2026-10-31 07:04 SGT: exempt by exact path pattern tests/fixtures/flutter-coverage-groups-*.json only, generic-api-key only."
+targetRules = ["generic-api-key"]
+paths = [
+  '''^tests/fixtures/flutter-coverage-groups-[^/]+\.json$''',
+]
