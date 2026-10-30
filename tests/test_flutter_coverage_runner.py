@@ -687,11 +687,13 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("scan floor", result.stderr)
 
-    def test_workflow_uses_exact_checked_out_runner_and_keeps_ratchet(self):
+    def test_release_attestation_no_longer_runs_the_full_suite(self):
+        # 2026-10-30 Jim decision (plan B5): the runner stays for the coverage
+        # pilot / daily CI, but the release Source attestation does not call it.
         workflow = (ROOT / ".github/workflows/source-attestation.yml").read_text()
         self.assertIn("ref: $" + "{{ github.sha }}", workflow)
-        self.assertIn("python3 .source-attestation-tools/scripts/run-flutter-coverage.py", workflow)
-        self.assertIn("dart run tool/automation/coverage_ratchet.dart --check", workflow)
+        self.assertNotIn("run-flutter-coverage.py", workflow)
+        self.assertNotIn("coverage_ratchet.dart --check", workflow)
 
     def test_missing_required_case_fails_even_when_file_floor_is_met(self):
         path = self.root / "test/services/user_custom_rules_test.dart"

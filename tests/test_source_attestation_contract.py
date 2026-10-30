@@ -51,12 +51,7 @@ WORKFLOW_MARKERS = (
     "test -f windows/third_party/wintun/wintun.sha256",
     'dart run tool/automation/release_guard.dart --tag "$RELEASE_TAG"',
     "dart run tool/automation/manifest_guard.dart --self-check",
-    "Checkout exact attestation parser",
     "ref: ${{ github.sha }}",
-    "timeout-minutes: 100",
-    ".source-attestation-tools/scripts/run-flutter-coverage.py",
-    "Retain complete Flutter execution evidence",
-    "dart run tool/automation/coverage_ratchet.dart --check",
     "python3 -m unittest discover -s scripts/native_tests/source_offer",
     "GITLEAKS_VERSION: '8.30.1'",
     "GITLEAKS_LINUX_X64_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'",
@@ -78,7 +73,7 @@ WORKFLOW_MARKERS = (
     "needs: [source_contract, gitleaks, govulncheck, macos_integration, windows_durability]",
     "- name: Upload source proof\n        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
     "actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32",
-    '"flutter-tests-floor-2044"',
+    "'.sourceSha == $sha and (.gates | length) == 16'",
     '"gitleaks-full-history"',
     '"govulncheck-core-service"',
     '"macos-integration"',
@@ -150,7 +145,8 @@ SOURCE_VERIFIER_MARKERS = (
     '.sourceRepository == "onesyue/yuelink" and .sourceSha == $source',
     '.releaseTag == $release',
     '.builderRepository == "onesyue/yuelink-ci" and\n    .workflowSha == $builder and .runId == $run and .runAttempt == $attempt',
-    "(.gates | sort) == ([",
+    '($gates - ["flutter-tests-floor-2044"]) == ([',
+    '.reuse.flutter.gates == ["flutter-analyze"] or',
     '"windows-native-core-runtime"',
     'gh attestation verify "$proof"',
     '--repo "$REPOSITORY"',
@@ -323,11 +319,14 @@ def contract_issues(
             "SOURCE_SHA validation must appear in exactly 5 jobs "
             f"(source_contract + 4 probes), found {validation_count}"
         )
-    for job in ("source_contract", "macos_integration"):
+    # B5 (Jim 2026-10-30): source_contract no longer runs the full Flutter
+    # suite, so it no longer checks out the attestation tools; macos_integration
+    # still counts machine tests with them.
+    for job, expected in (("source_contract", 0), ("macos_integration", 1)):
         match = re.search(rf"(?ms)^  {job}:\n(.*?)(?=^  [a-z_]+:|\Z)", workflow)
         block = match.group(1) if match else ""
-        if block.count("ref: ${{ github.sha }}") != 1:
-            issues.append(f"{job} must checkout exactly one current attestation tool revision")
+        if block.count("ref: ${{ github.sha }}") != expected:
+            issues.append(f"{job} must checkout exactly {expected} current attestation tool revision")
     for marker in RELEASE_MARKERS:
         if marker not in release:
             issues.append(f"release gate missing {marker!r}")
@@ -486,57 +485,20 @@ class SourceAttestationContractTests(unittest.TestCase):
     def test_current_contract_is_complete(self) -> None:
         self.assertEqual(contract_issues(self.workflow, self.release, self.readme), [])
 
-    def test_actual_flutter_step_preserves_ratchet_failure_before_reuse_capture(self):
-        def step(name):
-            return self.workflow.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
-
-        gate = step("Run complete Flutter suite and enforce reviewed floor")
-        script = textwrap.dedent(gate.split("        run: |\n", 1)[1])
-        capture = step("Capture executed Flutter gate identities")
-        capture_script = re.search(r"^        run: (.+)$", capture, re.MULTILINE)[1]
-        self.assertNotIn("continue-on-error", gate + capture)
+    def test_release_attestation_does_not_run_full_flutter_suite(self):
+        # 2026-10-30 Jim decision (plan B5): the release attestation keeps
+        # analyze, gitleaks, govulncheck, probes and contracts, but no longer
+        # runs (or claims) the complete Flutter suite / coverage floor.
+        for forbidden in ("run-flutter-coverage.py", "coverage_ratchet.dart",
+                          "flutter-tests-floor-2044", "Run complete Flutter suite"):
+            self.assertNotIn(forbidden, self.workflow)
+        capture = self.workflow.split(
+            "      - name: Capture executed Flutter gate identities\n", 1)[1].split(
+            "\n      - name:", 1)[0]
+        self.assertNotIn("continue-on-error", capture)
         self.assertNotIn("if:", capture)
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            for name in ("python3", "dart", "lcov"):
-                target = root / name
-                target.write_text(f"#!{sys.executable}\n" + """import os,sys
-from pathlib import Path
-name=Path(sys.argv[0]).name
-args=sys.argv[1:]
-if name=='lcov': sys.exit(0)
-if name=='dart':
-    assert args==['run','tool/automation/coverage_ratchet.dart','--check']
-    stage='ratchet'
-elif args==['.source-attestation-tools/scripts/run-flutter-coverage.py']:
-    stage='runner'
-else:
-    assert args[:3]==['scripts/ci/attested_preflight.py','capture','--kind']
-    assert args[3]=='flutter'
-    stage='capture'
-with Path(os.environ['CONSUMER_TRACE']).open('a') as log: log.write(stage+'\\n')
-sys.exit(int(os.environ.get(stage.upper()+'_EXIT','0')))
-""")
-                target.chmod(0o755)
-            for runner, ratchet, expected in ((11, 0, ["runner"]),
-                                               (0, 12, ["runner", "ratchet"]),
-                                               (0, 0, ["runner", "ratchet", "capture"])):
-                with self.subTest(runner_exit=runner, ratchet_exit=ratchet):
-                    trace = root / "trace"
-                    trace.unlink(missing_ok=True)
-                    env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ["PATH"],
-                               CONSUMER_TRACE=str(trace), RUNNER_EXIT=str(runner),
-                               RATCHET_EXIT=str(ratchet), RUNNER_TEMP=directory)
-                    result = subprocess.run(["bash", "-c", script], cwd=root, env=env,
-                                            capture_output=True, text=True, timeout=15)
-                    self.assertEqual(result.returncode, runner or ratchet, result.stderr)
-                    # The next workflow step is eligible only after the exact
-                    # extracted gate shell succeeds, as enforced by Actions.
-                    if result.returncode == 0:
-                        result = subprocess.run(["bash", "-c", capture_script], cwd=root, env=env,
-                                                capture_output=True, text=True, timeout=15)
-                        self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertEqual(trace.read_text().splitlines(), expected)
+        self.assertLess(self.workflow.index("flutter analyze --no-fatal-infos"),
+                        self.workflow.index("Capture executed Flutter gate identities"))
 
     def test_each_critical_workflow_gate_is_mutation_sensitive(self) -> None:
         for marker in WORKFLOW_MARKERS:
