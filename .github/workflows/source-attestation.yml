@@ -618,11 +618,11 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   abort-on-gate-failure:
-    # Fail fast across jobs: when any gate fails, cancel the whole run
-    # (in particular the 65-93 min Flutter suite) instead of waiting for a
-    # proof that can no longer be produced. Runs no source code and holds
-    # only the right to cancel this very run; never runs on success, and
-    # attest never depends on it.
+    # Failure cleanup runs only after all required gate jobs finish.
+    # This multi-needs job cannot cancel a still-running sibling at the
+    # first failure; only the govulncheck matrix has immediate fail-fast.
+    # Job timeouts bound the remaining gates. This handler runs no source
+    # code and can cancel only this run; attest never depends on it.
     needs:
       - source_contract
       - gitleaks
