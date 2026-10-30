@@ -36,6 +36,9 @@ jobs:
   source_contract:
     name: Analyze, tests and release contracts
     runs-on: ubuntu-24.04
+    # Historical green runs take 65-93 min (2026-10); 150 leaves headroom
+    # while still killing a genuinely hung suite instead of the 6h default.
+    timeout-minutes: 150
     outputs:
       source_sha: ${{ steps.identity.outputs.source_sha }}
       release_tag: ${{ steps.identity.outputs.release_tag }}
@@ -245,6 +248,7 @@ jobs:
   gitleaks:
     name: Gitleaks full history
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -296,10 +300,12 @@ jobs:
   govulncheck:
     name: govulncheck (${{ matrix.module }})
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: read
     strategy:
-      fail-fast: false
+      # One red module already fails the attestation; stop the sibling.
+      fail-fast: true
       matrix:
         module: [core, service]
     steps:
@@ -369,6 +375,7 @@ jobs:
   macos_integration:
     name: Integration tests (macOS)
     runs-on: macos-26
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -436,6 +443,7 @@ jobs:
   windows_durability:
     name: Windows durability probe
     runs-on: windows-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -500,6 +508,7 @@ jobs:
     name: Bind green gates to source SHA
     needs: [source_contract, gitleaks, govulncheck, macos_integration, windows_durability]
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: read
       # actions/attest-build-provenance exchanges the job OIDC token for a
@@ -607,3 +616,31 @@ jobs:
             echo "- release: \`$RELEASE_TAG\`"
             echo "- provenance: $ATTESTATION_URL"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  abort-on-gate-failure:
+    # Fail fast across jobs: when any gate fails, cancel the whole run
+    # (in particular the 65-93 min Flutter suite) instead of waiting for a
+    # proof that can no longer be produced. Runs no source code and holds
+    # only the right to cancel this very run; never runs on success, and
+    # attest never depends on it.
+    needs:
+      - source_contract
+      - gitleaks
+      - govulncheck
+      - macos_integration
+      - windows_durability
+    if: failure()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel this run after a failed gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          echo "::error::a required gate failed; cancelling run $RUN_ID"
+          gh run cancel "$RUN_ID"
