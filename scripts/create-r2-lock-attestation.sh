@@ -64,7 +64,7 @@ esac
 }
 
 for command_name in \
-  curl jq gh sha256sum mktemp chmod date dirname rm find rmdir awk ln; do
+  curl jq gh sha256sum mktemp chmod date dirname rm find rmdir awk ln python3 sleep; do
   command -v "$command_name" >/dev/null 2>&1 || {
     echo "::error::missing R2 lock proof command: $command_name" >&2
     exit 1
@@ -84,14 +84,76 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Keep the original total budgets, including backoff. A monotonic clock avoids
+# wall-clock adjustments extending the security-sensitive observation window.
+monotonic_ms() {
+  python3 -c 'import time; print(time.monotonic_ns() // 1000000)'
+}
+fetch_with_budget() {
+  local budget=$1 attempts=$2 attempt_cap=$3 output=$4
+  shift 4
+  local deadline now remaining timeout_ms timeout status rc attempt delay=1 metadata
+  now=$(monotonic_ms) || return 1
+  deadline=$((now + budget * 1000))
+  for ((attempt=1; attempt<=attempts; attempt++)); do
+    now=$(monotonic_ms) || return 1
+    remaining=$((deadline - now))
+    if ((remaining <= 0)); then
+      echo "::error::R2 lock proof request budget exhausted" >&2
+      return 1
+    fi
+    timeout_ms=$((attempt_cap * 1000))
+    ((timeout_ms <= remaining)) || timeout_ms=$remaining
+    printf -v timeout '%d.%03d' "$((timeout_ms / 1000))" "$((timeout_ms % 1000))"
+    rc=0
+    metadata=$(curl --fail --silent --show-error \
+      --connect-timeout 10 --max-time "$timeout" --retry 0 \
+      --max-redirs 0 --max-filesize 262144 \
+      --write-out '%{http_code} %{url_effective}' --output "$output" "$@") || rc=$?
+    now=$(monotonic_ms) || return 1
+    if ((now >= deadline)); then
+      echo "::error::R2 lock proof request budget exhausted" >&2
+      return 1
+    fi
+    status=${metadata%% *}
+    if ((rc == 0)) && [[ "$status" =~ ^2[0-9][0-9]$ ]]; then
+      printf '%s' "${metadata#* }"
+      return 0
+    fi
+    # HTTP authorization/content errors take precedence over transport errors.
+    case "$status" in
+      429|5[0-9][0-9])
+        case "$rc" in
+          0|22|5|6|7|18|28|52|55|56|92) ;;
+          *) return "$rc" ;;
+        esac
+        ;;
+      000|2[0-9][0-9])
+        case "$rc" in
+          5|6|7|18|28|52|55|56|92) ;;
+          *) return 1 ;;
+        esac
+        ;;
+      *) return 1 ;;
+    esac
+    if ((attempt == attempts)); then
+      echo "::error::R2 lock proof request attempts exhausted" >&2
+      return 1
+    fi
+    if ((deadline - now <= delay * 1000)); then
+      echo "::error::R2 lock proof request budget exhausted before retry" >&2
+      return 1
+    fi
+    sleep "$delay" || return 1
+    delay=$((delay * 2))
+  done
+}
+
 candidate="$work_dir/update.candidate.json"
 candidate_url="https://yuetong.app/$TAG/update.candidate.json"
 effective_url="$(
-  curl --fail --silent --show-error \
-    --proto '=https' --proto-redir '=https' --tlsv1.2 \
-    --connect-timeout 10 --max-time 60 --retry 3 --retry-all-errors \
-    --retry-max-time 60 --max-redirs 0 --max-filesize 262144 \
-    --write-out '%{url_effective}' --output "$candidate" "$candidate_url"
+  fetch_with_budget 60 4 15 "$candidate" \
+    --proto '=https' --proto-redir '=https' --tlsv1.2 "$candidate_url"
 )"
 [ "$effective_url" = "$candidate_url" ] && [ -s "$candidate" ] || {
   echo "::error::candidate fetch redirected or returned no bytes" >&2
@@ -141,13 +203,11 @@ jq -e \
 # The scoped token is not used until every public release coordinate above has
 # been authenticated; its value is never copied into the proof or logs.
 lock_response="$work_dir/lock-response.json"
-curl --fail --silent --show-error \
-  --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 30 \
-  --retry 2 --retry-all-errors --retry-max-time 30 --max-redirs 0 \
-  --max-filesize 262144 \
+fetch_with_budget 30 3 10 "$lock_response" \
+  --proto '=https' --tlsv1.2 \
   -H "Authorization: Bearer $CLOUDFLARE_R2_CONFIG_TOKEN" \
   "https://api.cloudflare.com/client/v4/accounts/$R2_ACCOUNT_ID/r2/buckets/$BUCKET/lock" \
-  > "$lock_response"
+  > /dev/null
 jq -e '
   .success == true and (.errors | length) == 0 and
   ([.result.rules[]? | select(
