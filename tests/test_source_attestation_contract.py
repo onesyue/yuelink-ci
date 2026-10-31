@@ -161,7 +161,7 @@ SOURCE_VERIFIER_MARKERS = (
 
 README_MARKERS = (
     "source_sha=\"$SOURCE_SHA\"",
-    "reviewed floor of 2044",
+    "Owner decision B5 removed the full Flutter suite",
     "local test output is never accepted",
     "GitHub artifact attestation",
     "2026-08-21",
@@ -319,10 +319,9 @@ def contract_issues(
             "SOURCE_SHA validation must appear in exactly 5 jobs "
             f"(source_contract + 4 probes), found {validation_count}"
         )
-    # B5 (Jim 2026-10-30): source_contract no longer runs the full Flutter
-    # suite, so it no longer checks out the attestation tools; macos_integration
-    # still counts machine tests with them.
-    for job, expected in (("source_contract", 0), ("macos_integration", 1)):
+    # Source contracts use exact-builder tools for signed baseline selection;
+    # macOS uses the same binding for its machine-test parser. B5 remains intact.
+    for job, expected in (("source_contract", 1), ("macos_integration", 1)):
         match = re.search(rf"(?ms)^  {job}:\n(.*?)(?=^  [a-z_]+:|\Z)", workflow)
         block = match.group(1) if match else ""
         if block.count("ref: ${{ github.sha }}") != expected:
@@ -352,9 +351,9 @@ def contract_issues(
     source_checkouts = re.findall(
         r"(?m)^\s*repository:\s*onesyue/yuelink\s*$", workflow
     )
-    if len(source_checkouts) != 5:
-        issues.append("every one of the five source jobs must checkout yuelink")
-    if workflow.count("fetch-depth: 0") != 5:
+    if len(source_checkouts) != 6:
+        issues.append("five source jobs and the signed baseline must checkout yuelink")
+    if workflow.count("fetch-depth: 0") != 6:
         issues.append("every source checkout must use full history")
     if workflow.count("submodules: recursive") != 5:
         issues.append("every source checkout must resolve recursive modules")

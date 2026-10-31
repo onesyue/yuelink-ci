@@ -34,6 +34,7 @@ class XcodePinTests(unittest.TestCase):
                 DEVELOPER_DIR=str(developer),
                 GITHUB_WORKSPACE=str(root / "workspace"),
                 GITHUB_ENV=str(output),
+                RUNNER_TEMP=str(root),
                 TEST_XCODE_VERSION=version,
             )
             result = subprocess.run(
@@ -52,14 +53,15 @@ class XcodePinTests(unittest.TestCase):
             )
             expected = {
                 "DEVELOPER_DIR": str(developer),
-                "COMPILATION_CACHE_ENABLE_CACHING": "YES",
-                "COMPILATION_CACHE_PREFIX_MAP": str(root / "workspace") + "=.",
-                "COMPILATION_CACHE_CAS_PATH": str(
-                    home
-                    / "Library/Developer/Xcode/DerivedData/CompilationCache.noindex"
-                ),
+                "XCODE_XCCONFIG_FILE": str(root / "yuelink-compilation-cache.xcconfig"),
             }
-            cache_created = Path(expected["COMPILATION_CACHE_CAS_PATH"]).is_dir()
+            cache_created = (home / "Library/Developer/Xcode/DerivedData/CompilationCache.noindex").is_dir()
+            if result.returncode == 0:
+                config = Path(expected["XCODE_XCCONFIG_FILE"]).read_text()
+                self.assertIn("COMPILATION_CACHE_ENABLE_CACHING = YES", config)
+                self.assertIn("CLANG_ENABLE_PREFIX_MAPPING = YES", config)
+                self.assertIn("SWIFT_ENABLE_PREFIX_MAPPING = YES", config)
+                self.assertIn("COMPILATION_CACHE_CAS_PATH = $(HOME)/Library/Developer/Xcode/DerivedData/CompilationCache.noindex", config)
             return result, exported, expected, cache_created
 
     def test_apple_release_build_uses_xcode_26_6(self) -> None:
