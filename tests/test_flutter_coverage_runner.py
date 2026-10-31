@@ -83,6 +83,8 @@ if os.environ.get('SPLIT_TIMEOUT')=='once' and len(files)>1:
     marker=Path('split-once')
     if not marker.exists():
         marker.write_text('1')
+        if os.environ.get('BEFORE_TIMEOUT'):
+            print(os.environ['BEFORE_TIMEOUT'], flush=True)
         sys.exit(124)
 if not (os.environ.get('ALLOW_ORDINARY_CACHE') and ordinary):
     assert not cache.exists(), 'prior compiler kernel was reused'
@@ -913,6 +915,43 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
             ALLOW_ORDINARY_CACHE="1", SPLIT_TIMEOUT="once",
             FIXTURE_GROUPS=str(len(groups)), YUELINK_COVERAGE_MAX_WORKERS="1")
         self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        out = self.root / "coverage/source-gate"
+        originals = list(out.glob("*.initial.jsonl"))
+        self.assertEqual(len(originals), 1)
+        index = originals[0].name.split('.')[0]
+        self.assertEqual(originals[0].read_bytes(), b"")
+        self.assertEqual(json.loads((out / f"{index}.execution.json").read_text())["exit_code"], 124)
+        for part in (0, 1):
+            self.assertEqual(json.loads((out / f"{index}.half{part}.execution.json").read_text())["exit_code"], 0)
+
+    def test_failure_before_timeout_cannot_be_replaced_by_green_halves(self):
+        (self.root / "test/services/case_0_test.dart").write_text("void main() { /* live */ }\n")
+        subprocess.run(["git", "add", "test"], cwd=self.root, check=True)
+        self.commit_fixture(self.root, "live tree")
+        groups = RUNNER.directory_groups(RUNNER.partition(self.root))
+        for event in ({"type": "error", "error": "first attempt failed"},
+                      {"type": "testDone", "testID": 1, "result": "failure"},
+                      {"type": "testDone", "testID": 1, "result": "error"},
+                      {"type": "done", "success": False}):
+            with self.subTest(event=event):
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                raw = json.dumps(event)
+                result = self.run_gate(
+                    ALLOW_ORDINARY_CACHE="1", SPLIT_TIMEOUT="once", BEFORE_TIMEOUT=raw,
+                    FIXTURE_GROUPS=str(len(groups)), YUELINK_COVERAGE_MAX_WORKERS="1")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("recorded a failure", result.stderr)
+                out = self.root / "coverage/source-gate"
+                originals = list(out.glob("*.initial.jsonl"))
+                self.assertEqual(len(originals), 1)
+                original = originals[0]
+                index = original.name.split('.')[0]
+                self.assertEqual(original.read_bytes(), (raw + "\n").encode())
+                self.assertEqual((out / f"{index}.jsonl").read_bytes(), original.read_bytes())
+                self.assertEqual(json.loads((out / f"{index}.execution.json").read_text())["exit_code"], 124)
+                self.assertFalse(list(out.glob("*.half*.jsonl")))
+                self.assertNotEqual(json.loads((out / "execution.json").read_text())["status"], "COMPLETE")
+                self.assertFalse((self.root / "coverage/lcov.info").exists())
 
     def test_timeout_halves_must_each_have_terminal_and_coverage(self):
         self.admitted_singleton_corpus()

@@ -463,6 +463,7 @@ def main() -> None:
                 "--concurrency=1", "--coverage-path", str(lcov), *tests,
             ]
             print(f"Flutter coverage group {index + 1}/{len(groups)}: {len(tests)} files", flush=True)
+            attempt = report.stem
             group_receipt = {"index": index, "files": tests, "worker": worker.name,
                              "command": command, "started_at": time.time(), "exit_code": None}
             start = time.monotonic()
@@ -470,10 +471,10 @@ def main() -> None:
             try:
                 with report.open("w") as log:
                     result = run_flutter_worker(
-                        timed_command(command, out / f"{index}.resource.txt"), worker, log)
+                        timed_command(command, out / f"{attempt}.resource.txt"), worker, log)
                 group_receipt["exit_code"] = result.returncode
             finally:
-                raw_resource = read_text(out / f"{index}.resource.txt")
+                raw_resource = read_text(out / f"{attempt}.resource.txt")
                 metrics = {}
                 for key, pattern in {
                     "user_cpu_seconds": r"User time \(seconds\): ([0-9.]+)",
@@ -486,7 +487,7 @@ def main() -> None:
                                      resources=metrics,
                                      resource_status="OBSERVED" if all(v is not None for v in metrics.values()) else "UNKNOWN",
                                      resource_scope="per-command process tree; not concurrent job peak")
-                (out / f"{index}.execution.json").write_text(json.dumps(group_receipt, indent=2) + "\n")
+                (out / f"{attempt}.execution.json").write_text(json.dumps(group_receipt, indent=2) + "\n")
             if result is None:
                 raise RuntimeError("flutter group produced no result")
             return result
@@ -541,6 +542,24 @@ def main() -> None:
                 result = invoke(index, tests, report, lcov)
                 if result.returncode == 124 and mode == "directory_groups" and len(tests) > 1:
                     clear_compiler_cache()
+                    # Preserve the first attempt even if successful halves replace
+                    # the canonical report. A timeout never erases a real failure.
+                    original = out / f"{index}.initial.jsonl"
+                    shutil.copyfile(report, original)
+                    if lcov.is_file():
+                        shutil.copyfile(lcov, out / f"{index}.initial.info")
+                    for line in original.read_text().splitlines():
+                        try:
+                            event = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if isinstance(event, dict) and (
+                            event.get("type") == "error"
+                            or (event.get("type") == "testDone"
+                                and event.get("result") in {"failure", "error"})
+                            or (event.get("type") == "done" and event.get("success") is False)
+                        ):
+                            raise ValueError(f"timed-out group {index} recorded a failure; see {original.name}")
                     stitch(index, tests, report, lcov)
                 elif result.returncode:
                     clear_compiler_cache()

@@ -5,13 +5,15 @@ import hashlib
 import importlib.util
 import json
 import os
+import select
+import signal
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -359,50 +361,132 @@ class Group25Tests(unittest.TestCase):
             with self.subTest(key=key), patch.object(pilot, "GROUP25_MANIFEST", path), self.assertRaises(ValueError):
                 pilot.group25_manifest()
 
+    def observe_ready(self, output, body, *, partial=False, require_event=True):
+        """Test-only pipes gate real signals on child readiness and observer arrival."""
+        ready_read, ready_write = os.pipe()
+        ack_read, ack_write = os.pipe()
+        for fd in (ready_read, ready_write, ack_read, ack_write):
+            self.addCleanup(os.close, fd)
+        child = ("import os,signal,sys\n"
+                 f"ready={ready_write}; ack={ack_read}\n" + body)
+        command = [sys.executable, "-u", "-c", child]
+        if not partial:
+            timeout = shutil.which("timeout")
+            self.assertIsNotNone(timeout, "actual GNU timeout is required")
+            # Zero disables the timer. SIGALRM below enters GNU timeout's real
+            # expiry path only after readiness, without a startup-time race.
+            command = [timeout, "--verbose", "--signal=TERM", "--kill-after=10s", "0", *command]
+        real_popen = subprocess.Popen
+        real_clock = pilot.time.monotonic_ns
+        real_selector = pilot.selectors.DefaultSelector()
+        self.addCleanup(real_selector.close)
+        state = {"ready": False, "signalled": False, "acked": False, "expired": False}
+        processes = []
+
+        def popen(*args, **kwargs):
+            process = real_popen(*args, **kwargs, pass_fds=(ready_write, ack_read))
+            processes.append(process)
+            return process
+
+        def select_ready(wait):
+            if not state["ready"] and select.select([ready_read], [], [], 0)[0]:
+                self.assertEqual(os.read(ready_read, 5), b"ready")
+                state["ready"] = True
+            rows = [json.loads(line) for line in (output / "arrivals.jsonl").read_text().splitlines()]
+            before = any(row.get("machine_time") == 66683 for row in rows)
+            announcement = any("timeout_signal_announcement" in row for row in rows)
+            if partial:
+                if state["ready"] and (output / "events.jsonl").read_bytes() == b"{partial":
+                    state["expired"] = True
+            elif state["ready"] and (before or not require_event) and not state["signalled"]:
+                os.kill(processes[0].pid, signal.SIGALRM)
+                state["signalled"] = True
+            if announcement and not state["acked"]:
+                os.write(ack_write, b"1")
+                state["acked"] = True
+            return real_selector.select(wait)
+
+        def clock():
+            # Exercise the actual outer-watchdog cleanup after partial bytes
+            # are flushed and retained. The product clock/budget is unchanged.
+            return real_clock() + (20_000_000_000 if state["expired"] else 0)
+
+        selector = Mock(wraps=real_selector)
+        selector.select.side_effect = select_ready
+        with patch.object(pilot.subprocess, "Popen", side_effect=popen), \
+             patch.object(pilot.selectors, "DefaultSelector", return_value=selector), \
+             patch.object(pilot.time, "monotonic_ns", side_effect=clock):
+            result = pilot.observe_command(command, self.root, output, 10)
+        self.assertTrue(state["ready"], "child readiness was not received")
+        self.assertIsNotNone(processes[0].poll(), "child was not reaped")
+        with self.assertRaises(ProcessLookupError):
+            os.killpg(processes[0].pid, 0)
+        return result
+
+    def assert_ordered_events(self, output):
+        rows = [json.loads(line) for line in (output / "arrivals.jsonl").read_text().splitlines()]
+        before = [row for row in rows if row.get("machine_time") == 66683]
+        after = [row for row in rows if row.get("machine_time") == 66684]
+        signals = [row for row in rows if "timeout_signal_announcement" in row]
+        self.assertEqual(len(before), 1)
+        self.assertEqual(len(after), 1)
+        self.assertEqual(len(signals), 1)
+        self.assertLess(before[0]["monotonic_ns"], signals[0]["monotonic_ns"])
+        self.assertLess(signals[0]["monotonic_ns"], after[0]["monotonic_ns"])
+        for row, stamp in ((before[0], 66683), (after[0], 66684)):
+            raw = f'{{"type":"error","time":{stamp}}}\n'.encode()
+            self.assertEqual(row["event_type"], "error")
+            self.assertEqual(row["line_sha256"], hashlib.sha256(raw).hexdigest())
+
     def test_real_observer_retains_bytes_and_orders_arrival_before_timeout(self):
-        timeout = shutil.which("timeout")
-        self.assertIsNotNone(timeout, "actual GNU timeout is required by this finite consumer")
         output = self.root / "observe"
         output.mkdir()
-        raw = '{"type":"error","time":66683}\n'
-        command = [timeout, "--verbose", "--signal=TERM", "--kill-after=0.2s", "0.3",
-                   sys.executable, "-u", "-c", "import time;print(" + repr(raw.rstrip()) + ");time.sleep(10)"]
-        result = pilot.observe_command(command, self.root, output, 2)
+        before = '{"type":"error","time":66683}\n'
+        after = '{"type":"error","time":66684}\n'
+        child = ("def term(*args):\n"
+                 " signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+                 " os.read(ack,1)\n"
+                 f" sys.stdout.write({after!r}); sys.stdout.flush()\n"
+                 " sys.exit(0)\n"
+                 "signal.signal(signal.SIGTERM,term)\n"
+                 f"sys.stdout.write({before!r}); sys.stdout.flush()\n"
+                 "os.write(ready,b'ready')\n"
+                 "signal.pause()\n")
+        result = self.observe_ready(output, child)
         self.assertEqual(result["exit_code"], 124)
-        self.assertEqual((output / "events.jsonl").read_bytes(), raw.encode())
-        rows = [json.loads(line) for line in (output / "arrivals.jsonl").read_text().splitlines()]
-        event = next(row for row in rows if row.get("event_type") == "error")
-        signal_row = next(row for row in rows if "timeout_signal_announcement" in row)
-        self.assertLess(event["monotonic_ns"], signal_row["monotonic_ns"])
-        self.assertEqual(event["machine_time"], 66683)
-        self.assertEqual(event["line_sha256"], hashlib.sha256(raw.encode()).hexdigest())
-        after = self.root / "after-signal"
-        after.mkdir()
-        child = ("import signal,time,sys\n"
-                 "def term(*args):\n time.sleep(.05)\n print(" + repr(raw.rstrip()) +
-                 ",flush=True)\n sys.exit(0)\n"
-                 "signal.signal(signal.SIGTERM,term)\ntime.sleep(10)\n")
-        result = pilot.observe_command(
-            [timeout, "--verbose", "--signal=TERM", "--kill-after=0.2s", "0.3",
-             sys.executable, "-u", "-c", child], self.root, after, 2)
+        self.assertFalse(result["outer_watchdog"])
+        self.assertEqual((output / "events.jsonl").read_bytes(), (before + after).encode())
+        self.assert_ordered_events(output)
+
+    def test_missing_event_cannot_satisfy_arrival_control(self):
+        output = self.root / "missing-event"
+        output.mkdir()
+        result = self.observe_ready(output, "os.write(ready,b'ready')\nsignal.pause()\n",
+                                    require_event=False)
         self.assertEqual(result["exit_code"], 124)
-        rows = [json.loads(line) for line in (after / "arrivals.jsonl").read_text().splitlines()]
-        event = next(row for row in rows if row.get("event_type") == "error")
-        signal_row = next(row for row in rows if "timeout_signal_announcement" in row)
-        self.assertGreater(event["monotonic_ns"], signal_row["monotonic_ns"])
-        self.assertEqual(event["machine_time"], 66683)
+        self.assertEqual((output / "events.jsonl").read_bytes(), b"")
+        with self.assertRaises(AssertionError):
+            self.assert_ordered_events(output)
+
+    def test_missing_readiness_cannot_satisfy_handshake(self):
+        output = self.root / "missing-readiness"
+        output.mkdir()
+        with self.assertRaisesRegex(AssertionError, "child readiness was not received"):
+            self.observe_ready(output, "sys.exit(0)\n")
+        self.assertEqual((output / "events.jsonl").read_bytes(), b"")
 
     def test_real_observer_records_outer_watchdog_and_partial_raw_line(self):
         output = self.root / "watchdog"
         output.mkdir()
-        command = [sys.executable, "-u", "-c",
-                   "import time,sys;sys.stdout.write('{partial');sys.stdout.flush();time.sleep(10)"]
-        result = pilot.observe_command(command, self.root, output, 0.25)
+        child = ("sys.stdout.write('{partial');sys.stdout.flush()\n"
+                 "os.write(ready,b'ready')\nsignal.pause()\n")
+        result = self.observe_ready(output, child, partial=True)
         self.assertTrue(result["outer_watchdog"])
-        self.assertNotEqual(result["exit_code"], 0)
+        self.assertEqual(result["exit_code"], -signal.SIGKILL)
         self.assertEqual((output / "events.jsonl").read_bytes(), b"{partial")
         self.assertEqual(result["partial_line_bytes"]["stdout"], 8)
-        self.assertTrue((output / "execution.json").is_file())
+        self.assertEqual(result["received_bytes"], 8)
+        self.assertEqual(json.loads((output / "execution.json").read_text()), result)
 
     def test_cache_miss_wrong_arch_and_sdk_are_refused_without_download(self):
         installer = pilot.module("fixture_installer", ROOT / ".github/actions/setup-flutter/install_flutter_sdk.py")
