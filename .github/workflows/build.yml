@@ -1830,7 +1830,7 @@ jobs:
     # tags only, one required reviewer. This is the single human click per
     # release — builds and per-platform R2 uploads stay unattended; assembling the candidate and moving the root
     # wait for approval. Inert until the owner moves the secrets (see
-    # docs/2026-09-23-ci-credential-migration.md in the workspace root).
+    # docs/archive/2026-09-23-ci-credential-migration.md in the workspace root).
     environment: yuelink-release
     permissions:
       # Native LGPL source attachments are published on this exact signed tag.
