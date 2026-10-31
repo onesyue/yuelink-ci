@@ -71,12 +71,14 @@ may split into two halves, each attempted once; other failures are not retried.
 The complete step has a 100-minute deadline and retains the four known crash
 cases. Historical failures remain in Git and their original run receipts.
 
-Flutter 3.47.8 / Dart 3.13.7 uses a source-bound singleton plan and a fresh compiler
-cache per file. Selection requires the exact private-workflow SDK pin and rejects
-absent, symlinked or mismatched feedback plans. Source commit, test blobs, runtime
-tree, lockfile and all four SDK identity fields must match. Retained reviewed
-group plans also enforce their baseline case/skip and coverage union; the previous
-3.47.7 fixtures remain unchanged.
+Live directory groups use the complete Flutter 3.47.8 / Dart 3.13.7 identity
+frozen in `tests/fixtures/flutter-coverage-groups-20261028.json` (`live_sdk`).
+The runner verifies the plan SHA256 before selection and compares all four SDK
+identity fields at execution. The successor retains the historical 3.47.7 `sdk`,
+source bindings and coverage baseline unchanged for exact historical snapshots;
+it does not claim cross-SDK baseline equivalence. SDK updates require a new
+reviewed plan, updated runner digest and a signed Git commit. Release evidence
+and reproduction commands are in `reports/sdk17-evidence.md`.
 
 The final source-SHA proof has GitHub build provenance. Schema2 additionally
 binds successful executed Flutter/service-race receipts to source, builder,

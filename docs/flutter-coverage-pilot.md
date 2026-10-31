@@ -188,7 +188,7 @@ that diagnostic. Current unit fixtures explicitly bind their synthetic helper
 bytes and also test this refusal. They do not requalify or rewrite old ABBA
 results.
 
-The canonical runner now consumes
+The historical runner consumed
 `tests/fixtures/flutter-coverage-groups-20261020.json`. It binds all 509 current
 files by content hash, the application tree, dependency lock and exact SDK.
 There are 508 Linux files in 70 proposed commands: seven protected singleton
@@ -257,3 +257,12 @@ no commit embeds its own prospective SHA. Ordinary developer `make test`
 semantics, stable attestation reuse and the adapter are unchanged. The next
 necessary complete source gate must qualify final source/builder identities;
 no repeat old pilot or separate full A-then-B campaign is required.
+
+## sdk17: live SDK successor (2026-10-28)
+
+The canonical runner now pins `flutter-coverage-groups-20261028.json` by SHA256.
+Its historical bindings and baseline are unchanged. Only live directory groups
+use its separate `live_sdk`, taken from verified v1.3.157 source attestation
+run 40464318467: Flutter 3.47.8 / Dart 3.13.7. The complete four-field identity
+is enforced; missing fields or a changed plan digest fail closed. See
+`../reports/sdk17-evidence.md` for commands, evidence hashes and acceptance.
