@@ -64,6 +64,13 @@ def partition(root: Path) -> list[list[str]]:
 
 
 
+def run_flutter_worker(command: list[str], worker: Path, log):
+    # Keep the trusted workflow baseline in the real Flutter process, including
+    # detached workers and split retries. Git worktrees share the fetched object.
+    return subprocess.run(command, cwd=worker, env=os.environ.copy(),
+                          stdout=log, stderr=subprocess.STDOUT, timeout=350, check=False)
+
+
 def digest(value) -> str:
     return hashlib.sha256(json.dumps(value, separators=(",", ":"), ensure_ascii=True).encode()).hexdigest()
 
@@ -462,8 +469,8 @@ def main() -> None:
             result = None
             try:
                 with report.open("w") as log:
-                    result = subprocess.run(timed_command(command, out / f"{index}.resource.txt"),
-                                            cwd=worker, stdout=log, stderr=subprocess.STDOUT, timeout=350, check=False)
+                    result = run_flutter_worker(
+                        timed_command(command, out / f"{index}.resource.txt"), worker, log)
                 group_receipt["exit_code"] = result.returncode
             finally:
                 raw_resource = read_text(out / f"{index}.resource.txt")

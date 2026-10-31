@@ -190,6 +190,43 @@ jobs:
       - name: Manifest schema self-check
         run: dart run tool/automation/manifest_guard.dart --self-check
 
+      - name: Checkout exact attestation parser
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.sha }}
+          path: .source-attestation-tools
+          persist-credentials: false
+
+      - name: Select signed reviewed contract baseline
+        id: contract_baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$(python3 .source-attestation-tools/scripts/contract-baseline.py)"
+          printf 'sha=%s\n' "$baseline" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch exact private contract baseline
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ steps.contract_baseline.outputs.sha }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          path: .source-contract-baseline
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Import and validate contract baseline object
+        shell: bash
+        env:
+          CONTRACT_BASELINE: ${{ steps.contract_baseline.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --no-write-fetch-head ./.source-contract-baseline "$CONTRACT_BASELINE"
+          actual="$(python3 .source-attestation-tools/scripts/contract-baseline.py --source .)"
+          test "$actual" = "$CONTRACT_BASELINE"
+          printf 'YUELINK_CONTRACT_BASELINE=%s\n' "$CONTRACT_BASELINE" >> "$GITHUB_ENV"
+
       # 2026-10-30 Jim 决定（计划「耗时环节取消清单」B5）：发版 Source attestation
       # 不再跑全量 Flutter 测试（实测 89m51s / 92m31s，run 40464318467）。保留
       # analyze、gitleaks、govulncheck、macOS/Windows 探针和全部发版契约；
