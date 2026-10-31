@@ -33,6 +33,7 @@ jobs:
   audit:
     name: Audit permanent versioned releases
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Validate trusted Build workflow_run identity
