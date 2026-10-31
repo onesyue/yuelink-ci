@@ -152,8 +152,8 @@ class ReleaseRemoteTagBehaviorTests(unittest.TestCase):
                     verified=verified,
                     reason=reason,
                 )
-                self.assertEqual(result.returncode, 1, result.stdout)
-                self.assertIn("尚未 valid", result.stdout)
+                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertIn("签名被拒绝", result.stdout)
 
     def test_exact_tag_object_and_builder_remain_mandatory(self) -> None:
         mutations = (

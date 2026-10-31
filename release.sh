@@ -206,7 +206,9 @@ inspect_remote_public_tag() {
   if ! ref_json="$(
     gh api "repos/onesyue/yuelink-ci/git/ref/tags/$TAG" 2>/dev/null
   )"; then
-    return 1
+    # Only an explicit API 404 means the immutable object is not visible yet.
+    jq -e '.status == "404" or .status == 404' <<<"$ref_json" >/dev/null && return 1
+    return 2
   fi
   tag_object_sha="$(jq -er '.object.sha' <<<"$ref_json")" || return 2
   ref_type="$(jq -er '.object.type' <<<"$ref_json")" || return 2
@@ -216,7 +218,10 @@ inspect_remote_public_tag() {
   }
   tag_json="$(
     gh api "repos/onesyue/yuelink-ci/git/tags/$tag_object_sha" 2>/dev/null
-  )" || return 1
+  )" || {
+    jq -e '.status == "404" or .status == 404' <<<"$tag_json" >/dev/null && return 1
+    return 2
+  }
   jq -e --arg tag "$TAG" --arg builder "$BUILDER_COMMIT" \
     --arg message "$PUBLIC_TAG_MESSAGE" '
     # GitHub currently returns a signed annotated tag message as the exact
@@ -251,8 +256,14 @@ inspect_remote_public_tag() {
     ' <<<"$tag_json" >/dev/null; then
     return 0
   fi
-  echo "::notice::远端 $TAG 已存在且 commit 正确，但 GitHub 验签尚未 valid（reason=$(jq -r '.verification.reason // "unknown"' <<<"$tag_json")）。" >&2
-  return 1
+  if jq -e '
+      .verification.verified == false and (.verification.reason == "gpgverify_unavailable" or .verification.reason == "gpgverify_error")
+    ' <<<"$tag_json" >/dev/null; then
+    echo "::notice::远端 $TAG 的 GitHub 验签仍 pending。" >&2
+    return 1
+  fi
+  echo "::error::远端 $TAG 的签名被拒绝（reason=$(jq -r '.verification.reason // "unknown"' <<<"$tag_json")）。" >&2
+  return 2
 }
 
 wait_for_verified_remote_public_tag() {
@@ -267,7 +278,8 @@ wait_for_verified_remote_public_tag() {
         echo "✓ GitHub 已验真 signed public tag: $TAG -> $BUILDER_COMMIT"
         return 0
         ;;
-      2) return 1 ;;
+      1) ;; # Explicitly pending/not visible only.
+      *) return 1 ;;
     esac
     [ "$attempt" -eq 12 ] || sleep 5
   done

@@ -1,0 +1,57 @@
+--- build.yml
++++ build.yml
+@@ -153,6 +153,15 @@
+                 ' <<<"$tag_json" >/dev/null; then
+                 break
+               fi
++              # Only an explicit pending verification may consume the wait budget.
++              jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
++                .tag == $tag and .object.type == "commit" and
++                .object.sha == $builder and .verification.verified == false and
++                (.verification.reason == "gpgverify_unavailable" or .verification.reason == "gpgverify_error")
++              ' <<<"$tag_json" >/dev/null || {
++                echo "::error::public tag content or signature rejected"
++                exit 1
++              }
+               [ "$attempt" -eq 12 ] || sleep 5
+             done
+             jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
+@@ -2431,13 +2440,36 @@
+         if: env.SKIP_MANIFEST != '1'
+         run: |
+           set -euo pipefail
++          report="$(mktemp)"
++          trap 'rm -f "$report"' EXIT
+           for attempt in 1 2 3 4 5 6 7 8; do
+             if dart run scripts/verify_release_artifacts.dart \
+-                 --version "$APP_VERSION" --candidate; then
++                 --version "$APP_VERSION" --candidate --json >"$report"; then
++              cat "$report"
+               echo "release candidate verification passed on attempt $attempt"
+               exit 0
++            else
++              status=$?
+             fi
+-            echo "::notice::CDN has not converged yet (attempt $attempt/8)"
++            cat "$report"
++            # The verifier's JSON distinguishes binary 404 from integrity failures.
++            # Missing/incorrect sidecars and manifests are ambiguous: fail closed.
++            if [ "$status" -ne 1 ] || ! jq -e '
++              type == "array" and length > 0 and
++              all(.[]; type == "object" and (.ok | type) == "boolean" and
++                (.check | type) == "string" and (.detail | type) == "string") and
++              any(.[]; .ok == false) and
++              all(.[]; .ok == true or
++                ((.check | startswith("binary:")) and
++                 (.detail | test("^HTTP 404, content-length=-?[0-9]+$"))))
++            ' "$report" >/dev/null; then
++              echo "::error::candidate content/integrity verification failed"
++              exit 1
++            fi
++            if [ "$attempt" -eq 8 ]; then
++              break
++            fi
++            echo "::notice::CDN binary not yet visible (attempt $attempt/8)"
+             sleep 15
+           done
+           echo "::error::candidate verification failed after CDN propagation window"

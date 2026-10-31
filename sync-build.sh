@@ -140,6 +140,10 @@ open(p, "w", encoding="utf-8").write(s)
 print("✓ build.yml 镜像内容已生成(4 处锁点全命中)")
 PY
 
+# Public builder retry policy is maintained in this repository (I32-E R11/R12).
+# Apply with exact context; a source-template change must be reconciled explicitly.
+patch --batch --fuzz=0 --forward "$GENERATED" < "$SCRIPT_DIR/scripts/public-release-retry.patch"
+
 if [ "$CHECK_ONLY" -eq 1 ]; then
   if ! cmp -s "$GENERATED" "$DST"; then
     echo "::error::公开 CI build.yml 与私有仓发布工作流不同步。"
