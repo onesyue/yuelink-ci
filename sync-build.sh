@@ -31,6 +31,9 @@ trap 'rm -f "$GENERATED"' EXIT
 cp "$SRC" "$GENERATED"
 
 python3 - "$GENERATED" <<'PY'
+import json
+import re
+from pathlib import Path
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
@@ -115,6 +118,23 @@ must_replace(
           persist-credentials: false
 """,
 "release-checkout")
+
+# Public dependency caches bind the reviewed SDK identity and lockfile.
+# Fail closed on an SDK bump until the evidence-backed plan is updated.
+plan = json.loads(Path("tests/fixtures/flutter-coverage-groups-20261028.json").read_text())
+fields = ("frameworkVersion", "frameworkRevision", "engineRevision", "dartSdkVersion")
+sdk = plan["live_sdk"]
+if set(sdk) != set(fields) or any(not re.fullmatch(r"[A-Za-z0-9.+-]+", sdk[f]) for f in fields):
+    sys.exit("::error:: invalid reviewed SDK identity")
+if f"  FLUTTER_VERSION: '{sdk['frameworkVersion']}'" not in s:
+    sys.exit("::error:: workflow SDK differs from reviewed cache identity")
+suffix = "-sdk-" + "-".join(sdk[f] for f in fields)
+suffix += "-${{ hashFiles('pubspec.lock') }}"
+# Include restore prefixes: a fallback must not cross SDK/lockfile identities.
+s, count = re.subn(r"(?m)^( +(?:key: )?)(yue-(?:xcode-cc|gomod|gocache|pub|gradle)-v1-[^\n]+)$",
+                   lambda m: m[1] + "yue" + suffix + "-" + m[2], s)
+if count != 14:
+    sys.exit(f"::error:: expected 14 cache keys/prefixes, found {count}")
 
 open(p, "w", encoding="utf-8").write(s)
 print("✓ build.yml 镜像内容已生成(4 处锁点全命中)")

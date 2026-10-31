@@ -1,20 +1,21 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest import mock
 
-
 ROOT = Path(__file__).resolve().parents[1]
 ACTION = ROOT / ".github/actions/setup-flutter/action.yml"
 INSTALLER = ROOT / ".github/actions/setup-flutter/install_flutter_sdk.py"
-HELPER = ROOT.parent / "yuelink" / "scripts" / "ci" / "link_platform_cache.py"
+HELPER = Path(os.environ.get("YUELINK_SOURCE", str(ROOT.parent / "yuelink"))) / "scripts/ci/link_platform_cache.py"
 
 
 def _step_body(workflow: str, name: str) -> str:
@@ -347,7 +348,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
         assert "cache-hit" not in core
 
         linux = _step_body(workflow, "Install Linux build dependencies")
-        assert "timeout --signal=TERM 180 sudo apt-get" in linux
+        assert "sudo timeout --signal=KILL 180 apt-get" in linux
         assert "apt_bounded update -q" in linux
         assert "apt_bounded install -y --no-install-recommends" in linux
         assert "link_platform_cache.py apt-result" in linux
@@ -366,8 +367,10 @@ class LinkPlatformCacheTests(unittest.TestCase):
         assert "configuration-cache" not in workflow
         assert "android/gradle/wrapper/gradle-wrapper.properties" in gradle
 
-        assert "COMPILATION_CACHE_ENABLE_CACHING=YES" in workflow
-        assert "COMPILATION_CACHE_PREFIX_MAP=${GITHUB_WORKSPACE}=." in workflow
+        assert "COMPILATION_CACHE_ENABLE_CACHING = YES" in workflow
+        assert "XCODE_XCCONFIG_FILE=$cache_config" in workflow
+        assert "CLANG_ENABLE_PROJECT_PREFIX_MAPPING = YES" in workflow
+        assert "SWIFT_ENABLE_PROJECT_PREFIX_MAPPING = YES" in workflow
         key = (
             "yue-xcode-cc-v1-${{ runner.os }}-${{ runner.arch }}"
             "-${{ matrix.platform }}-${{ github.sha }}"
@@ -386,6 +389,8 @@ class LinkPlatformCacheTests(unittest.TestCase):
         script = decide.split("run: |", 1)[1]
         assert "${{" not in script
         assert "xcode-save --bytes" in script
+        assert 'tar -cf - -C "$cache" .' in script
+        assert "bytes + bytes / 100 + 1048576" in script
 
         gomod = _step_body(workflow, "Restore Go module cache")
         assert "path: ~/go/pkg/mod" in gomod
@@ -400,7 +405,8 @@ class LinkPlatformCacheTests(unittest.TestCase):
         windows_mod = _step_body(workflow, "Restore Go module cache (Windows)")
         assert "path: ~\\go\\pkg\\mod" in windows_mod
         compiler = _step_body(workflow, "Restore Go compiler cache")
-        assert "path: ~/.cache/go-build" in compiler
+        assert "runner.os == 'macOS' && '~/Library/Caches/go-build'" in compiler
+        assert "|| '~/.cache/go-build'" in compiler
         windows_compiler = _step_body(workflow, "Restore Go compiler cache (Windows)")
         assert "path: ~\\AppData\\Local\\go-build" in windows_compiler
         assert "runner.os" in compiler
@@ -418,6 +424,130 @@ class LinkPlatformCacheTests(unittest.TestCase):
             block = workflow[start:end]
             assert re.search(r"(?m)^\s+cache: true\s*$", block)
             assert re.search(r"(?m)^\s+cache: false\s*$", block) is None
+
+    def test_dependency_cache_actions_keys_and_restore_prefixes(self) -> None:
+        workflow = (ROOT / ".github/workflows/build.yml").read_text()
+        self._assert_cache_identity(workflow)
+
+    def _assert_cache_identity(self, workflow: str) -> None:
+        sdk = json.loads((ROOT / "tests/fixtures/flutter-coverage-groups-20261028.json").read_text())["live_sdk"]
+        fields = ("frameworkVersion", "frameworkRevision", "engineRevision", "dartSdkVersion")
+        identity = "-sdk-" + "-".join(sdk[field] for field in fields)
+        blocks = re.split(r"(?m)^      - ", workflow)
+        caches = [block for block in blocks if re.search(r"(?m)^(?:        )?uses: actions/cache", block)]
+        assert len(caches) == 9
+        for block in caches:
+            assert re.search(r"uses: actions/cache(?:/restore|/save)?@55cc8345863c7cc4c66a329aec7e433d2d1c52a9(?: |$)", block)
+            key = re.search(r"(?m)^          key: (.+)$", block)
+            assert key is not None
+            assert identity in key[1]
+            assert "${{ hashFiles('pubspec.lock') }}" in key[1]
+            if "restore-keys:" in block:
+                prefixes = re.findall(r"(?m)^            (\S.*)$", block.split("restore-keys: |\n", 1)[1])
+                assert prefixes
+                for prefix in prefixes:
+                    assert identity in prefix
+                    assert "${{ hashFiles('pubspec.lock') }}" in prefix
+                    assert key[1].startswith(prefix)
+        for source in (workflow, ACTION.read_text()):
+            for ref in re.findall(r"uses:\s*(actions/cache[^\s#]*)", source):
+                assert re.fullmatch(r"actions/cache(?:/restore|/save)?@[0-9a-f]{40}", ref)
+
+    def test_cache_paths_cannot_restore_release_or_attestation_outputs(self) -> None:
+        workflow = (ROOT / ".github/workflows/build.yml").read_text()
+        self._assert_cache_boundary(workflow)
+
+    def _assert_cache_boundary(self, workflow: str) -> None:
+        allowed = {
+            "~/Library/Developer/Xcode/DerivedData/CompilationCache.noindex",
+            "~/go/pkg/mod", r"~\go\pkg\mod",
+            "${{ runner.os == 'macOS' && '~/Library/Caches/go-build' || '~/.cache/go-build' }}",
+            r"~\AppData\Local\go-build", "~/.pub-cache", r"~\AppData\Local\Pub\Cache",
+            "~/.gradle/caches", "~/.gradle/wrapper",
+        }
+        blocks = re.split(r"(?m)^      - ", workflow)
+        seen = set()
+        for block in blocks:
+            if re.search(r"(?m)^(?:        )?uses: actions/cache", block):
+                path = block.split("          path: ", 1)[1].split("          key:", 1)[0].strip()
+                paths = path[1:].splitlines() if path.startswith("|") else [path]
+                for item in paths:
+                    if item.strip():
+                        assert item.strip() in allowed
+                        seen.add(item.strip())
+            title = block.splitlines()[0]
+            if re.search(r"sign|attest|provenance|promot", title, re.IGNORECASE):
+                assert "actions/cache" not in block
+                assert "cache-hit" not in block
+                for path in allowed:
+                    assert path not in block
+        assert seen == allowed
+        attest = _step_body(workflow, "Attest build provenance")
+        assert "subject-path: 'dist/*'" in attest
+        assert "continue-on-error" not in attest
+        for name in ("Build & install Go core", "Verify exact attested source checkout"):
+            assert "cache-hit" not in _step_body(workflow, name)
+
+    def test_cache_contract_rejects_anonymous_output_restore_and_broad_fallback(self) -> None:
+        workflow = (ROOT / ".github/workflows/build.yml").read_text()
+        unsafe = workflow + "\n      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9\n        with:\n          path: dist\n          key: unsafe\n"
+        with self.assertRaises(AssertionError):
+            self._assert_cache_boundary(unsafe)
+        with self.assertRaises(AssertionError):
+            self._assert_cache_identity(unsafe)
+        unsafe = workflow.replace("          restore-keys: |\n", "          restore-keys: |\n            yue-\n", 1)
+        with self.assertRaises(AssertionError):
+            self._assert_cache_identity(unsafe)
+
+    def test_cache_identity_rejects_mutable_actions_and_missing_identity(self) -> None:
+        workflow = (ROOT / ".github/workflows/build.yml").read_text()
+        sdk = json.loads(
+            (ROOT / "tests/fixtures/flutter-coverage-groups-20261028.json").read_text()
+        )["live_sdk"]
+        mutations = [
+            workflow.replace(
+                "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+                "actions/cache/restore@v6", 1,
+            ),
+            workflow.replace("${{ hashFiles('pubspec.lock') }}", "unbound", 1),
+        ]
+        mutations.extend(workflow.replace(value, "unbound", 1) for value in (
+            "-" + sdk[field] + "-" for field in (
+                "frameworkVersion", "frameworkRevision", "engineRevision", "dartSdkVersion"
+            )
+        ))
+        for unsafe in mutations:
+            with self.assertRaises(AssertionError):
+                self._assert_cache_identity(unsafe)
+
+    def test_apt_shell_maps_kill_and_retries_without_errexit(self) -> None:
+        workflow = (ROOT / ".github/workflows/build.yml").read_text()
+        linux = _step_body(workflow, "Install Linux build dependencies")
+        function = textwrap.dedent(linux.split("run: |\n", 1)[1].split("          apt_bounded update", 1)[0])
+        # Execute the actual function with command stand-ins; no sudo/network.
+        for statuses, expected, attempts in (("137 137", 124, 2), ("137 0", 0, 2), ("100 0", 0, 2), ("0", 0, 1)):
+            script = r'''set -euo pipefail
+count=0
+sudo() {
+  test "$1 $2 $3 $4" = 'timeout --signal=KILL 180 apt-get'
+  count=$((count + 1))
+  eval "return \${status_$count}"
+}
+python3() {
+  echo "helper:$4:$6"
+  if [ "$4:$6" = "2:124" ]; then echo APT_TIMEOUT; return 2; fi
+  return 1
+}
+'''
+            script += "\n".join(f"status_{i}={status}" for i, status in enumerate(statuses.split(), 1)) + "\n"
+            result = subprocess.run(["bash", "-c", script + function + "\napt_bounded update -q\necho calls=$count\n"], check=False, capture_output=True, text=True)
+            assert result.returncode == expected, result.stderr
+            assert ("APT_TIMEOUT" in result.stdout) == (expected == 124)
+            if expected == 0:
+                assert f"calls={attempts}" in result.stdout
+            else:
+                assert "helper:1:124" in result.stdout
+                assert "helper:2:124" in result.stdout
 
     @unittest.skipUnless(
         HELPER.is_file(), "private helper is absent from this checkout"

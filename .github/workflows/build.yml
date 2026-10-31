@@ -482,11 +482,19 @@ jobs:
           version="$(xcodebuild -version | sed -n '1p')"
           test "$version" = 'Xcode 26.6' || { echo "::error::unexpected Xcode: $version"; exit 1; }
           mkdir -p "$HOME/Library/Developer/Xcode/DerivedData/CompilationCache.noindex"
+          # xcodebuild consumes this override even when invoked by Flutter.
+          cache_config="$RUNNER_TEMP/yuelink-compilation-cache.xcconfig"
+          cat > "$cache_config" <<'XCCONFIG'
+          COMPILATION_CACHE_ENABLE_CACHING = YES
+          CLANG_ENABLE_PREFIX_MAPPING = YES
+          CLANG_ENABLE_PROJECT_PREFIX_MAPPING = YES
+          SWIFT_ENABLE_PREFIX_MAPPING = YES
+          SWIFT_ENABLE_PROJECT_PREFIX_MAPPING = YES
+          COMPILATION_CACHE_CAS_PATH = $(HOME)/Library/Developer/Xcode/DerivedData/CompilationCache.noindex
+          XCCONFIG
           {
             echo "DEVELOPER_DIR=$DEVELOPER_DIR"
-            echo "COMPILATION_CACHE_ENABLE_CACHING=YES"
-            echo "COMPILATION_CACHE_PREFIX_MAP=${GITHUB_WORKSPACE}=."
-            echo "COMPILATION_CACHE_CAS_PATH=$HOME/Library/Developer/Xcode/DerivedData/CompilationCache.noindex"
+            echo "XCODE_XCCONFIG_FILE=$cache_config"
           } >> "$GITHUB_ENV"
 
       - name: Restore Xcode compilation cache
@@ -496,9 +504,9 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/Library/Developer/Xcode/DerivedData/CompilationCache.noindex
-          key: yue-xcode-cc-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ github.sha }}
+          key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-xcode-cc-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ github.sha }}
           restore-keys: |
-            yue-xcode-cc-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-
+            yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-xcode-cc-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-
 
       # ── Toolchains (Go for core, Flutter for app, Java for android) ───────
       # Flutter SDK cache stays on (reviewed 2026-08-31). setup-go's own
@@ -518,9 +526,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/go/pkg/mod
-          key: yue-gomod-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-${{ github.sha }}
+          key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-gomod-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-${{ github.sha }}
           restore-keys: |
-            yue-gomod-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-
+            yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-gomod-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-
 
       - name: Restore Go module cache (Windows)
         if: runner.os == 'Windows'
@@ -528,19 +536,19 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~\go\pkg\mod
-          key: yue-gomod-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-${{ github.sha }}
+          key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-gomod-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-${{ github.sha }}
           restore-keys: |
-            yue-gomod-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-
+            yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-gomod-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-
 
       - name: Restore Go compiler cache
         if: runner.os != 'Windows'
         continue-on-error: true
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cache/go-build
-          key: yue-gocache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-${{ github.sha }}
+          path: ${{ runner.os == 'macOS' && '~/Library/Caches/go-build' || '~/.cache/go-build' }}
+          key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-gocache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-${{ github.sha }}
           restore-keys: |
-            yue-gocache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-
+            yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-gocache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-
 
       - name: Restore Go compiler cache (Windows)
         if: runner.os == 'Windows'
@@ -548,9 +556,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~\AppData\Local\go-build
-          key: yue-gocache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-${{ github.sha }}
+          key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-gocache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-${{ github.sha }}
           restore-keys: |
-            yue-gocache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-
+            yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-gocache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-
 
       - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
         with:
@@ -562,14 +570,14 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.pub-cache
-          key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
 
       - name: Restore pub cache (lockfile-verified, Windows)
         if: runner.os == 'Windows'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~\AppData\Local\Pub\Cache
-          key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
 
       - name: Setup Java (Android only)
         if: matrix.platform == 'android'
@@ -602,14 +610,20 @@ jobs:
             local status=0
             while [ "$attempt" -le 2 ]; do
               set +e
-              timeout --signal=TERM 180 sudo apt-get "$@"
+              # KILL bounds even an apt subprocess that ignores TERM at 180s.
+              sudo timeout --signal=KILL 180 apt-get "$@"
               status=$?
+              # GNU timeout reports 137 when its KILL deadline fires.
+              if [ "$status" -eq 137 ]; then status=124; fi
               set -e
               if [ "$status" -eq 0 ]; then
                 return 0
               fi
-              if ! python3 scripts/ci/link_platform_cache.py apt-result --attempt "$attempt" --status "$status"; then
-                exit 1
+              # The helper returns 1 to retry and 2 for the final timeout.
+              # A nonzero first result must not abort the retry loop.
+              python3 scripts/ci/link_platform_cache.py apt-result --attempt "$attempt" --status "$status" || true
+              if [ "$attempt" -eq 2 ]; then
+                return "$status"
               fi
               attempt=$((attempt + 1))
             done
@@ -792,7 +806,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: yue-gradle-v1-${{ runner.os }}-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
+          key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-gradle-v1-${{ runner.os }}-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
 
       - name: Decode Android keystore
         if: matrix.platform == 'android'
@@ -1604,7 +1618,11 @@ jobs:
             echo "save=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          bytes="$(du -sk "$cache" | awk '{print $1 * 1024}')"
+          # Count logical tar bytes, including sparse contents and headers.
+          # Reserve 1% + 1 MiB for compression framing/manifest overhead;
+          # this deliberately skips borderline archives below the 2 GiB cap.
+          bytes="$(tar -cf - -C "$cache" . | wc -c | tr -d '[:space:]')"
+          bytes=$((bytes + bytes / 100 + 1048576))
           if python3 scripts/ci/link_platform_cache.py xcode-save --bytes "$bytes"; then
             echo "save=true" >> "$GITHUB_OUTPUT"
           else
@@ -1617,7 +1635,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/Library/Developer/Xcode/DerivedData/CompilationCache.noindex
-          key: yue-xcode-cc-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ github.sha }}
+          key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-xcode-cc-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ github.sha }}
       - name: Record native media validation evidence
         if: always()
         shell: bash
