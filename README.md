@@ -13,6 +13,9 @@ From a clean, current `master` checkout:
 git diff -- .github/workflows/build.yml
 ./sync-build.sh --check ../yuelink
 
+# If synchronization changed build.yml, stop here: review, sign and land that
+# change on master, then update this checkout to the clean origin/master HEAD.
+# Dispatch only from that exact builder; release.sh rejects a dirty/stale tree.
 SOURCE_SHA=$(git -C ../yuelink rev-parse HEAD)
 gh workflow run source-attestation.yml -R onesyue/yuelink-ci \
   -f source_sha="$SOURCE_SHA"
@@ -105,10 +108,11 @@ The protected final `release` step runs `scripts/ci/promote_in_pipeline.sh`:
 authenticate the current signed root, sign the complete candidate, enforce a
 monotonic version transition, publish the immutable archive/root and verify live
 artifacts. The updater seed stays in protected Secrets, never source or artifacts.
-Private/local promotion is recovery-only. The manual credential-recovery workflow
-verifies both public signing identities and emits only two-recipient age
-ciphertext to its recovery bucket and one-day encrypted artifact; no PR trigger
-or plaintext upload is permitted.
+Private/local promotion is recovery-only. Backup creation/verification and
+disaster-restore drills were canceled by the owner on 2026-10-20; the retained
+manual credential-backup workflow is not a current task or release prerequisite.
+This does not cancel release rollback or interrupted-publication recovery, and
+does not authorize changing retained workflows or deleting stored artifacts.
 
 In the full Yue.to workspace, use the maintained
 [client recovery procedure](../yuelink/docs/ops/runbook.md#5-rollback-a-stable-release)

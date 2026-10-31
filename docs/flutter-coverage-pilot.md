@@ -179,9 +179,24 @@ first-pair failure, removed second invocation, wrong source, changed cases/skips
 missing terminals/LCOV, lost coverage, changed resources and retained Git
 credentials. They are wiring evidence, not a real Flutter benchmark.
 
-## 2026-10-20: proposed complete-corpus successor
+## Current runner selection
 
-The preceding sections describe the immutable 2026-10-19 diagnostic. Its
+The canonical [runner](../scripts/run-flutter-coverage.py) selects a plan from
+the exact source inventory, runtime tree, dependency lock and SDK. The retained
+2026-10-20 grouping plan is selected only when its inputs match. Otherwise the
+runner considers the reviewed singleton plan; the exact private-workflow Flutter
+3.47.8 pin selects `flutter-coverage-singletons-20261027-v157.json` with
+Dart 3.13.7. A missing, symlinked or mismatched feedback plan fails closed.
+The older-SDK compatibility path can select directory groups if its non-feedback
+singleton plan is missing or symlinked; this does not apply to the 3.47.8 plan.
+These filenames live under `tests/fixtures/`; the runner constants and
+`execution_plan` are the authority when pins change. Historical counts and
+comparison receipts below do not describe the current source corpus or prove
+performance of the selected plan.
+
+## 2026-10-20: historical complete-corpus proposal
+
+The 2026-10-19 diagnostic sections above describe that immutable diagnostic. Its
 manifest and receipts remain unchanged. The historical manifest intentionally
 refuses a changed runner helper; use the original frozen builder when inspecting
 that diagnostic. Current unit fixtures explicitly bind their synthetic helper
@@ -189,14 +204,14 @@ bytes and also test this refusal. They do not requalify or rewrite old ABBA
 results.
 
 The historical runner consumed
-`tests/fixtures/flutter-coverage-groups-20261020.json`. It binds all 509 current
+`tests/fixtures/flutter-coverage-groups-20261020.json`. It binds all 509 historical
 files by content hash, the application tree, dependency lock and exact SDK.
 There are 508 Linux files in 70 proposed commands: seven protected singleton
 commands and 63 groups of at most eight, preserving file order. The native
 macOS keychain file retains its separate required job. Unknown added, removed,
 renamed or changed tests fail before execution; no implicit subset or retry
-fallback is permitted. This plan is a candidate awaiting its own complete source
-gate, not a measured full-suite improvement.
+fallback is permitted. These were the proposal's acceptance conditions, not
+evidence of a measured full-suite improvement or the current gate's status.
 
 The comparison baseline is accepted source gate 39403709212, source
 `3b7218f6d81146fe3e8b3cb024607996d24d4a84`, builder
