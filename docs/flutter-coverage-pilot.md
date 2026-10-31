@@ -181,18 +181,14 @@ credentials. They are wiring evidence, not a real Flutter benchmark.
 
 ## Current runner selection
 
-The canonical [runner](../scripts/run-flutter-coverage.py) selects a plan from
-the exact source inventory, runtime tree, dependency lock and SDK. The retained
-2026-10-20 grouping plan is selected only when its inputs match. Otherwise the
-runner considers the reviewed singleton plan; the exact private-workflow Flutter
-3.47.8 pin selects `flutter-coverage-singletons-20261027-v157.json` with
-Dart 3.13.7. A missing, symlinked or mismatched feedback plan fails closed.
-The older-SDK compatibility path can select directory groups if its non-feedback
-singleton plan is missing or symlinked; this does not apply to the 3.47.8 plan.
-These filenames live under `tests/fixtures/`; the runner constants and
-`execution_plan` are the authority when pins change. Historical counts and
-comparison receipts below do not describe the current source corpus or prove
-performance of the selected plan.
+The canonical [runner](../scripts/run-flutter-coverage.py) selects the historical
+reviewed grouping only for an exact source inventory, runtime tree, lock and SDK
+match. Otherwise it enforces the frozen `live_sdk` from the reviewed plan and
+uses `directory_groups`, preserving every discovered test. Singleton/feedback
+selection is historical. The runner's `execution_plan` is authoritative.
+Historical comparison receipts do not prove performance of the current corpus.
+Owner decision B5 removed this full-suite runner from release source attestation;
+its standalone checks remain available without restoring that release gate.
 
 ## 2026-10-20: historical complete-corpus proposal
 
