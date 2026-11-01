@@ -32,7 +32,8 @@ class CoverageRunnerTests(unittest.TestCase):
             "core/storage/persisted_schema", "core/storage/settings_service_schema",
             "governance/mihomo_fork_ledger",
             "core/storage/subscription_reset_operation_store", "core/storage/tun_datapath_accel_latch",
-            *[f"services/case_{i}" for i in range(493)],
+            "services/rotating_log_file",
+            *[f"services/case_{i}" for i in range(492)],
         ]
         for name in names:
             path = self.root / "test" / (name + "_test.dart")
@@ -73,6 +74,7 @@ isolated={
  'test/core/storage/persisted_schema_test.dart','test/core/storage/settings_service_schema_test.dart',
  'test/governance/mihomo_fork_ledger_test.dart','test/core/storage/subscription_reset_operation_store_test.dart',
  'test/core/storage/tun_datapath_accel_latch_test.dart',
+ 'test/services/rotating_log_file_test.dart',
 }
 ordinary=bool(files) and all(path not in isolated for path in files)
 if os.environ.get('CACHE_LOG'):
