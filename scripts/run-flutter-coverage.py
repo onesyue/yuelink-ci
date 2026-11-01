@@ -31,6 +31,9 @@ ISOLATED = REQUIRED_TESTS | {
     "test/governance/mihomo_fork_ledger_test.dart",
     "test/core/storage/subscription_reset_operation_store_test.dart",
     "test/core/storage/tun_datapath_accel_latch_test.dart",
+    # flutter_tester segfaults at process shutdown after all tests pass when
+    # co-scheduled under --coverage (group 16 timeout, Build YueLink 41320915784).
+    "test/services/rotating_log_file_test.dart",
 }
 PLAN = Path(__file__).resolve().parents[1] / "tests/fixtures/flutter-coverage-groups-20261028.json"
 # This accepted control is immutable. A corrupt plan must not select a different
