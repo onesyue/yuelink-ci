@@ -16,6 +16,8 @@ for name in \
   KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD \
   UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64 \
   UPDATE_MANIFEST_ED25519_PUBLIC_KEY_B64 \
+  CLIENT_CONFIG_ED25519_PRIVATE_KEY_B64 \
+  CLIENT_CONFIG_ED25519_PUBLIC_KEY_B64 \
   YUEOPS_KEYVAULT_BREAKGLASS_RECIPIENT \
   YUEOPS_KEYVAULT_VERIFIER_RECIPIENT; do
   [[ -n ${!name:-} ]] || {
@@ -56,6 +58,8 @@ printf '%s' "$KEYSTORE_BASE64" | base64 --decode \
   >"$stage/payload/yuelink-android-keystore"
 printf '%s\n' "$UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64" \
   >"$stage/payload/yuelink-updater-seed"
+printf '%s\n' "$CLIENT_CONFIG_ED25519_PRIVATE_KEY_B64" \
+  >"$stage/payload/yuelink-client-config-seed"
 {
   printf 'KEYSTORE_PASSWORD=%s\n' "$KEYSTORE_PASSWORD"
   printf 'KEY_ALIAS=%s\n' "$KEY_ALIAS"
@@ -76,26 +80,33 @@ android_cert_sha256=$(
   exit 1
 }
 
-# Derive the Ed25519 public key from the 32-byte seed using its RFC 8410 PKCS#8
-# wrapper and bind it to the public key embedded by YueLink clients.
-seed_der=$work/updater-private.der
-{
-  printf '\x30\x2e\x02\x01\x00\x30\x05\x06\x03\x2b\x65\x70\x04\x22\x04\x20'
-  printf '%s' "$UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64" | base64 --decode
-} >"$seed_der"
-[[ $(stat -c '%s' "$seed_der") == 48 ]] || {
-  printf 'updater signing seed is not 32 raw bytes\n' >&2
-  exit 1
+# Derive each Ed25519 public key from its 32-byte seed using the RFC 8410
+# PKCS#8 wrapper and bind it to the public key embedded by YueLink clients.
+verify_ed25519_seed() {
+  local label=$1 seed_b64=$2 expected_public=$3 der derived
+  der=$work/$label-private.der
+  {
+    printf '\x30\x2e\x02\x01\x00\x30\x05\x06\x03\x2b\x65\x70\x04\x22\x04\x20'
+    printf '%s' "$seed_b64" | base64 --decode
+  } >"$der"
+  [[ $(stat -c '%s' "$der") == 48 ]] || {
+    printf '%s signing seed is not 32 raw bytes\n' "$label" >&2
+    exit 1
+  }
+  derived=$(
+    openssl pkey -inform DER -in "$der" -pubout -outform DER 2>/dev/null \
+      | tail -c 32 | base64 -w0
+  )
+  rm -f -- "$der"
+  [[ $derived == "$expected_public" ]] || {
+    printf '%s signing seed does not match the audited client trust root\n' "$label" >&2
+    exit 1
+  }
 }
-derived_updater_public=$(
-  openssl pkey -inform DER -in "$seed_der" -pubout -outform DER 2>/dev/null \
-    | tail -c 32 | base64 -w0
-)
-[[ $derived_updater_public == "$UPDATE_MANIFEST_ED25519_PUBLIC_KEY_B64" ]] || {
-  printf 'updater signing seed does not match the audited client trust root\n' >&2
-  exit 1
-}
-rm -f -- "$seed_der"
+verify_ed25519_seed updater \
+  "$UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64" "$UPDATE_MANIFEST_ED25519_PUBLIC_KEY_B64"
+verify_ed25519_seed client-config \
+  "$CLIENT_CONFIG_ED25519_PRIVATE_KEY_B64" "$CLIENT_CONFIG_ED25519_PUBLIC_KEY_B64"
 
 # Exercise store password, alias and private-key password together.
 keytool -importkeystore -noprompt \
@@ -118,6 +129,7 @@ manifest=$stage/MANIFEST
   for slot in \
     yuelink-android-keystore \
     yuelink-updater-seed \
+    yuelink-client-config-seed \
     yuelink-keystore-credentials; do
     path=$stage/payload/$slot
     digest=$(sha256sum "$path"); digest=${digest%% *}
@@ -125,6 +137,7 @@ manifest=$stage/MANIFEST
     case "$slot" in
       yuelink-android-keystore) source_path='yuelink-ci:KEYSTORE_BASE64' ;;
       yuelink-updater-seed) source_path='yuelink-ci:UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64' ;;
+      yuelink-client-config-seed) source_path='yuelink-ci:CLIENT_CONFIG_ED25519_PRIVATE_KEY_B64' ;;
       yuelink-keystore-credentials) source_path='yuelink-ci:KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD' ;;
     esac
     printf '%s\t%s\t%s\t%s\n' "$slot" "$source_path" "$digest" "$bytes"

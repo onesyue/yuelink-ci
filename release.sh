@@ -164,6 +164,16 @@ PUBLIC_TAG_MESSAGE="$(printf \
 # 工作区。后者可能有尚未进入 tag 的修改；用它做 sync check 会让公开 tag
 # 带着“未来 workflow”去 checkout 旧私仓源码，直到 runner 缺脚本才爆炸。
 SOURCE_SNAPSHOT="$(mktemp -d "${TMPDIR:-/tmp}/yuelink-ci-source-tag.XXXXXX")"
+# Fetch the exact source tag over HTTPS using gh's credential helper. Never
+# print authentication data or fall back to a sibling working tree.
+git init -q "$SOURCE_SNAPSHOT"
+if ! git -C "$SOURCE_SNAPSHOT" -c credential.helper= \
+  -c 'credential.helper=!gh auth git-credential' fetch --quiet --no-tags \
+  https://github.com/onesyue/yuelink.git "refs/tags/$TAG:refs/tags/$TAG" 2>/dev/null; then
+  echo '::error::cannot fetch private source tag; release admission rejected' >&2
+  exit 1
+fi
+bash scripts/verify-source-version.sh "$SOURCE_SNAPSHOT" "$TAG" "$SOURCE_COMMIT"
 mkdir -p "$SOURCE_SNAPSHOT/.github/workflows"
 gh_read gh api \
   "repos/onesyue/yuelink/contents/.github/workflows/build.yml?ref=$TAG" \

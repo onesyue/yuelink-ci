@@ -42,6 +42,7 @@ class KeyVaultWorkstationBackupContractTest(unittest.TestCase):
             "KEY_ALIAS",
             "KEY_PASSWORD",
             "UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64",
+            "CLIENT_CONFIG_ED25519_PRIVATE_KEY_B64",
         ):
             self.assertIn(f"secrets.{name}", workflow)
         self.assertNotIn("set -x", builder)
@@ -54,6 +55,7 @@ class KeyVaultWorkstationBackupContractTest(unittest.TestCase):
         workflow = WORKFLOW.read_text()
         builder = BUILDER.read_text()
         self.assertIn("vars.UPDATE_MANIFEST_ED25519_PUBLIC_KEY_B64", workflow)
+        self.assertIn("vars.CLIENT_CONFIG_ED25519_PUBLIC_KEY_B64", workflow)
         self.assertIn(
             "2b117c57ef715f3adb7aa4226a8d23de9a6607eff9f0d3f4df2dbdaa069148cc",
             builder,
@@ -63,6 +65,7 @@ class KeyVaultWorkstationBackupContractTest(unittest.TestCase):
         for slot in (
             "yuelink-android-keystore",
             "yuelink-updater-seed",
+            "yuelink-client-config-seed",
             "yuelink-keystore-credentials",
         ):
             self.assertIn(slot, builder)

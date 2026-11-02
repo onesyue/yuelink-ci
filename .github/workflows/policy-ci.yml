@@ -4,7 +4,12 @@ on:
   pull_request: {}
   push:
     branches: [master]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      yuelink_sha:
+        description: Exact yuelink PR commit SHA to validate (optional)
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -58,3 +63,27 @@ jobs:
             --retry 2 --retry-all-errors \
             https://yuetong.app/update.json -o "$tmp"
           python3 scripts/verify-update-manifest.py "$tmp"
+
+  source_version:
+    name: YueLink source version gate
+    if: github.event_name == 'workflow_dispatch' && inputs.yuelink_sha != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Validate exact source input
+        env:
+          SOURCE_SHA: ${{ inputs.yuelink_sha }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+      - name: Checkout requested YueLink commit and release tags
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ inputs.yuelink_sha }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require version bump for shipped source changes
+        run: bash scripts/check-version-bump.sh --ref HEAD
+      - name: Test version gate failure paths
+        run: python3 -m unittest discover -s scripts -p test_version_gate.py -v
