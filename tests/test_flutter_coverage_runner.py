@@ -81,13 +81,16 @@ if os.environ.get('CACHE_LOG'):
     Path(os.environ['CACHE_LOG']).open('a').write(('1' if cache.exists() else '0')+' '+str(len(files))+' '+' '.join(files)+chr(10))
 if os.environ.get('SPLIT_TIMEOUT')=='always' and len(files)>1:
     sys.exit(124)
-if os.environ.get('SPLIT_TIMEOUT')=='once' and len(files)>1:
+if os.environ.get('SPLIT_TIMEOUT')=='once' and len(files)>1 and (not os.environ.get('SPLIT_SIZE') or len(files)==int(os.environ['SPLIT_SIZE'])):
     marker=Path('split-once')
     if not marker.exists():
         marker.write_text('1')
         if os.environ.get('BEFORE_TIMEOUT'):
             print(os.environ['BEFORE_TIMEOUT'], flush=True)
         sys.exit(124)
+if os.environ.get('HALF_ENGINE_TIMEOUT') and '.half' in args[args.index('--coverage-path')+1]:
+    print(os.environ['BEFORE_TIMEOUT'], flush=True)
+    sys.exit(124)
 if not (os.environ.get('ALLOW_ORDINARY_CACHE') and ordinary):
     assert not cache.exists(), 'prior compiler kernel was reused'
 cache.parent.mkdir(exist_ok=True)
@@ -954,6 +957,85 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
                 self.assertFalse(list(out.glob("*.half*.jsonl")))
                 self.assertNotEqual(json.loads((out / "execution.json").read_text())["status"], "COMPLETE")
                 self.assertFalse((self.root / "coverage/lcov.info").exists())
+
+    def engine_timeout_events(self, message):
+        return [
+            [{"event": "test.startedProcess", "params": {}}],
+            {"type": "suite", "suite": {"id": 0, "path": "test/example_test.dart"}},
+            {"type": "testStart", "test": {"id": 1, "suiteID": 0,
+                                              "name": "loading test/example_test.dart"}},
+            {"type": "testDone", "testID": 1, "result": "success"},
+            {"type": "error", "testID": 1, "error": message, "isFailure": False},
+        ]
+
+    def prepare_timeout_groups(self):
+        # Two files ensure the split retries exercise the per-file bound.
+        for name in ("a", "b"):
+            path = self.root / f"test/timeout/{name}_test.dart"
+            path.parent.mkdir(exist_ok=True)
+            path.write_text("void main() {}\n")
+        subprocess.run(["git", "add", "test"], cwd=self.root, check=True)
+        self.commit_fixture(self.root, "live timeout corpus")
+        return RUNNER.directory_groups(RUNNER.partition(self.root))
+
+    def run_engine_timeout(self, groups, events, **extra):
+        return self.run_gate(
+            SPLIT_TIMEOUT="once", SPLIT_SIZE="2",
+            BEFORE_TIMEOUT="\n".join(json.dumps(event) for event in events),
+            FIXTURE_GROUPS=str(len(groups)), YUELINK_COVERAGE_MAX_WORKERS="1", **extra)
+
+    def test_engine_shutdown_timeout_recovers_with_auditable_halves(self):
+        groups = self.prepare_timeout_groups()
+        for message in sorted(RUNNER.ENGINE_SHUTDOWN_ERRORS):
+            with self.subTest(message=message):
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                events = self.engine_timeout_events(message)
+                events.append({"type": "done", "success": False})
+                result = self.run_engine_timeout(groups, events)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                out = self.root / "coverage/source-gate"
+                original, = out.glob("*.initial.jsonl")
+                self.assertEqual([json.loads(line) for line in original.read_text().splitlines()], events)
+                index = original.name.split('.')[0]
+                self.assertEqual(json.loads((out / f"{index}.timeout.json").read_text()), {
+                    "classification": "engine_shutdown_fault", "report": original.name})
+                for part in (0, 1):
+                    attempt = json.loads((out / f"{index}.half{part}.execution.json").read_text())
+                    self.assertEqual(attempt["exit_code"], 0)
+                    self.assertEqual(len(attempt["files"]), 1)
+                self.assertEqual(json.loads((out / "execution.json").read_text())["status"], "COMPLETE")
+
+    def test_engine_shutdown_timeout_rejects_mixed_unknown_and_nonloading_errors(self):
+        groups = self.prepare_timeout_groups()
+        engine = self.engine_timeout_events("getSourceReport: (112) Service has disappeared")
+        nonloading = json.loads(json.dumps(engine))
+        nonloading[2]["test"]["name"] = "ordinary test"
+        for events in (
+            engine + [{"type": "testDone", "testID": 2, "result": "failure"}],
+            engine + [{"type": "error", "testID": 1, "error": "real failure", "isFailure": True}],
+            self.engine_timeout_events("getSourceReport: unknown error"),
+            nonloading,
+            [{"type": "done", "success": False}] + engine,
+        ):
+            with self.subTest(events=events):
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                result = self.run_engine_timeout(groups, events)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("recorded a failure", result.stderr)
+                out = self.root / "coverage/source-gate"
+                self.assertFalse(list(out.glob("*.half*.jsonl")))
+                self.assertFalse((self.root / "coverage/lcov.info").exists())
+
+    def test_single_file_half_engine_timeout_stops_and_names_file(self):
+        groups = self.prepare_timeout_groups()
+        result = self.run_engine_timeout(groups, self.engine_timeout_events(
+            "Shell subprocess crashed with segmentation fault."), HALF_ENGINE_TIMEOUT="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("engine shutdown fault timed out for file test/timeout/a_test.dart", result.stderr)
+        self.assertIn("single-file retry limit reached", result.stderr)
+        out = self.root / "coverage/source-gate"
+        self.assertEqual(len(list(out.glob("*.half*.jsonl"))), 1)
+        self.assertFalse((self.root / "coverage/lcov.info").exists())
 
     def test_timeout_halves_must_each_have_terminal_and_coverage(self):
         self.admitted_singleton_corpus()
