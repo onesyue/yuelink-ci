@@ -1,0 +1,38 @@
+You are an independent reviewer. Post-merge review of PR yuelink-ci-26 (ci(coverage): isolate rotating_log_file_test (flutter_tester shutdown segfault in group 16)	2026-11-01T23:43:22Z	7c1c3f41). Review the diff below for correctness, security, and whether it weakens any gate. Note: yueto-ci#56 merged while policy CI failed (missing PyYAML for test_postgres_lock_diagnostics), fixed forward by #58. Output: verdict APPROVE / APPROVE_WITH_NOTES / REQUEST_CHANGES, then findings with file:line. Be concise.
+
+diff --git a/scripts/run-flutter-coverage.py b/scripts/run-flutter-coverage.py
+index 738f534..cc3cbb3 100644
+--- a/scripts/run-flutter-coverage.py
++++ b/scripts/run-flutter-coverage.py
+@@ -31,6 +31,9 @@
+     "test/governance/mihomo_fork_ledger_test.dart",
+     "test/core/storage/subscription_reset_operation_store_test.dart",
+     "test/core/storage/tun_datapath_accel_latch_test.dart",
++    # flutter_tester segfaults at process shutdown after all tests pass when
++    # co-scheduled under --coverage (group 16 timeout, Build YueLink 41320915784).
++    "test/services/rotating_log_file_test.dart",
+ }
+ PLAN = Path(__file__).resolve().parents[1] / "tests/fixtures/flutter-coverage-groups-20261028.json"
+ # This accepted control is immutable. A corrupt plan must not select a different
+diff --git a/tests/test_flutter_coverage_runner.py b/tests/test_flutter_coverage_runner.py
+index d795e40..0addb33 100644
+--- a/tests/test_flutter_coverage_runner.py
++++ b/tests/test_flutter_coverage_runner.py
+@@ -32,7 +32,8 @@ def setUp(self):
+             "core/storage/persisted_schema", "core/storage/settings_service_schema",
+             "governance/mihomo_fork_ledger",
+             "core/storage/subscription_reset_operation_store", "core/storage/tun_datapath_accel_latch",
+-            *[f"services/case_{i}" for i in range(493)],
++            "services/rotating_log_file",
++            *[f"services/case_{i}" for i in range(492)],
+         ]
+         for name in names:
+             path = self.root / "test" / (name + "_test.dart")
+@@ -73,6 +74,7 @@ def setUp(self):
+  'test/core/storage/persisted_schema_test.dart','test/core/storage/settings_service_schema_test.dart',
+  'test/governance/mihomo_fork_ledger_test.dart','test/core/storage/subscription_reset_operation_store_test.dart',
+  'test/core/storage/tun_datapath_accel_latch_test.dart',
++ 'test/services/rotating_log_file_test.dart',
+ }
+ ordinary=bool(files) and all(path not in isolated for path in files)
+ if os.environ.get('CACHE_LOG'):
