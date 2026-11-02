@@ -234,6 +234,53 @@ def cases(report: Path, worker: Path, expected: list[str], counter) -> tuple[int
     return count, result
 
 
+ENGINE_SHUTDOWN_ERRORS = {
+    "Shell subprocess crashed with segmentation fault",
+    "Shell subprocess crashed with segmentation fault.",
+    "getSourceReport: (112) Service has disappeared",
+    "getSourceReport: (-32000) Service connection disposed",
+}
+
+
+def timeout_classification(report: Path) -> str:
+    """Admit only known loading/coverage shutdown errors, never test failures."""
+    suites, started = {}, {}
+    engine_errors = 0
+    for line in report.read_text().splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        kind = event.get("type")
+        if kind == "suite":
+            suite = event.get("suite", {})
+            suites[suite.get("id")] = suite.get("path")
+        elif kind == "testStart":
+            test = event.get("test", {})
+            started[test.get("id")] = test
+        elif kind == "testDone" and event.get("result") in {"failure", "error"}:
+            return "recorded_failure"
+        elif kind == "error":
+            test = started.get(event.get("testID"), {})
+            path = suites.get(test.get("suiteID"))
+            if (not isinstance(path, str) or not path
+                    or test.get("name") != "loading " + path
+                    or event.get("error") not in ENGINE_SHUTDOWN_ERRORS
+                    or event.get("isFailure") is not False):
+                return "recorded_failure"
+            engine_errors += 1
+        elif kind == "done" and event.get("success") is False:
+            # A failed summary can be explained only by an already observed
+            # loading crash; any failed test terminal still vetoes recovery.
+            if not engine_errors:
+                return "recorded_failure"
+    if engine_errors:
+        return "engine_shutdown_fault"
+    return "no_recorded_failure"
+
+
 def coverage_rows(path: Path, worker: Path) -> set:
     rows = set()
     source = None
@@ -507,6 +554,11 @@ def main() -> None:
                 half_result = invoke(index, half, half_report, half_lcov)
                 if half_result.returncode:
                     clear_compiler_cache()
+                    if (half_result.returncode == 124 and len(half) == 1
+                            and timeout_classification(half_report) == "engine_shutdown_fault"):
+                        raise ValueError(
+                            f"engine shutdown fault timed out for file {half[0]}; "
+                            f"single-file retry limit reached; see {half_report.name}")
                     raise subprocess.CalledProcessError(half_result.returncode, half_result.args)
                 cases(half_report, worker, half, counter)
                 if not half_lcov.is_file():
@@ -551,18 +603,12 @@ def main() -> None:
                     shutil.copyfile(report, original)
                     if lcov.is_file():
                         shutil.copyfile(lcov, out / f"{index}.initial.info")
-                    for line in original.read_text().splitlines():
-                        try:
-                            event = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        if isinstance(event, dict) and (
-                            event.get("type") == "error"
-                            or (event.get("type") == "testDone"
-                                and event.get("result") in {"failure", "error"})
-                            or (event.get("type") == "done" and event.get("success") is False)
-                        ):
-                            raise ValueError(f"timed-out group {index} recorded a failure; see {original.name}")
+                    classification = timeout_classification(original)
+                    (out / f"{index}.timeout.json").write_text(json.dumps({
+                        "classification": classification, "report": original.name,
+                    }, indent=2) + "\n")
+                    if classification == "recorded_failure":
+                        raise ValueError(f"timed-out group {index} recorded a failure; see {original.name}")
                     stitch(index, tests, report, lcov)
                 elif result.returncode:
                     clear_compiler_cache()
