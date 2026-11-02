@@ -1,7 +1,9 @@
 # YueLink version and release drift gates
 
 The source repository owns `scripts/check-version-bump.sh`. Land its version-gate
-PR before relying on these consumers; absence is an error, never a skipped gate.
+PR #51, including service-path fix
+`a0c86ccb0310738bd7c26a187dc7dc8d305b55d0`, before relying on these consumers;
+absence is an error, never a skipped gate.
 No workflow is added to the private repository.
 
 ## Pre-merge validation
@@ -28,11 +30,14 @@ this change addresses database schema/grants or the yueto-ci packaging seal.
 
 `release.sh` fetches the immutable private tag into its temporary source snapshot
 via HTTPS and the existing gh authentication. Before creating any public tag it
-requires `git verify-tag`, the attested source SHA, and an exact stable version
-match against the pubspec at that tag. The local Git signing trust configuration
-must trust the source tag signer. Missing trust, unsigned tags, version mismatch
-or fetch failures stop admission with an explicit error. Existing GitHub signature
-verification and attestation checks remain in force.
+requires `git -c gpg.minTrustLevel=fully verify-tag`, the attested source SHA,
+and an exact stable version match against the pubspec at that tag. The local Git
+signing trust configuration must trust the source tag signer at least fully. OpenPGP keys with undefined,
+never or marginal trust are rejected even when their signature is valid; SSH
+signers must be authorized by `gpg.ssh.allowedSignersFile`. The command-line
+minimum overrides weaker local Git configuration. Missing trust, unsigned tags,
+version mismatch or fetch failures stop admission with an explicit error.
+Existing GitHub signature verification and attestation checks remain in force.
 
 ## Read-only drift monitor
 
@@ -59,3 +64,8 @@ Targeted regression command:
 ```bash
 python3 -m unittest discover -s tests -p test_version_release_gates.py -v
 ```
+
+The offline suite includes real OpenPGP and SSH signatures and a service-only
+Git history through both source admission and drift reporting. The source checker
+fixture is pinned in `tests/fixtures/source-version-gate/README.md`; set
+`SOURCE_VERSION_GATE_REPO=/path/to/yuelink` to test a source checkout directly.

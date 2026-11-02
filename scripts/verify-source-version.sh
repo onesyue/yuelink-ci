@@ -6,7 +6,7 @@ tag="${2:?missing tag}"
 source_sha="${3:?missing source SHA}"
 [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
 [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
-if ! git -C "$repo" verify-tag "$tag" >/dev/null 2>&1; then
+if ! git -C "$repo" -c gpg.minTrustLevel=fully verify-tag "$tag" >/dev/null 2>&1; then
   echo '::error::source tag signature verification failed (git verify-tag)' >&2
   exit 1
 fi

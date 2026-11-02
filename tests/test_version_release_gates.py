@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import tempfile
 import time
 import unittest
@@ -63,6 +64,59 @@ class SourceTagTests(unittest.TestCase):
         self.assertEqual(self.verify('v1.2.3').returncode, 1)
 
 
+class OpenPGPTrustTests(unittest.TestCase):
+    """Use separate keyrings so a valid signature does not imply owner trust."""
+
+    git = SourceTagTests.git
+    verify = SourceTagTests.verify
+
+    def setUp(self):
+        SourceTagTests.setUp(self)
+        from unittest.mock import patch
+        signing = self.repo / 'signing'
+        verifying = self.repo / 'verifying'
+        for home in (signing, verifying):
+            home.mkdir(mode=0o700)
+        self.addCleanup(subprocess.run, ['gpgconf', '--homedir', str(signing), '--kill', 'all'],
+                        capture_output=True)
+        self.addCleanup(subprocess.run, ['gpgconf', '--homedir', str(verifying), '--kill', 'all'],
+                        capture_output=True)
+        self.gpg(signing, '--passphrase', '', '--quick-generate-key',
+                 'Gate Test <test@example.invalid>', 'ed25519', 'sign', '0')
+        records = self.gpg(signing, '--with-colons', '--list-keys').stdout.decode()
+        fingerprint = next(line.split(':')[9] for line in records.splitlines()
+                           if line.startswith('fpr:'))
+        self.fingerprint = fingerprint
+        self.git('config', 'gpg.format', 'openpgp')
+        self.git('config', 'user.signingkey', fingerprint)
+        # Explicitly permissive local config must not weaken release admission.
+        self.git('config', 'gpg.minTrustLevel', 'undefined')
+        with patch.dict(os.environ, GNUPGHOME=str(signing)):
+            self.git('tag', '-s', 'v1.2.3', '-m', 'release')
+        public = self.gpg(signing, '--export', fingerprint).stdout
+        self.gpg(verifying, '--import', input=public)
+        self.verifying = verifying
+        self.env_patch = patch.dict(os.environ, GNUPGHOME=str(verifying))
+        self.env_patch.start()
+        self.addCleanup(self.env_patch.stop)
+
+    def gpg(self, home, *args, input=None):
+        return subprocess.run(['gpg', '--homedir', str(home), '--batch', '--pinentry-mode',
+                               'loopback', *args], input=input, capture_output=True, check=True)
+
+    def test_untrusted_openpgp_signature_fails_then_authorized_signer_passes(self):
+        raw = subprocess.run(['git', 'verify-tag', '--raw', 'v1.2.3'], cwd=self.repo,
+                             text=True, capture_output=True)
+        self.assertEqual(raw.returncode, 0, raw.stderr)
+        self.assertIn('TRUST_UNDEFINED', raw.stderr)
+        result = self.verify('v1.2.3')
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn('signature verification failed', result.stderr)
+        self.gpg(self.verifying, '--import-ownertrust',
+                 input=f'{self.fingerprint}:6:\n'.encode())
+        self.assertEqual(self.verify('v1.2.3').returncode, 0)
+
+
 class DriftTests(unittest.TestCase):
     def run_drift(self, *, age=None, channel='1.2.3', broken=None):
         with tempfile.TemporaryDirectory() as tmp:
@@ -114,6 +168,57 @@ class DriftTests(unittest.TestCase):
              patch.object(module.subprocess, 'run', return_value=result), \
              patch.object(module.urllib.request, 'urlopen', side_effect=OSError('offline')):
             self.assertEqual(module.main(), 1)
+
+
+class SourceServiceIntegrationTests(unittest.TestCase):
+    def test_service_only_change_fails_source_admission_and_old_change_fails_drift(self):
+        source = os.environ.get('SOURCE_VERSION_GATE_REPO')
+        scripts = Path(source) / 'scripts' if source else ROOT / 'tests/fixtures/source-version-gate'
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+
+            def git(*args, env=None):
+                return subprocess.check_output(['git', *args], cwd=repo, env=env,
+                                               stderr=subprocess.PIPE).decode().strip()
+
+            git('init', '-q')
+            for key, value in (('user.name', 'Test'), ('user.email', 'test@example.invalid'),
+                               ('commit.gpgsign', 'false'), ('tag.gpgsign', 'false'),
+                               ('core.hooksPath', '/dev/null')):
+                git('config', key, value)
+            (repo / 'scripts').mkdir()
+            for name in ('check-version-bump.sh', 'version_gate.py'):
+                shutil.copyfile(scripts / name, repo / 'scripts' / name)
+            (repo / 'pubspec.yaml').write_text('version: 1.2.3+4\n')
+            (repo / 'service').mkdir()
+            service = repo / 'service/main.go'
+            service.write_text('package main\n')
+            git('add', '.')
+            git('commit', '-qm', 'baseline')
+            git('tag', 'v1.2.3')
+            manifest = repo / 'manifest.json'
+            manifest.write_text(json.dumps({'version': '1.2.3'}))
+            gate = ['bash', str(repo / 'scripts/check-version-bump.sh'), '--ref', 'HEAD']
+            drift = ['bash', str(ROOT / 'scripts/release-drift.sh'), str(repo),
+                     '--no-fetch', '--manifest-file', str(manifest)]
+            git('update-ref', 'refs/remotes/origin/master', 'HEAD')
+            for command in (gate, drift):
+                result = subprocess.run(command, cwd=repo, text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            service.write_text('package main\nfunc main() {}\n')
+            git('add', 'service/main.go')
+            git('commit', '-qm', 'native service change', env=dict(
+                os.environ, GIT_AUTHOR_DATE='2020-01-01T00:00:00Z',
+                GIT_COMMITTER_DATE='2020-01-01T00:00:00Z'))
+            git('update-ref', 'refs/remotes/origin/master', 'HEAD')
+            result = subprocess.run(gate, cwd=repo, text=True, capture_output=True)
+            self.assertEqual(result.returncode, 1, result.stdout)
+            self.assertIn('bump pubspec version', result.stderr)
+            report = subprocess.check_output(gate + ['--report-json'], cwd=repo, text=True)
+            self.assertEqual(json.loads(report)['first_shipped_at'], 1577836800)
+            result = subprocess.run(drift, cwd=repo, text=True, capture_output=True)
+            self.assertEqual(result.returncode, 1, result.stdout)
+            self.assertIn('more than 24h', result.stderr)
 
 
 class WiringTests(unittest.TestCase):
