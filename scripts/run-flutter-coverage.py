@@ -543,26 +543,45 @@ def main() -> None:
             return result
 
         def stitch(index: int, tests: list[str], report: Path, lcov: Path) -> None:
-            """Split one timed-out directory group in half and retry each half once."""
-            mid = len(tests) // 2
+            """Bisect engine-fault timeouts and stitch validated successful leaves."""
+            leaves: list[tuple[Path, Path]] = []
+
+            def split(files: list[str], path: str = "") -> None:
+                mid = len(files) // 2
+                for part, half in enumerate((files[:mid], files[mid:])):
+                    half_path = f"{path}{part}"
+                    attempt = f"{index}.half{half_path}"
+                    half_report = out / f"{attempt}.jsonl"
+                    half_lcov = out / f"{attempt}.info"
+                    half_result = invoke(index, half, half_report, half_lcov)
+                    if half_result.returncode:
+                        clear_compiler_cache()
+                        if half_result.returncode == 124:
+                            original = out / f"{attempt}.initial.jsonl"
+                            shutil.copyfile(half_report, original)
+                            classification = timeout_classification(original)
+                            (out / f"{attempt}.timeout.json").write_text(json.dumps({
+                                "classification": classification, "report": original.name,
+                            }, indent=2) + "\n")
+                            if classification == "engine_shutdown_fault":
+                                if len(half) == 1:
+                                    raise ValueError(
+                                        f"engine shutdown fault timed out for file {half[0]}; "
+                                        f"single-file retry limit reached; see {original.name}")
+                                split(half, half_path)
+                                continue
+                        raise subprocess.CalledProcessError(half_result.returncode, half_result.args)
+                    cases(half_report, worker, half, counter)
+                    if not half_lcov.is_file():
+                        raise ValueError(f"coverage report missing for group {index} half {half_path}")
+                    leaves.append((half_report, half_lcov))
+
+            split(tests)
             parts: list[str] = []
             coverage: list[str] = []
             offset = 0
-            for part, half in enumerate((tests[:mid], tests[mid:])):
-                half_report = out / f"{index}.half{part}.jsonl"
-                half_lcov = out / f"{index}.half{part}.info"
-                half_result = invoke(index, half, half_report, half_lcov)
-                if half_result.returncode:
-                    clear_compiler_cache()
-                    if (half_result.returncode == 124 and len(half) == 1
-                            and timeout_classification(half_report) == "engine_shutdown_fault"):
-                        raise ValueError(
-                            f"engine shutdown fault timed out for file {half[0]}; "
-                            f"single-file retry limit reached; see {half_report.name}")
-                    raise subprocess.CalledProcessError(half_result.returncode, half_result.args)
-                cases(half_report, worker, half, counter)
-                if not half_lcov.is_file():
-                    raise ValueError(f"coverage report missing for group {index} half {part}")
+            for part, (half_report, half_lcov) in enumerate(leaves):
+                max_id = 0
                 rewritten = []
                 for line in half_report.read_text().splitlines():
                     try:
@@ -570,21 +589,27 @@ def main() -> None:
                     except json.JSONDecodeError:
                         rewritten.append(line)
                         continue
+                    if isinstance(event, dict):
+                        for record in (event, event.get("suite", {}), event.get("test", {})):
+                            for key in ("id", "suiteID", "testID"):
+                                if isinstance(record.get(key), int):
+                                    max_id = max(max_id, record[key])
+                        for key in ("suiteID", "testID"):
+                            if key in event:
+                                event[key] += offset
                     if isinstance(event, dict) and event.get("type") == "suite":
                         event["suite"]["id"] += offset
                     elif isinstance(event, dict) and event.get("type") == "testStart":
                         event["test"]["id"] += offset
                         event["test"]["suiteID"] += offset
-                    elif isinstance(event, dict) and event.get("type") == "testDone":
-                        event["testID"] += offset
-                    elif isinstance(event, dict) and event.get("type") == "done" and part == 0:
+                    elif isinstance(event, dict) and event.get("type") == "done" and part != len(leaves) - 1:
                         continue
                     elif isinstance(event, dict) and event.get("type") == "start" and part != 0:
                         continue
                     rewritten.append(json.dumps(event))
                 parts.append("\n".join(rewritten) + ("\n" if rewritten else ""))
                 coverage.append(half_lcov.read_text())
-                offset += 100000
+                offset += max_id + 1
             report.write_text("".join(parts))
             lcov.write_text("".join(coverage))
 

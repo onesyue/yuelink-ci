@@ -401,9 +401,8 @@ jobs:
           CLOUDFLARE_R2_CONFIG_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
         run: bash scripts/ci/release_preflight.sh
 
-      # A timed-out coverage group raises before stitching and its machine
-      # report is otherwise lost with the runner. Keep only the per-group
-      # *.initial.jsonl/.info evidence (test events + LCOV), never other files.
+      # Preserve timeout attempts, half reports and classifications for diagnosis.
+      # Upload only the listed test-event/LCOV evidence patterns, never other files.
       - name: Retain timed-out coverage group evidence
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -412,6 +411,8 @@ jobs:
           path: |
             coverage/source-gate/*.initial.jsonl
             coverage/source-gate/*.initial.info
+            coverage/source-gate/*.half*.jsonl
+            coverage/source-gate/*.timeout.json
           if-no-files-found: ignore
           retention-days: 3
 

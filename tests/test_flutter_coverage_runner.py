@@ -88,9 +88,10 @@ if os.environ.get('SPLIT_TIMEOUT')=='once' and len(files)>1 and (not os.environ.
         if os.environ.get('BEFORE_TIMEOUT'):
             print(os.environ['BEFORE_TIMEOUT'], flush=True)
         sys.exit(124)
-if os.environ.get('HALF_ENGINE_TIMEOUT') and '.half' in args[args.index('--coverage-path')+1]:
-    print(os.environ['BEFORE_TIMEOUT'], flush=True)
-    sys.exit(124)
+if os.environ.get('HALF_ENGINE_TIMEOUT') and '.half' in args[args.index('--coverage-path')+1] and len(files)>int(os.environ.get('HALF_SUCCESS_SIZE', '0')):
+    fault = len(files)<=int(os.environ.get('HALF_FAULT_SIZE', '8'))
+    print(os.environ.get('HALF_TIMEOUT_EVENTS', os.environ['BEFORE_TIMEOUT']) if fault else os.environ['BEFORE_TIMEOUT'], flush=True)
+    sys.exit(int(os.environ.get('HALF_EXIT_CODE', '124')) if fault else 124)
 if not (os.environ.get('ALLOW_ORDINARY_CACHE') and ordinary):
     assert not cache.exists(), 'prior compiler kernel was reused'
 cache.parent.mkdir(exist_ok=True)
@@ -968,9 +969,8 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
             {"type": "error", "testID": 1, "error": message, "isFailure": False},
         ]
 
-    def prepare_timeout_groups(self):
-        # Two files ensure the split retries exercise the per-file bound.
-        for name in ("a", "b"):
+    def prepare_timeout_groups(self, size=2):
+        for name in "abcdefgh"[:size]:
             path = self.root / f"test/timeout/{name}_test.dart"
             path.parent.mkdir(exist_ok=True)
             path.write_text("void main() {}\n")
@@ -980,7 +980,7 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
 
     def run_engine_timeout(self, groups, events, **extra):
         return self.run_gate(
-            SPLIT_TIMEOUT="once", SPLIT_SIZE="2",
+            SPLIT_TIMEOUT="once", SPLIT_SIZE=extra.pop("SPLIT_SIZE", "2"),
             BEFORE_TIMEOUT="\n".join(json.dumps(event) for event in events),
             FIXTURE_GROUPS=str(len(groups)), YUELINK_COVERAGE_MAX_WORKERS="1", **extra)
 
@@ -1034,8 +1034,57 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
         self.assertIn("engine shutdown fault timed out for file test/timeout/a_test.dart", result.stderr)
         self.assertIn("single-file retry limit reached", result.stderr)
         out = self.root / "coverage/source-gate"
-        self.assertEqual(len(list(out.glob("*.half*.jsonl"))), 1)
+        self.assertEqual(len(list(out.glob("*.half*.initial.jsonl"))), 1)
+        classification, = out.glob("*.half*.timeout.json")
+        self.assertEqual(json.loads(classification.read_text())["classification"], "engine_shutdown_fault")
         self.assertFalse((self.root / "coverage/lcov.info").exists())
+
+    def test_nested_engine_shutdown_timeouts_recover_from_successful_leaves(self):
+        groups = self.prepare_timeout_groups(8)
+        events = self.engine_timeout_events("getSourceReport: (112) Service has disappeared")
+        result = self.run_engine_timeout(
+            groups, events, SPLIT_SIZE="8", HALF_ENGINE_TIMEOUT="1", HALF_SUCCESS_SIZE="2")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        out = self.root / "coverage/source-gate"
+        original, = [
+            p for p in out.glob("*.initial.jsonl") if ".half" not in p.name]
+        index = original.name.split(".")[0]
+        for path in ("0", "1"):
+            evidence = out / f"{index}.half{path}.initial.jsonl"
+            self.assertEqual([json.loads(line) for line in evidence.read_text().splitlines()], events)
+            self.assertEqual(json.loads((out / f"{index}.half{path}.timeout.json").read_text()), {
+                "classification": "engine_shutdown_fault", "report": evidence.name})
+        for path in ("00", "01", "10", "11"):
+            attempt = json.loads((out / f"{index}.half{path}.execution.json").read_text())
+            self.assertEqual(attempt["exit_code"], 0)
+            self.assertEqual(len(attempt["files"]), 2)
+        rows = [json.loads(line) for line in (out / f"{index}.jsonl").read_text().splitlines()]
+        for kind, key in (("suite", "suite"), ("testStart", "test")):
+            ids = [row[key]["id"] for row in rows if row.get("type") == kind]
+            self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(sum(row.get("type") == "start" for row in rows), 1)
+        self.assertEqual(sum(row.get("type") == "done" for row in rows), 1)
+        self.assertEqual((out / f"{index}.info").read_text().count("end_of_record"), 4)
+
+    def test_nested_real_failure_and_non_timeout_exit_stop_recovery(self):
+        groups = self.prepare_timeout_groups(8)
+        events = self.engine_timeout_events("Shell subprocess crashed with segmentation fault.")
+        for code, half_events in (("124", events + [{"type": "testDone", "testID": 2, "result": "failure"}]),
+                                  ("7", events)):
+            with self.subTest(code=code):
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                result = self.run_engine_timeout(
+                    groups, events, SPLIT_SIZE="8", HALF_ENGINE_TIMEOUT="1",
+                    HALF_EXIT_CODE=code, HALF_FAULT_SIZE="2", HALF_TIMEOUT_EVENTS="\n".join(map(json.dumps, half_events)))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("CalledProcessError", result.stderr)
+                out = self.root / "coverage/source-gate"
+                self.assertEqual(len(list(out.glob("*.half00.execution.json"))), 1)
+                self.assertFalse(list(out.glob("*.half000.execution.json")))
+                if code == "124":
+                    classification, = out.glob("*.half00.timeout.json")
+                    self.assertEqual(json.loads(classification.read_text())["classification"], "recorded_failure")
+                self.assertFalse((self.root / "coverage/lcov.info").exists())
 
     def test_timeout_halves_must_each_have_terminal_and_coverage(self):
         self.admitted_singleton_corpus()

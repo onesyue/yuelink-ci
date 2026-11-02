@@ -119,6 +119,28 @@ must_replace(
 """,
 "release-checkout")
 
+# Public coverage timeout evidence is restricted to these explicit patterns.
+must_replace(
+    "      - name: Verify live immutable version-prefix bucket lock\n",
+    """      # Preserve timeout attempts, half reports and classifications for diagnosis.
+      # Upload only the listed test-event/LCOV evidence patterns, never other files.
+      - name: Retain timed-out coverage group evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-timeout-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            coverage/source-gate/*.initial.jsonl
+            coverage/source-gate/*.initial.info
+            coverage/source-gate/*.half*.jsonl
+            coverage/source-gate/*.timeout.json
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Verify live immutable version-prefix bucket lock
+""",
+    "coverage-timeout-evidence")
+
 # Public dependency caches bind the reviewed SDK identity and lockfile.
 # Fail closed on an SDK bump until the evidence-backed plan is updated.
 plan = json.loads(Path("tests/fixtures/flutter-coverage-groups-20261028.json").read_text())
