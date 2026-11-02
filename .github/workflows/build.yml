@@ -288,7 +288,7 @@ jobs:
           python3 scripts/ci/verify_gradle_wrapper_supply_chain.py
           python3 scripts/ci/test_gradle_wrapper_supply_chain.py
 
-      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@25d71e2ab4d5c16695e569c6011ddbdc66ab221f # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           # 2026-08-31 reviewed decision — verified-artifact caches are ON in
@@ -569,7 +569,7 @@ jobs:
           restore-keys: |
             yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-gocache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-
 
-      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@25d71e2ab4d5c16695e569c6011ddbdc66ab221f # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
@@ -1873,7 +1873,7 @@ jobs:
 
       - name: Set up Flutter for release-candidate verification
         if: needs.preflight.outputs.tag_kind == 'stable'
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@25d71e2ab4d5c16695e569c6011ddbdc66ab221f # pinned installer v1
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           # Cache ON — reviewed 2026-08-31 decision, see the preflight
