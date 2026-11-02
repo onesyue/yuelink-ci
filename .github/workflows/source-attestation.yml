@@ -91,6 +91,9 @@ jobs:
           }
           printf 'source_sha=%s\nrelease_tag=v%s\n' "$SOURCE_SHA" "$version" >> "$GITHUB_OUTPUT"
 
+      - name: Require version bump for shipped source changes
+        run: bash scripts/check-version-bump.sh --ref HEAD
+
       - name: Verify signed native QUIC source export
         run: python3 core/mihomo/third_party/verify_quic_source.py
 
