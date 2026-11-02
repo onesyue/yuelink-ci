@@ -1,0 +1,27 @@
+You are an independent reviewer. Post-merge review of PR yuelink-ci-28 (ci(build): retain timed-out coverage group *.initial.jsonl on release-gate failure	2026-11-02T01:19:38Z	ed97bb21). Review the diff below for correctness, security, and whether it weakens any gate. Note: yueto-ci#56 merged while policy CI failed (missing PyYAML for test_postgres_lock_diagnostics), fixed forward by #58. Output: verdict APPROVE / APPROVE_WITH_NOTES / REQUEST_CHANGES, then findings with file:line. Be concise.
+
+diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
+index c2e980a..e55ffe7 100644
+--- a/.github/workflows/build.yml
++++ b/.github/workflows/build.yml
+@@ -401,6 +401,20 @@ jobs:
+           CLOUDFLARE_R2_CONFIG_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
+         run: bash scripts/ci/release_preflight.sh
+ 
++      # A timed-out coverage group raises before stitching and its machine
++      # report is otherwise lost with the runner. Keep only the per-group
++      # *.initial.jsonl/.info evidence (test events + LCOV), never other files.
++      - name: Retain timed-out coverage group evidence
++        if: failure()
++        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
++        with:
++          name: coverage-timeout-evidence-${{ github.run_id }}-${{ github.run_attempt }}
++          path: |
++            coverage/source-gate/*.initial.jsonl
++            coverage/source-gate/*.initial.info
++          if-no-files-found: ignore
++          retention-days: 3
++
+       - name: Verify live immutable version-prefix bucket lock
+         if: startsWith(github.ref, 'refs/tags/')
+         shell: bash
