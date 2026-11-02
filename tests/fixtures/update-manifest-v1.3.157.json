@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.157",
+  "channel": "stable",
+  "publishedAt": "2026-10-27T06:49:41Z",
+  "expiresAt": "2026-12-01T06:49:41Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "活动到期自动下线。\n\n- 公告卡片与已打开的活动详情随截止时间自动隐藏。\n- 离线消息保留活动截止时间，旧缓存不再继续展示过期活动。\n- 返回客户端或下拉刷新时同步最新公告，普通长期公告与已读记录保留。\n- 套餐卡片展示该套餐自己的设备数，不限设备显示为「不限」。\n- 账户流量在配套总览没带字节字段时仍用面板配额；`transfer_enable`、`u`、`d` 按字节读取。\n- 签到结果只有奖励明细时，按积分、流量或余额显示，不再空白。\n- 暂停或过期账号的入口写「申诉」，并按申诉提交。\n- 佣金划转到余额后用于续费。\n- 规则模式下，Google、Play 和 OpenAI 走主代理组，这些域名用境外 DNS 解析。\n- 内置的 Google 与 AI 规则集在当作已安装之前会核对文件头。\n- 订阅里的全局客户端指纹会写到缺少该项的节点上，然后去掉已废弃的全局项。\n- 面板和健康检查的 TLS 握手在调用方时限到达时关闭。\n- 订阅占位说明，以及节点列表的限速（节点保留）或暂停（列表为空）通知，会显示出来，不再只看到空列表或全红节点。\n- 设备数已满时，登录提示设备上限。密码错误仍提示密码错误。\n- 切换语言后，线路无响应时的「自动换线」仍然在。\n- 确认 Linux 网卡启动修复（sing-tun v0.4.23-yue.8）：网卡能收包之前，传输处理已经装好。\n",
+  "notesEn": "Activities disappear when they expire.\n\n- Hide expired announcement cards and close activity details at their deadline.\n- Preserve activity deadlines in offline messages and stop reusing older caches without expiry metadata.\n- Refresh announcements on resume and dashboard refresh while retaining evergreen notices and read receipts.\n- Each plan shows its own device limit, including unlimited.\n- Membership traffic stays in bytes from the panel quota when the account overview omits it.\n- A check-in reward named only inside the rewards list is shown as points, traffic, or balance.\n- A paused or expired account opens an appeal, and that ticket is submitted as an appeal.\n- Commission moved into the balance is described as usable for renewals.\n- In rule mode, Google, Play, and OpenAI use the main proxy group, and those names resolve on the overseas DNS path.\n- The bundled Google and AI rulesets are checked as real ruleset files before they count as installed.\n- A subscription's global client fingerprint is copied onto proxies that omit one, and the deprecated global key is then removed.\n- Panel and health-check TLS handshakes close when the caller deadline fires.\n- A subscription placeholder, or the server notice for a traffic hold or pause, is shown instead of an empty or all-red node list. A hold keeps the nodes.\n- A sign-in rejected for the device limit says so. A wrong password still says the password is wrong.\n- Auto-switch stays on an unresponsive line after the language changes.\n- The Linux TUN startup fix in sing-tun v0.4.23-yue.8 is confirmed: transport handlers are installed before the interface can receive packets.\n",
+  "sourceCommit": "cf6e8d1216d02944fec45da527921fd4963cc9df",
+  "sha256SumsSha256": "7a93fb5e9d9fcf8375b8cbcf1e4d683ec4743ee970da5bcba04d7c25401353d5",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.157/YueLink-1.3.157-android-arm64-v8a.apk",
+      "sha256": "fa819333a185edbd7825a7a11a5cd3a299c072398f522cbd12fcd2424a1a0b9a"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.157/YueLink-1.3.157-android-armeabi-v7a.apk",
+      "sha256": "765e1f8952a6f8794bd7b90c54065541cbeb5e5e1d7d0c8c18c7235fcd0db1e5"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.157/YueLink-1.3.157-android-x86_64.apk",
+      "sha256": "43fefd8c98ce14824bff848db8348c3e622a984fa90a61f947c679598ce46fc6"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.157/YueLink-1.3.157-android-universal.apk",
+      "sha256": "199a4e304c80d704604a8ac18c8cd35f8c8983b4082c789a4b0e905e142f7164"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.157/YueLink-1.3.157-ios.ipa",
+      "sha256": "873cac8dfb448feab5adef3376d6e3036ce9aa2ebe90300d1ec5506e2c496396"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.157/YueLink-1.3.157-macos-universal.dmg",
+      "sha256": "2d44632d10e0daf15737591dce8bb6532745673ea651e9f5032914501ae5e3cf",
+      "minimumSystemVersion": "13.0"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.157/YueLink-1.3.157-windows-amd64-setup.exe",
+      "sha256": "731dbb00a84ad360bdb0de490ab8a5edb40f485700a1ee3aee86f48e5a0a7a2d"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.157/YueLink-1.3.157-windows-amd64-portable.zip",
+      "sha256": "7bf7758b54f52272b36ed565ecf92b9ee91995bd2ea9a83dc0ba33597eac8d63"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.157/YueLink-1.3.157-linux-amd64.AppImage",
+      "sha256": "d5a952222a68886ac65c4166d6e61a81fc3760812f6d46cc3a31bf03ef2d105b"
+    }
+  },
+  "compatibility": {
+    "schemaVersion": 1,
+    "policyRevision": 1,
+    "effectiveAt": "2026-10-15T00:00:00Z",
+    "transitionDays": 90,
+    "enforcement": "observe",
+    "unknownClient": "unverified",
+    "releases": [
+      {
+        "product": "sing-box",
+        "version": "1.13.21",
+        "releasedAt": "2026-08-30T11:24:04Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.13.21/sing-box-1.13.21-linux-arm64.tar.gz",
+          "sha256": "3e30b876c9a93c19e503e2a2d6249cf05e6a26766553d4b61e1daf48223f304f"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      },
+      {
+        "product": "sing-box",
+        "version": "1.14.3",
+        "releasedAt": "2026-10-09T05:35:00Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-linux-arm64.tar.gz",
+          "sha256": "29dae24d76bea3bc62d07dd3e60cfc12003de7debbd6b768df9be9c68360174e"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      }
+    ],
+    "policySourceSha256": "f1a12d625595963fb3c16b69ac216101c733fd21f18aad8b95c7ccdefada58b4"
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "6c186c40df9e5200f31ffc56f3217d320e400849216f0a47b1fabc34f270ec99",
+    "sha256SumsSha256": "7a93fb5e9d9fcf8375b8cbcf1e4d683ec4743ee970da5bcba04d7c25401353d5",
+    "payloadBundleSha256": "489e79e8f8e604d7f821ca0c13543fee2280ac33aed1b574087edbdc7915a66a",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:MOsqPrNKy6DUGgw/2vgQNeUzTjeam3vQA/77mqGdZpp6OPSJiNRFqj0FgOeGAm/kkazIVjklPai8URz2rn/ZCw=="
+}
