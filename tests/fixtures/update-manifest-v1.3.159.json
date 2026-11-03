@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.159",
+  "channel": "stable",
+  "publishedAt": "2026-11-02T07:26:20Z",
+  "expiresAt": "2026-12-07T07:26:20Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "首次连接更稳，测速更宽容。\n\n- 首次连接前先准备好服务规则，避免刚连上时部分服务走错线路。\n- 自动选线测速的超时不足 5 秒时按 5 秒计算，减少误判节点不可用。\n- 更新内置代理核心，修正统一延迟测速的二次响应日志。\n- 加强更新下载和 DNS 相关的稳定性测试。\n",
+  "notesEn": "Steadier first connections and fairer latency tests.\n\n- Prepare service rules before the first connection so services route correctly right away.\n- Raise automatic-group latency test timeouts below 5 seconds to 5 seconds, reducing false unavailable nodes.\n- Update the bundled proxy core to fix second-response logging in unified-delay tests.\n- Strengthen stability tests for update downloads and DNS handling.\n",
+  "sourceCommit": "cca9b2beee72c6593c0c7a3030a425e6626b4ef0",
+  "sha256SumsSha256": "39f01c531635e5c71657bb24167edd46fd1501cb7579db325de362d4448af324",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.159/YueLink-1.3.159-android-arm64-v8a.apk",
+      "sha256": "9363ff34bbaec09feb431748355e34bcfa19bcf97b35f84f4b31f183a8fa2cb9"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.159/YueLink-1.3.159-android-armeabi-v7a.apk",
+      "sha256": "ebdcdd9b9b64de72f2d76e33bad33f383fe41ec7bc9fa111245f4eaaba9b18de"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.159/YueLink-1.3.159-android-x86_64.apk",
+      "sha256": "013ea95f2df563bd3b2be4123eb4036b33966f3191bc3f3a2e7eada45a2f7508"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.159/YueLink-1.3.159-android-universal.apk",
+      "sha256": "f9954674d0073472a0e0cb1af0cf96809a9e337a9d468d6945da144628f75d14"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.159/YueLink-1.3.159-ios.ipa",
+      "sha256": "faa1a7cdf47a510119b71090aa338fda04f5c514b3225724e088d7f06f1a7129"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.159/YueLink-1.3.159-macos-universal.dmg",
+      "sha256": "0159fa7aa695d14d0420c79d4f640d434cb0493c74728c87066e3fa12580091b",
+      "minimumSystemVersion": "13.0"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.159/YueLink-1.3.159-windows-amd64-setup.exe",
+      "sha256": "6bba14a453968ddba42a442c21e88a5d899086af17e52011a82d98e97cccc35e"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.159/YueLink-1.3.159-windows-amd64-portable.zip",
+      "sha256": "fd5a52d84172b81054ae6fbccf1bff3732eef89f2ebe420ce88832ed9de0fe01"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.159/YueLink-1.3.159-linux-amd64.AppImage",
+      "sha256": "03296af0ba5ebb1c07ac76cd1b53475a575637b474b4c4a08b16d2d5cde5a099"
+    }
+  },
+  "compatibility": {
+    "schemaVersion": 1,
+    "policyRevision": 1,
+    "effectiveAt": "2026-10-15T00:00:00Z",
+    "transitionDays": 90,
+    "enforcement": "observe",
+    "unknownClient": "unverified",
+    "releases": [
+      {
+        "product": "sing-box",
+        "version": "1.13.21",
+        "releasedAt": "2026-08-30T11:24:04Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.13.21/sing-box-1.13.21-linux-arm64.tar.gz",
+          "sha256": "3e30b876c9a93c19e503e2a2d6249cf05e6a26766553d4b61e1daf48223f304f"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      },
+      {
+        "product": "sing-box",
+        "version": "1.14.3",
+        "releasedAt": "2026-10-09T05:35:00Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-linux-arm64.tar.gz",
+          "sha256": "29dae24d76bea3bc62d07dd3e60cfc12003de7debbd6b768df9be9c68360174e"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      }
+    ],
+    "policySourceSha256": "f1a12d625595963fb3c16b69ac216101c733fd21f18aad8b95c7ccdefada58b4"
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "003d29c1dd0eceb80e32870498548f79a0846dd4d516dc71f0c99352e54168b0",
+    "sha256SumsSha256": "39f01c531635e5c71657bb24167edd46fd1501cb7579db325de362d4448af324",
+    "payloadBundleSha256": "c0f507f5d939e270bc1a351c8a59651b963bac11e80552b482f738a2d967b21c",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:mQbxY3rd4rBUooxgHNUthGEyUqSQUrKqNsjRn/lobQgCBAMInE9WDAg8rPoVAvuE7n7U5Vjd6TR5R2yjTJ9KCw=="
+}
