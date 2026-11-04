@@ -1,5 +1,11 @@
 # Bounded Flutter coverage A/B pilot
 
+> Retired on 2026-11-04 by owner decision. The pilot workflow, implementation,
+> and pilot-only tests have been removed. Commands and implementation references
+> below are historical evidence only and must not be used as current instructions.
+> Frozen JSON manifests remain as historical data; the shared coverage runner
+> and machine-event counter remain available.
+
 This is a diagnostic candidate for W12.3, not a production runner replacement,
 release receipt, complete-suite result, or demonstrated performance improvement.
 The manual `flutter-coverage-pilot.yml` workflow invokes the frozen implementation

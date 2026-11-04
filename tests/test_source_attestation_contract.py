@@ -17,19 +17,15 @@ README = ROOT / "README.md"
 DEPENDABOT = ROOT / ".github/dependabot.yml"
 
 EXPECTED_ACTION_YAML = {
-    ".github/workflows/android-target-sdk-dry-run.yml",
     ".github/actions/setup-flutter/action.yml",
     ".github/workflows/backup-critical-workstation-keys.yml",
     ".github/workflows/build.yml",
     ".github/workflows/ephemeral-signer-bridge.yml",
-    ".github/workflows/flutter-coverage-pilot.yml",
-    ".github/workflows/flutter-teardown-diagnostic.yml",
     ".github/workflows/manifest-health.yml",
     ".github/workflows/policy-ci.yml",
     ".github/workflows/prune-r2.yml",
     ".github/workflows/r2-lock-attestation.yml",
     ".github/workflows/source-attestation.yml",
-    ".github/workflows/theme-goldens.yml",
 }
 EXPECTED_EXTERNAL_ACTION_REPOS = {
     "android-actions/setup-android",
