@@ -31,6 +31,14 @@ if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
+# Both workflows must be safe before any remote dispatch or immutable tag push.
+if ! bash "$SCRIPT_DIR/scripts/assert-self-hosted-runs-on.sh" \
+    "$SCRIPT_DIR/.github/workflows/source-attestation.yml" \
+    "$SCRIPT_DIR/.github/workflows/build.yml"; then
+  echo "::error::发布门禁拒绝：工作流含 GitHub 托管 runner 或无法证明仅使用 self-hosted；未触发工作流或推送标签。" >&2
+  exit 1
+fi
+
 command -v gh >/dev/null 2>&1 || {
   echo "::error::缺少 gh，不能校验私有源码 tag；拒绝 fail-open 发版。"
   exit 1
@@ -153,6 +161,34 @@ if [[ ! "$ATTESTATION_RUN_ID" =~ ^[0-9]+$ ]]; then
   echo "触发: gh workflow run source-attestation.yml -R onesyue/yuelink-ci -f source_sha=$SOURCE_COMMIT"
   exit 1
 fi
+
+# Inspect every page: a green run from an old hosted workflow is not admissible.
+verify_attestation_runners() {
+  local page=1 seen=0 total jobs count
+  while :; do
+    jobs="$(gh_read gh api "repos/onesyue/yuelink-ci/actions/runs/$ATTESTATION_RUN_ID/jobs?per_page=100&page=$page")" || return 1
+    if ! jq -e '
+      (.total_count | type == "number" and . > 0 and . <= 10000) and
+      (.jobs | type == "array" and length > 0) and
+      all(.jobs[];
+        .conclusion == "skipped" or
+        (.labels | type == "array" and length > 0 and
+          index("self-hosted") != null and
+          all(.[]; type == "string" and
+            (test("^(ubuntu-|macos-|windows-)|-latest$"; "i") | not))))
+    ' <<<"$jobs" >/dev/null; then
+      echo "::error::源码证明含托管 runner 或 runner labels 不可验证，拒绝发布。" >&2
+      return 1
+    fi
+    total="$(jq -r '.total_count' <<<"$jobs")"
+    count="$(jq -r '.jobs | length' <<<"$jobs")"
+    seen=$((seen + count))
+    [ "$seen" -le "$total" ] || return 1
+    [ "$seen" -ne "$total" ] || return 0
+    page=$((page + 1))
+  done
+}
+verify_attestation_runners || exit 1
 
 bash scripts/verify-source-attestation.sh \
   "$TAG" "$SOURCE_COMMIT" "$BUILDER_COMMIT" "$ATTESTATION_RUN_ID"

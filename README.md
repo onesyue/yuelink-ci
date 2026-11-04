@@ -23,7 +23,7 @@ unreachable cases. For a small change, select the affected test module.
 ## Release contract
 
 Finalize, review and sign the public builder and private source before requesting
-hosted proof. Dispatch from the exact clean builder master; `release.sh` rejects
+self-hosted proof. Dispatch from the exact clean builder master; `release.sh` rejects
 a dirty or stale checkout. Synchronization changes must be committed first:
 
 ```sh
@@ -32,7 +32,7 @@ gh workflow run source-attestation.yml -R onesyue/yuelink-ci \
   -f source_sha="$SOURCE_SHA"
 ```
 
-Follow the runbook before creating any signed stable tag. Hosted attestation is
+Follow the runbook before creating any signed stable tag. Self-hosted attestation is
 mandatory; local test output is never accepted. The exact source proof uses
 GitHub artifact attestation with Flutter analysis and the retained source gates.
 Owner decision B5 removed the full Flutter suite and coverage floor from release
@@ -76,3 +76,9 @@ Sources: [source-attestation contract](tests/test_source_attestation_contract.py
 [shared verifier](scripts/verify-source-attestation.sh), [sync generator](sync-build.sh)
 and the operational material consolidated from README.md at base
 `dda16708a19405d0822a1862fc2ecb6b5a2ec519` into [RUNBOOK](docs/RUNBOOK.md).
+
+## Self-hosted release gate (N24)
+
+Owner decision 2026-11-05: the Windows durability probe was dropped from the release gate because no self-hosted Windows runner exists. Its co-located native Windows runtime probe and both attestation claims were removed with that job. Linux gates require `[self-hosted, Linux, X64, yue-local-release]`; macOS requires `[self-hosted, macOS, ARM64, yuelink-ci-mac]`. `build.yml` remains unchanged pending a separate owner decision, so `release.sh` intentionally refuses release while that workflow still permits hosted runners.
+
+The admission parser requires Python 3 and PyYAML (`requirements-ci.txt`), preinstalled on the release workstation and policy runners. It uses a YAML parser to inspect every job, rejects duplicate/merge keys and unknown expressions, and fails closed if the parser is missing. Self-hosted runners must have the workflow toolchains installed (including GLib development files and desktop schemas on Linux); jobs clean their workspace before use. Attestation selection checks every jobs API page and requires `self-hosted` labels on every job that executed; missing labels or API errors reject release.

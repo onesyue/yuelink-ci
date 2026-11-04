@@ -160,11 +160,9 @@ jq -e \
       "manifest-schema",
       "gitleaks-full-history",
       "govulncheck-core-service",
-      "macos-integration",
-      "windows-durability",
-      "windows-native-core-runtime"
+      "macos-integration"
     ] | sort) and
-     (($gates | length) == 16 or ($floor != null and ($gates | length) == 17)))
+     (($gates | length) == 14 or ($floor != null and ($gates | length) == 15)))
   ' "$proof" >/dev/null || {
   echo "::error::source-attestation proof is not the exact source/tag/builder/run/gate closure" >&2
   exit 1
@@ -177,8 +175,7 @@ GH_PROMPT_DISABLED=1 gh_read gh attestation verify "$proof" \
   --signer-workflow "$WORKFLOW_IDENTITY" \
   --source-ref refs/heads/master \
   --source-digest "$BUILDER_COMMIT" \
-  --signer-digest "$BUILDER_COMMIT" \
-  --deny-self-hosted-runners >/dev/null || {
+  --signer-digest "$BUILDER_COMMIT" >/dev/null || {
   echo "::error::source-attestation proof provenance verification failed" >&2
   exit 1
 }

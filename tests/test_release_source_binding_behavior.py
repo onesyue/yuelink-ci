@@ -32,8 +32,6 @@ GATES = [
     "gitleaks-full-history",
     "govulncheck-core-service",
     "macos-integration",
-    "windows-durability",
-    "windows-native-core-runtime",
 ]
 
 

@@ -251,7 +251,7 @@ class ReleaseReadRetryTests(unittest.TestCase):
             self.assertEqual(m.run(argv), 124)
             self.assertEqual(execute.call_count, 1)
 
-    def test_actual_release_entry_reaches_secret_read_retry_and_keeps_bad_tag_red(self):
+    def test_actual_release_entry_blocks_hosted_build_before_remote_reads(self):
         git = self.bin / "git"
         git.write_text('#!/bin/sh\ncase "$*" in\n"branch --show-current") echo master;;\n'
                        '"status --porcelain"|"fetch --prune --no-tags origin master") :;;\n'
@@ -261,9 +261,9 @@ class ReleaseReadRetryTests(unittest.TestCase):
         result = subprocess.run(["bash", str(ROOT / "release.sh"), "v9.8.7"],
                                 env={**self.env, "FAIL_KEY": "secrets", "FAIL_COUNT": "1"},
                                 capture_output=True, text=True, timeout=15)
-        self.assertNotEqual(result.returncode, 0)  # fake tag body is deliberately invalid
-        self.assertEqual(len(self.calls("secrets")), 2)
-        self.assertGreater(len(self.calls()), 2)  # reached the private tag consumer
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.calls(), [])
+        self.assertIn("发布门禁拒绝", result.stderr)
         self.assertNotIn("partial untrusted", result.stdout)
 
 

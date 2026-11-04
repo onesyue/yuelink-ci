@@ -17,9 +17,21 @@ permissions:
 jobs:
   manifest_contract:
     name: Updater manifest trust contract
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, yue-local-release]
     timeout-minutes: 15
     steps:
+      - name: Clean self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$GITHUB_WORKSPACE" || "$GITHUB_WORKSPACE" == / || ! -d "$GITHUB_WORKSPACE" ]]; then
+            echo "::error::invalid self-hosted workspace"; exit 1
+          fi
+          workspace="$(cd -- "$GITHUB_WORKSPACE" && pwd -P)"
+          if [[ "$workspace" -ef / ]]; then
+            echo "::error::refusing to clean root workspace"; exit 1
+          fi
+          find "$workspace" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -67,9 +79,21 @@ jobs:
   source_version:
     name: YueLink source version gate
     if: github.event_name == 'workflow_dispatch' && inputs.yuelink_sha != ''
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, yue-local-release]
     timeout-minutes: 5
     steps:
+      - name: Clean self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$GITHUB_WORKSPACE" || "$GITHUB_WORKSPACE" == / || ! -d "$GITHUB_WORKSPACE" ]]; then
+            echo "::error::invalid self-hosted workspace"; exit 1
+          fi
+          workspace="$(cd -- "$GITHUB_WORKSPACE" && pwd -P)"
+          if [[ "$workspace" -ef / ]]; then
+            echo "::error::refusing to clean root workspace"; exit 1
+          fi
+          find "$workspace" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       - name: Validate exact source input
         env:
           SOURCE_SHA: ${{ inputs.yuelink_sha }}

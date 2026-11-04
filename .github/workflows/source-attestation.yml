@@ -35,7 +35,7 @@ env:
 jobs:
   source_contract:
     name: Analyze, tests and release contracts
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, yue-local-release]
     # Historical green runs take 65-93 min (2026-10); 150 leaves headroom
     # while still killing a genuinely hung suite instead of the 6h default.
     timeout-minutes: 150
@@ -43,6 +43,18 @@ jobs:
       source_sha: ${{ steps.identity.outputs.source_sha }}
       release_tag: ${{ steps.identity.outputs.release_tag }}
     steps:
+      - name: Clean self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$GITHUB_WORKSPACE" || "$GITHUB_WORKSPACE" == / || ! -d "$GITHUB_WORKSPACE" ]]; then
+            echo "::error::invalid self-hosted workspace"; exit 1
+          fi
+          workspace="$(cd -- "$GITHUB_WORKSPACE" && pwd -P)"
+          if [[ "$workspace" -ef / ]]; then
+            echo "::error::refusing to clean root workspace"; exit 1
+          fi
+          find "$workspace" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       - name: Validate source SHA input
         shell: bash
         env:
@@ -248,22 +260,32 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # 2026-08-31: the four probe jobs below no longer `needs: source_contract`.
+  # 2026-08-31: the three probe jobs below no longer `needs: source_contract`.
   # They only ever consumed its validated copy of `inputs.source_sha`, and
   # serializing them behind the 9-minute contract job put the 7-minute macOS
   # integration run on the critical path (16.5 min total). Each job now
   # validates the input itself and checks out the exact SHA directly; the
   # binding authority is unchanged — `attest` still requires source_contract
   # AND every probe, so nothing is attested unless the full contract holds.
-  # Public-runner minutes are free; a wasted probe on a bad input costs
-  # nothing, while the serialization cost 7 wall-clock minutes per release.
   gitleaks:
     name: Gitleaks full history
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, yue-local-release]
     timeout-minutes: 15
     permissions:
       contents: read
     steps:
+      - name: Clean self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$GITHUB_WORKSPACE" || "$GITHUB_WORKSPACE" == / || ! -d "$GITHUB_WORKSPACE" ]]; then
+            echo "::error::invalid self-hosted workspace"; exit 1
+          fi
+          workspace="$(cd -- "$GITHUB_WORKSPACE" && pwd -P)"
+          if [[ "$workspace" -ef / ]]; then
+            echo "::error::refusing to clean root workspace"; exit 1
+          fi
+          find "$workspace" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       - name: Validate source SHA input
         shell: bash
         env:
@@ -311,7 +333,7 @@ jobs:
 
   govulncheck:
     name: govulncheck (${{ matrix.module }})
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, yue-local-release]
     timeout-minutes: 20
     permissions:
       contents: read
@@ -321,6 +343,18 @@ jobs:
       matrix:
         module: [core, service]
     steps:
+      - name: Clean self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$GITHUB_WORKSPACE" || "$GITHUB_WORKSPACE" == / || ! -d "$GITHUB_WORKSPACE" ]]; then
+            echo "::error::invalid self-hosted workspace"; exit 1
+          fi
+          workspace="$(cd -- "$GITHUB_WORKSPACE" && pwd -P)"
+          if [[ "$workspace" -ef / ]]; then
+            echo "::error::refusing to clean root workspace"; exit 1
+          fi
+          find "$workspace" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       - name: Validate source SHA input
         shell: bash
         env:
@@ -380,17 +414,35 @@ jobs:
       - name: Verify native Linux proxy backend before release tags
         if: matrix.module == 'service'
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends g++ pkg-config libglib2.0-dev gsettings-desktop-schemas
+          set -euo pipefail
+          for tool in g++ pkg-config gsettings; do
+            command -v "$tool" >/dev/null || { echo "::error::self-hosted runner missing $tool"; exit 1; }
+          done
+          pkg-config --exists gio-2.0 || { echo "::error::self-hosted runner missing GLib development files"; exit 1; }
+          gsettings list-schemas | grep -Fx org.gnome.system.proxy >/dev/null || {
+            echo "::error::self-hosted runner missing gsettings-desktop-schemas"; exit 1;
+          }
           bash scripts/ci/test_native_network_settings.sh
 
   macos_integration:
     name: Integration tests (macOS)
-    runs-on: macos-26
+    runs-on: [self-hosted, macOS, ARM64, yuelink-ci-mac]
     timeout-minutes: 30
     permissions:
       contents: read
     steps:
+      - name: Clean self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$GITHUB_WORKSPACE" || "$GITHUB_WORKSPACE" == / || ! -d "$GITHUB_WORKSPACE" ]]; then
+            echo "::error::invalid self-hosted workspace"; exit 1
+          fi
+          workspace="$(cd -- "$GITHUB_WORKSPACE" && pwd -P)"
+          if [[ "$workspace" -ef / ]]; then
+            echo "::error::refusing to clean root workspace"; exit 1
+          fi
+          find "$workspace" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       - name: Validate source SHA input
         shell: bash
         env:
@@ -452,74 +504,10 @@ jobs:
           YUELINK_REQUIRE_ROOT_PREFS: '1'
         run: bash scripts/ci/test_native_network_settings.sh
 
-  windows_durability:
-    name: Windows durability probe
-    runs-on: windows-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - name: Validate source SHA input
-        shell: bash
-        env:
-          SOURCE_SHA: ${{ inputs.source_sha }}
-        run: |
-          set -euo pipefail
-          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::source_sha must be exactly 40 lowercase hexadecimal characters"
-            exit 1
-          fi
-      - name: Checkout exact private source with full history
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          repository: onesyue/yuelink
-          ref: ${{ inputs.source_sha }}
-          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
-          fetch-depth: 0
-          submodules: recursive
-          persist-credentials: false
-      - name: Set up Flutter
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-      - name: Restore pub cache (lockfile-verified)
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~\AppData\Local\Pub\Cache
-          key: yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
-      - run: flutter pub get --enforce-lockfile
-      - run: dart run tool/windows_durability_probe.dart
-
-      - name: Verify real Windows port reclamation checks
-        shell: bash
-        run: python3 scripts/ci/test_core_package_runtime.py -v
-
-      - name: Set up Go for native Windows runtime
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: |
-            core/go.sum
-            service/go.sum
-
-      - name: Build and exercise native Windows core before release tags
-        shell: bash
-        env:
-          GOTOOLCHAIN: local
-          GOFLAGS: -mod=readonly
-        run: |
-          set -euo pipefail
-          dart setup.dart build -p windows -a amd64
-          python3 -m zipfile -c "$RUNNER_TEMP/yuelink-native-core.zip" core/build/windows-amd64/libclash.dll
-          python3 scripts/performance/core_package_probe.py \
-            --artifact "$RUNNER_TEMP/yuelink-native-core.zip" --require-leases \
-            --output "$RUNNER_TEMP/yuelink-native-core-runtime.json"
-
   attest:
     name: Bind green gates to source SHA
-    needs: [source_contract, gitleaks, govulncheck, macos_integration, windows_durability]
-    runs-on: ubuntu-24.04
+    needs: [source_contract, gitleaks, govulncheck, macos_integration]
+    runs-on: [self-hosted, Linux, X64, yue-local-release]
     timeout-minutes: 15
     permissions:
       contents: read
@@ -528,6 +516,18 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - name: Clean self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$GITHUB_WORKSPACE" || "$GITHUB_WORKSPACE" == / || ! -d "$GITHUB_WORKSPACE" ]]; then
+            echo "::error::invalid self-hosted workspace"; exit 1
+          fi
+          workspace="$(cd -- "$GITHUB_WORKSPACE" && pwd -P)"
+          if [[ "$workspace" -ef / ]]; then
+            echo "::error::refusing to clean root workspace"; exit 1
+          fi
+          find "$workspace" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       - name: Read executed Flutter gate receipt
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -591,13 +591,11 @@ jobs:
                 "manifest-schema",
                 "gitleaks-full-history",
                 "govulncheck-core-service",
-                "macos-integration",
-                "windows-durability",
-                "windows-native-core-runtime"
+                "macos-integration"
               ]
             }' > source-attestation.json
           jq -e --arg sha "$SOURCE_SHA" \
-            '.sourceSha == $sha and (.gates | length) == 16' \
+            '.sourceSha == $sha and (.gates | length) == 14' \
             source-attestation.json >/dev/null
           cat source-attestation.json
 
@@ -639,13 +637,24 @@ jobs:
       - gitleaks
       - govulncheck
       - macos_integration
-      - windows_durability
     if: failure()
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, yue-local-release]
     timeout-minutes: 5
     permissions:
       actions: write
     steps:
+      - name: Clean self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$GITHUB_WORKSPACE" || "$GITHUB_WORKSPACE" == / || ! -d "$GITHUB_WORKSPACE" ]]; then
+            echo "::error::invalid self-hosted workspace"; exit 1
+          fi
+          workspace="$(cd -- "$GITHUB_WORKSPACE" && pwd -P)"
+          if [[ "$workspace" -ef / ]]; then
+            echo "::error::refusing to clean root workspace"; exit 1
+          fi
+          find "$workspace" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
       - name: Cancel this run after a failed gate
         env:
           GH_TOKEN: ${{ github.token }}
