@@ -1,52 +1,52 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.163",
+  "version": "1.3.164",
   "channel": "stable",
-  "publishedAt": "2026-11-04T00:26:10Z",
-  "expiresAt": "2026-12-09T00:26:10Z",
+  "publishedAt": "2026-11-04T17:57:00Z",
+  "expiresAt": "2026-12-09T17:57:00Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "统一蓝色主题，桌面文字更清晰。\n\n- 浅色与深色主题统一使用品牌蓝及中性背景。\n- 提升桌面导航文字在明暗壁纸上的可读性。\n",
-  "notesEn": "A consistent blue theme with clearer desktop text.\n\n- Align light and dark themes with the shared blue brand and neutral surfaces.\n- Keep desktop navigation text readable over bright and dark wallpapers.\n",
-  "sourceCommit": "23fe44ac886f4fa48704d5b3e2bd2b4067ff782a",
-  "sha256SumsSha256": "23271dc8414241cee3e980c0741c391872f4288126ed6cc2d12507ec5463ebee",
+  "notes": "设置更统一，活动入口更清晰。\n\n- 更新检查图标与相邻设置项保持一致，兼顾浅色与深色主题。\n- 移除已下线群组活动的推广和报名入口，保留既有状态、退出与申诉入口。\n- 同步客户端连接配置与账户重置协议。\n",
+  "notesEn": "Clearer settings and activity access.\n\n- Match the update icon to neighboring settings entries in light and dark themes.\n- Remove retired group activity promotion and enrollment while keeping existing status, exit and appeal access.\n- Align client connection configuration and account reset contracts with the services.\n",
+  "sourceCommit": "c43557d77467a4bd9d693690716f8d20ed2aa339",
+  "sha256SumsSha256": "fdf23902f350f021af79582645ba3ff10a6484ab533f50f40e22481c077486a0",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.163/YueLink-1.3.163-android-arm64-v8a.apk",
-      "sha256": "a01e66b9c072d1ec154ae7f6a78bc22b127f40b507ca2906bb0443eef04881a0"
+      "url": "https://yuetong.app/v1.3.164/YueLink-1.3.164-android-arm64-v8a.apk",
+      "sha256": "b1fcdd24b7beeedab1ec230c87e771f43c9dd8cbd6bb91b63f86b3bd40e2164a"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.163/YueLink-1.3.163-android-armeabi-v7a.apk",
-      "sha256": "3e9317c56ffc3647a8c177442744eef4ba68627a2d2438bfe6097ef91a328d02"
+      "url": "https://yuetong.app/v1.3.164/YueLink-1.3.164-android-armeabi-v7a.apk",
+      "sha256": "0465daf182178d05ba62b9f44a8a9a7ed640b0e8d67d80f81337b4008e58f1dd"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.163/YueLink-1.3.163-android-x86_64.apk",
-      "sha256": "48a527dc515e8e2baa98d59be22cd3de295280b25c2b4438c2c5d0f656bac5d7"
+      "url": "https://yuetong.app/v1.3.164/YueLink-1.3.164-android-x86_64.apk",
+      "sha256": "341f92a62032ccf6e9adf969e43dcc12eeb7d77fd100f1f763a0d15d9b8d60d8"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.163/YueLink-1.3.163-android-universal.apk",
-      "sha256": "df59424be9ec50f9060c6796f4527f3a09022dfda37a76f0ebd4977b1765c8cf"
+      "url": "https://yuetong.app/v1.3.164/YueLink-1.3.164-android-universal.apk",
+      "sha256": "46afb22fb5b0220d98d6563566a967086767d3cba4f8dfbda807c63a520f0ca5"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.163/YueLink-1.3.163-ios.ipa",
-      "sha256": "e15ff8b1a1683e2abc5f24090be66545a22e2b8ac052e06737278c2e1340345a"
+      "url": "https://yuetong.app/v1.3.164/YueLink-1.3.164-ios.ipa",
+      "sha256": "660bb4fbf2ccc7101c10b34fe89dd6f35cb924744b01088ccf81e0332e0dc6cb"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.163/YueLink-1.3.163-macos-universal.dmg",
-      "sha256": "94cfc717d470b2763c516d1c4cfe4602fd48df1ad663677bb3fe371b89a358d5",
+      "url": "https://yuetong.app/v1.3.164/YueLink-1.3.164-macos-universal.dmg",
+      "sha256": "d0546b16672b4c158218838098ca12a957fbdbc44b498de6c545b42cb9012561",
       "minimumSystemVersion": "13.0"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.163/YueLink-1.3.163-windows-amd64-setup.exe",
-      "sha256": "8e9900e75a031308a2450b3f6aded5e435c2ddc3ff80f9c2edcf9197d4bc47e2"
+      "url": "https://yuetong.app/v1.3.164/YueLink-1.3.164-windows-amd64-setup.exe",
+      "sha256": "ad142a3d373cc5c0c61b4f77b45c337ee9a703fd9719b39ffcb674974edf2941"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.163/YueLink-1.3.163-windows-amd64-portable.zip",
-      "sha256": "ed2c92dc9f5bcfca4ac6a0438ff4bcc5e40e1b9d5916b22fc2464882b9eb3386"
+      "url": "https://yuetong.app/v1.3.164/YueLink-1.3.164-windows-amd64-portable.zip",
+      "sha256": "ef59707754163d188ce97be6896a216b8ae6c2976bbbe83e0db56ab54fa539f6"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.163/YueLink-1.3.163-linux-amd64.AppImage",
-      "sha256": "92fb1bb8542ef5c87ee136b03cbc7022a9879e21a98aaa0a08f53ceb0ad5d75f"
+      "url": "https://yuetong.app/v1.3.164/YueLink-1.3.164-linux-amd64.AppImage",
+      "sha256": "23193cf1f70ed61b49c958c0ce56b26a96a0c253f18ef3d0e4d3fcd3233da26b"
     }
   },
   "compatibility": {
@@ -84,10 +84,10 @@
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "a3665aeafdd2937a602027052972bbe40146892ebfdbc80ac09e06b37b1422bf",
-    "sha256SumsSha256": "23271dc8414241cee3e980c0741c391872f4288126ed6cc2d12507ec5463ebee",
-    "payloadBundleSha256": "fbeba97a877f6adf179cef035a7125a790ddfb6d899bc78408707b090295948e",
+    "candidateSha256": "8a43dd57c70c194f53456b49901929bb69f7c7f5380ecf5e098ae11486472033",
+    "sha256SumsSha256": "fdf23902f350f021af79582645ba3ff10a6484ab533f50f40e22481c077486a0",
+    "payloadBundleSha256": "e8964cd56451bed385027fe0f1e1afa84e2ddf2a5ec5c336fe94d0a69de8af85",
     "payloadCount": 19
   },
-  "sig": "ed25519:TCPNS/RLRGpMIh4l5B3Yf36iNd/xIl8aELZMqcybvQXeEn1hpoGPRgWnZK/MnzwufZrT9qmhzW6O1j/frd/3Ag=="
+  "sig": "ed25519:lghVGFVHnmoq9xLLCVcpDV2AFHefgDTw7aRf5fNhkQ1CEJAYImSSml0vDYhpnMftGAp0wG5h1aglead4ouzYBA=="
 }
