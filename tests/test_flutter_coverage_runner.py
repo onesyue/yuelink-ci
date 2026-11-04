@@ -566,7 +566,7 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
         self.assertEqual(len(list(evidence.glob("*.jsonl"))), len(self.plan["groups"]))
         self.assertIn("Flutter tests observed: 2500", result.stdout)
         workflow = (ROOT / ".github/workflows/source-attestation.yml").read_text()
-        native = workflow.split("  macos_integration:", 1)[1].split("  attest:", 1)[0]
+        native = workflow.split("  macos_integration:", 1)[1].split("  windows_durability:", 1)[0]
         self.assertIn("flutter test --no-pub --machine " + name, native)
         self.assertIn("macos-keychain.jsonl --minimum 4", native)
         self.assertIn("set -euo pipefail", native)

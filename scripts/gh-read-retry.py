@@ -46,18 +46,18 @@ def validate(argv: list[str]) -> Path | None:
             argv[6:10] == ["--cert-oidc-issuer", "https://token.actions.githubusercontent.com",
                            "--predicate-type", "https://slsa.dev/provenance/v1"]):
         return validate(argv[:6] + argv[10:])
-    if (len(argv) == 16 and argv[:3] == ["gh", "attestation", "verify"]
+    if (len(argv) == 17 and argv[:3] == ["gh", "attestation", "verify"]
             and not argv[3].startswith("-")
             and argv[4:10] == ["--repo", REPOSITORY, "--signer-workflow",
                 REPOSITORY + "/.github/workflows/source-attestation.yml",
                 "--source-ref", "refs/heads/master"]
             and argv[10] == "--source-digest" and argv[12] == "--signer-digest"
             and argv[11] == argv[13] and re.fullmatch(r"[0-9a-f]{40}", argv[11])
-            and argv[14:] == ["--format", "json"]):
+            and argv[14:] == ["--deny-self-hosted-runners", "--format", "json"]):
         return None
     # The native verifier does not request JSON, but all its identity flags
     # are otherwise identical. Normalize only for validation, never execution.
-    if len(argv) == 14:
+    if len(argv) == 15 and argv[-1] == "--deny-self-hosted-runners":
         return validate(argv + ["--format", "json"])
     raise ValueError("not an approved release read")
 

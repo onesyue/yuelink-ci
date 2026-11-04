@@ -60,13 +60,21 @@ WORKFLOW_MARKERS = (
     "MODULE: ${{ matrix.module }}",
     'bash scripts/ci/govulncheck_targets.sh "$MODULE"',
     "flutter test integration_test/ -d macos --reporter expanded",
-    "needs: [source_contract, gitleaks, govulncheck, macos_integration]",
+    "dart run tool/windows_durability_probe.dart",
+    "python3 scripts/ci/test_core_package_runtime.py -v",
+    "dart setup.dart build -p windows -a amd64",
+    'python3 -m zipfile -c "$RUNNER_TEMP/yuelink-native-core.zip" core/build/windows-amd64/libclash.dll',
+    'python3 scripts/performance/core_package_probe.py',
+    '--artifact "$RUNNER_TEMP/yuelink-native-core.zip" --require-leases',
+    "needs: [source_contract, gitleaks, govulncheck, macos_integration, windows_durability]",
     "- name: Upload source proof\n        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
     "actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32",
-    "'.sourceSha == $sha and (.gates | length) == 14'",
+    "'.sourceSha == $sha and (.gates | length) == 16'",
     '"gitleaks-full-history"',
     '"govulncheck-core-service"',
     '"macos-integration"',
+    '"windows-durability"',
+    '"windows-native-core-runtime"',
 )
 
 RELEASE_MARKERS = (
@@ -135,6 +143,7 @@ SOURCE_VERIFIER_MARKERS = (
     '.builderRepository == "onesyue/yuelink-ci" and\n    .workflowSha == $builder and .runId == $run and .runAttempt == $attempt',
     '($gates - ["flutter-tests-floor-2044"]) == ([',
     '.reuse.flutter.gates == ["flutter-analyze"] or',
+    '"windows-native-core-runtime"',
     'gh attestation verify "$proof"',
     '--repo "$REPOSITORY"',
     '--cert-oidc-issuer https://token.actions.githubusercontent.com',
@@ -143,6 +152,7 @@ SOURCE_VERIFIER_MARKERS = (
     "--source-ref refs/heads/master",
     '--source-digest "$BUILDER_COMMIT"',
     '--signer-digest "$BUILDER_COMMIT"',
+    "--deny-self-hosted-runners",
 )
 
 README_MARKERS = (
@@ -233,8 +243,8 @@ def source_flutter_issues(workflow: str) -> list[str]:
         "d6c9eb965b79818ed944b3e2df168905b535ff49"
     )
     starts = [match.start() for match in re.finditer(re.escape(pin), workflow)]
-    if len(starts) != 2:
-        issues.append("source attestation must have exactly two installer usages")
+    if len(starts) != 3:
+        issues.append("source attestation must have exactly three installer usages")
     for index, start in enumerate(starts):
         end = workflow.find("\n      - ", start)
         if end < 0:
@@ -250,6 +260,37 @@ def source_flutter_issues(workflow: str) -> list[str]:
     return issues
 
 
+def windows_runtime_issues(workflow: str) -> list[str]:
+    issues: list[str] = []
+    match = re.search(r"(?ms)^  windows_durability:\n(?P<body>.*?)(?=^  attest:)", workflow)
+    if match is None:
+        return ["Windows native runtime job is missing"]
+    body = match.group("body")
+    if "runs-on: windows-latest" not in body:
+        issues.append("Windows native runtime must execute on Windows")
+    if re.search(r"(?m)^\s*(?:if|continue-on-error):", body):
+        issues.append("Windows native runtime must be unconditional and fatal")
+    steps = re.split(r"(?m)^      - ", body)
+    required = {
+        "Verify real Windows port reclamation checks": [
+            "        run: python3 scripts/ci/test_core_package_runtime.py -v",
+        ],
+        "Build and exercise native Windows core before release tags": [
+            "        run: |",
+            "          set -euo pipefail",
+            "          dart setup.dart build -p windows -a amd64",
+            '          python3 -m zipfile -c "$RUNNER_TEMP/yuelink-native-core.zip" core/build/windows-amd64/libclash.dll',
+            '          python3 scripts/performance/core_package_probe.py \\',
+            '            --artifact "$RUNNER_TEMP/yuelink-native-core.zip" --require-leases \\',
+            '            --output "$RUNNER_TEMP/yuelink-native-core-runtime.json"',
+        ],
+    }
+    for name, commands in required.items():
+        matches = [step for step in steps if step.startswith("name: " + name + "\n")]
+        if len(matches) != 1 or any(command not in matches[0].splitlines() for command in commands):
+            issues.append(f"Windows native runtime executable step changed: {name}")
+    return issues
+
 
 def contract_issues(
     workflow: str,
@@ -264,15 +305,15 @@ def contract_issues(
         if marker not in workflow:
             issues.append(f"source workflow missing {marker!r}")
     # 2026-08-31 并行化后，SOURCE_SHA 输入校验从 source_contract 独有变成
-    # 四个 job（source_contract + 三个探针）逐 job 自带。存在性检查对
-    # "删掉其中一处"失明（其余三处仍命中 `in`），必须按精确计数钉住——
+    # 五个 job（source_contract + 四个探针）逐 job 自带。存在性检查对
+    # "删掉其中一处"失明（其余四处仍命中 `in`），必须按精确计数钉住——
     # 少一处 = 某个探针在未经校验的输入上跑，多一处 = 出现了未登记的 job。
     validation_marker = '[[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]'
     validation_count = workflow.count(validation_marker)
-    if validation_count != 4:
+    if validation_count != 5:
         issues.append(
-            "SOURCE_SHA validation must appear in exactly 4 jobs "
-            f"(source_contract + 3 probes), found {validation_count}"
+            "SOURCE_SHA validation must appear in exactly 5 jobs "
+            f"(source_contract + 4 probes), found {validation_count}"
         )
     # Source contracts use exact-builder tools for signed baseline selection;
     # macOS uses the same binding for its machine-test parser. B5 remains intact.
@@ -301,15 +342,16 @@ def contract_issues(
                 f"release gate must contain exactly {expected_count} occurrences of {marker!r}"
             )
     issues.extend(source_flutter_issues(workflow))
+    issues.extend(windows_runtime_issues(workflow))
 
     source_checkouts = re.findall(
         r"(?m)^\s*repository:\s*onesyue/yuelink\s*$", workflow
     )
-    if len(source_checkouts) != 5:
-        issues.append("four source jobs and the signed baseline must checkout yuelink")
-    if workflow.count("fetch-depth: 0") != 5:
+    if len(source_checkouts) != 6:
+        issues.append("five source jobs and the signed baseline must checkout yuelink")
+    if workflow.count("fetch-depth: 0") != 6:
         issues.append("every source checkout must use full history")
-    if workflow.count("submodules: recursive") != 4:
+    if workflow.count("submodules: recursive") != 5:
         issues.append("every source checkout must resolve recursive modules")
     if "write-all" in workflow:
         issues.append("source workflow may not use write-all")
@@ -460,11 +502,22 @@ class SourceAttestationContractTests(unittest.TestCase):
                 self.assertNotEqual(mutated, self.workflow)
                 self.assertTrue(contract_issues(mutated, self.release, self.readme))
 
-    def test_removed_windows_job_cannot_claim_attestation(self) -> None:
-        for marker in ("windows_durability:", '"windows-durability"',
-                       '"windows-native-core-runtime"'):
-            self.assertNotIn(marker, self.workflow)
-            self.assertNotIn(marker, self.verifier)
+    def test_windows_native_runtime_cannot_be_skipped_or_commented(self) -> None:
+        step = "      - name: Build and exercise native Windows core before release tags\n"
+        for replacement in (
+            step + "        continue-on-error: true\n",
+            step + "        if: false\n",
+        ):
+            with self.subTest(replacement=replacement):
+                self.assertTrue(windows_runtime_issues(self.workflow.replace(step, replacement)))
+        for command in (
+            "python3 scripts/ci/test_core_package_runtime.py -v",
+            "dart setup.dart build -p windows -a amd64",
+            "python3 scripts/performance/core_package_probe.py",
+        ):
+            with self.subTest(command=command):
+                self.assertTrue(windows_runtime_issues(self.workflow.replace(command, "# " + command)))
+        self.assertTrue(windows_runtime_issues(self.workflow.replace("--require-leases", "")))
 
     def test_each_release_enforcement_is_mutation_sensitive(self) -> None:
         for marker in RELEASE_MARKERS:
@@ -602,7 +655,7 @@ class SourceAttestationContractTests(unittest.TestCase):
         starts = [
             match.start() for match in re.finditer(re.escape(pin), self.workflow)
         ]
-        self.assertEqual(len(starts), 2)
+        self.assertEqual(len(starts), 3)
         for index, start in enumerate(starts):
             cache = self.workflow.index("cache: true", start)
             with self.subTest(usage=index + 1):

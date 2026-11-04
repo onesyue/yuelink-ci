@@ -95,7 +95,7 @@ class XcodePinTests(unittest.TestCase):
     def test_macos_attestation_uses_xcode_26_6(self) -> None:
         workflow = ATTESTATION.read_text(encoding="utf-8")
         assert "runs-on: macos-latest" not in workflow
-        assert "runs-on: [self-hosted, macOS, ARM64, yuelink-ci-mac]" in workflow
+        assert "runs-on: macos-26" in workflow
         assert (
             "DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer" in workflow
         )

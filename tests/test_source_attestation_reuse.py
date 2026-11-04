@@ -17,7 +17,7 @@ GATES = ['source-master-ancestry', 'android-release-signing-contract', 'unreleas
          'flutter-analyze', 'architecture-imports', 'cocoapods-residue', 'workflow-policy',
          'security-scan', 'wintun-bundle', 'release-metadata', 'manifest-schema',
          'flutter-tests-floor-2044', 'gitleaks-full-history', 'govulncheck-core-service',
-         'macos-integration']
+         'macos-integration', 'windows-durability', 'windows-native-core-runtime']
 
 
 class SharedVerifierBehaviorTests(unittest.TestCase):
@@ -65,7 +65,7 @@ if a[:2]==['attestation','verify']:
       '--signer-workflow':'onesyue/yuelink-ci/.github/workflows/source-attestation.yml',
       '--source-ref':'refs/heads/master','--source-digest':'b'*40,'--signer-digest':'b'*40}
     okay=all(k in a and a[a.index(k)+1]==v for k,v in expected.items())
-    okay=okay and '--deny-self-hosted-runners' not in a and os.environ.get('SIGNATURE_FAIL')!='1'
+    okay=okay and '--deny-self-hosted-runners' in a and os.environ.get('SIGNATURE_FAIL')!='1'
     okay=okay and hashlib.sha256(pathlib.Path(a[2]).read_bytes()).hexdigest()==os.environ['SIGNED_DIGEST']
     if not okay: print('signature verification failed',file=sys.stderr)
     sys.exit(0 if okay else 1)
@@ -166,7 +166,7 @@ sys.exit(9)
         for old,new in [('https://token.actions.githubusercontent.com','https://wrong.example'),
                         ('WORKFLOW_IDENTITY=onesyue/yuelink-ci/.github/workflows/source-attestation.yml',
                          'WORKFLOW_IDENTITY=onesyue/yuelink-ci/.github/workflows/build.yml'),
-                        ('--signer-digest', '--unknown-signer-digest')]:
+                        ('--deny-self-hosted-runners','--allow-self-hosted-runners')]:
             with self.subTest(new=new):
                 verifier.write_text(original.replace(old,new))
                 self.assertNotEqual(self.verify().returncode,0)
