@@ -105,6 +105,10 @@ prior root as a replay regression. Never learn the floor from the CDN being
 verified. Retained installers remain available for manual recovery; the updater
 root may never decrease.
 
+The final release step is [signed ledger reconciliation](reconcile-yuelink-pin.md).
+Release completion requires the yuelink release-state row to be OK after the
+Mac owner writes, seals and reads back the exact stable version/source/digest.
+
 Every R2 object below `v` is permanently retained by the live enabled indefinite
 bucket-lock rule `yuelink-release-versioned-indefinite` (`prefix=v`). The historical
 `prune-r2.yml` performs a read-only archive/lock audit; it cannot delete or overwrite.

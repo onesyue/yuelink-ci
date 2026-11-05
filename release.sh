@@ -397,5 +397,7 @@ if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
   兜底（该步失败且需人工时，只在 bastion 起一次、绝不中途杀）:
   bash scripts/ci/release-promote-local.sh <X.Y.Z> <source40hex> <candidate64hex>
   上线验收后:把精确签名根更新到 tests/fixtures/update-manifest-v1.json
-  并把旧根保留为 replay regression fixture；不得从 CDN 动态学习地板。"
+  并把旧根保留为 replay regression fixture；不得从 CDN 动态学习地板。
+  最后收敛 yueto 签名发布账本：见 docs/reconcile-yuelink-pin.md，
+  用 scripts/reconcile-yuelink-pin.py 生成验签后的 write-yuelink 参数；release-state 的 yuelink 行须为 OK。"
 fi
