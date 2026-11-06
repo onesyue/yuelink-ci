@@ -1,9 +1,7 @@
 version: 2
 
-# The repository policy requires every external GitHub Action to use a full
-# 40-character commit SHA. Dependabot keeps those immutable refs current; no
-# update is merged automatically, so every workflow change still passes the
-# offline policy suite and human review.
+# Owner policy: no automatic Issues or PRs. Keep immutable action pins and
+# dependency scanning; security-update PRs are separately disabled in settings.
 updates:
   - package-ecosystem: github-actions
     directory: /
@@ -15,7 +13,7 @@ updates:
     # 供应链冷却：Actions 以可重指的 tag 分发，冷却更长（安全更新不受此限）。
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     commit-message:
       prefix: ci
 

@@ -693,7 +693,7 @@ class SourceAttestationContractTests(unittest.TestCase):
         self.assertRegex(dependabot, r"(?m)^\s+interval: weekly$")
         limit = re.search(r"(?m)^\s+open-pull-requests-limit:\s*(\d+)\s*$", dependabot)
         self.assertIsNotNone(limit)
-        self.assertGreater(int(limit.group(1)), 0)
+        self.assertEqual(int(limit.group(1)), 0)
         self.assertIn("sha_pinning_required=true", self.readme)
         self.assertIn(
             "Local or dynamically\nresolved actions are intentionally absent",
@@ -753,15 +753,25 @@ class SourceAttestationContractTests(unittest.TestCase):
                 self.assertIn(marker, prune)
         self.assertNotIn("actions/download-artifact", prune)
 
-    def test_manifest_issue_write_is_scoped_to_the_watchdog_job(self) -> None:
-        manifest = (ROOT / ".github/workflows/manifest-health.yml").read_text(
-            encoding="utf-8"
-        )
-        workflow_header, jobs = manifest.split("\njobs:\n", 1)
-        self.assertNotIn("issues: write", workflow_header)
-        job_header = jobs.split("\n    steps:\n", 1)[0]
-        self.assertIn("permissions:\n      contents: read", job_header)
-        self.assertIn("issues: write", job_header)
+    def test_manifest_failure_reporting_without_ticket_permissions(self) -> None:
+        manifest = (ROOT / ".github/workflows/manifest-health.yml").read_text()
+        self.assertNotIn("issues: write", manifest)
+        self.assertNotIn("gh issue", manifest)
+        report = manifest.split("Report manifest failure", 1)[1]
+        self.assertIn("if: failure()", report)
+        script = textwrap.dedent(report.split("run: |\n", 1)[1])
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "summary"
+            for detail in ("checksum mismatch", ""):
+                result = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
+                                        env={**os.environ, "DETAIL": detail,
+                                             "GITHUB_SERVER_URL": "https://example.invalid",
+                                             "GITHUB_REPOSITORY": "owner/repo", "GITHUB_RUN_ID": "123",
+                                             "GITHUB_STEP_SUMMARY": str(summary)}, timeout=10)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("::error::", result.stdout)
+                self.assertIn(detail or "fetch/shape error", summary.read_text())
+                self.assertIn("/owner/repo/actions/runs/123", summary.read_text())
 
     def test_ephemeral_signer_bridge_is_bound_to_one_private_run(self) -> None:
         bridge = (ROOT / ".github/workflows/ephemeral-signer-bridge.yml").read_text(

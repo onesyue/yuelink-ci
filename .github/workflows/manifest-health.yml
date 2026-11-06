@@ -28,8 +28,6 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      # Only the failure handler opens/comments on this repository's watchdog issue.
-      issues: write
     steps:
       - name: Checkout pinned manifest verifier
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -185,19 +183,15 @@ jobs:
             fi
           done < <(jq -r '.platforms[] | [.url, .sha256] | @tsv' "$tmp")
 
-      - name: Open issue on failure
+      - name: Report manifest failure
         if: failure()
         env:
-          GH_TOKEN: ${{ github.token }}
           DETAIL: ${{ steps.check.outputs.detail }}
         run: |
           set -euo pipefail
-          title="updater manifest health check failed"
-          existing="$(gh issue list -R "$GITHUB_REPOSITORY" --state open \
-            --search "$title in:title" --json number --jq '.[0].number // empty')"
-          body="${DETAIL:-manifest health check failed (fetch/shape error)} — run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          if [ -n "$existing" ]; then
-            gh issue comment "$existing" -R "$GITHUB_REPOSITORY" --body "$body"
-          else
-            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body "$body"
-          fi
+          printf '%s\n' '## Updater manifest health check failed' \
+            "${DETAIL:-manifest health check failed (fetch/shape error)}" \
+            "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            >> "$GITHUB_STEP_SUMMARY"
+          echo '::error::Updater manifest health check failed.'
+          exit 1
