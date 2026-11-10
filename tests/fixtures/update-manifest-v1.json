@@ -1,52 +1,52 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.170",
+  "version": "1.3.173",
   "channel": "stable",
-  "publishedAt": "2026-11-08T20:19:02Z",
-  "expiresAt": "2026-12-13T20:19:02Z",
+  "publishedAt": "2026-11-10T19:11:33Z",
+  "expiresAt": "2026-12-15T19:11:33Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "HY2 安静时更稳\n\n- HY2 空闲超时提到 120 秒。丢几个保活包不再在 30 秒断线。\n",
-  "notesEn": "Quiet HY2 sessions stay up\n\n- The HY2 idle timeout is 120 seconds, so a few lost keepalives no longer drop the session at 30 seconds.\n",
-  "sourceCommit": "e9403d381d61bfe6f26fd27654c6dd9fdd025c04",
-  "sha256SumsSha256": "abe1f029a61a7262aeacb3fb2fb9c7ef9c3ecb1cb74ec9734b35ce61fc61f748",
+  "notes": "扩展脚本更稳，进程规则支持空格和路径，TUN 修复和登录更可靠\n\n- 扩展脚本：修好对象展开写法 `{...x}`，以及箭头函数后面接正则的写法。\n- 扩展脚本有了运行上限：死循环、递归过深、过大的数组或字符串都会被停下，并保留上一份配置。全局脚本和订阅脚本一共最多运行约 3 秒，超时的脚本下次启动会直接跳过，修改后才会重新运行。\n- 自定义规则里的进程名可以带空格，比如 `Google Chrome Helper`。新增 PROCESS-PATH 规则，用来写完整的程序路径。以前写在 PROCESS-NAME 里的完整路径，会自动改为 PROCESS-PATH。\n- 电脑上切换 TUN 失败时，会留下可复制的提示。如果需要，连接修复页会给出「重新安装服务」按钮。Mac 上的提示不再提到 Wintun。\n- 天气、地图、Apple Music、App Store 用到的 Apple 内容域名改走国内 DNS 并直连，更新订阅后也不会丢失。\n- 未登录时，登录、注册、找回密码直接连接服务器，不再经过残留的代理。登录出错时显示固定的错误码，不再显示意义不明的代码。\n",
+  "notesEn": "Safer extend scripts, process rules with spaces and paths, better TUN repair and login\n\n- Extend scripts: object spread (`{...x}`) and a regex after an arrow function now work.\n- Extend scripts now have limits. An endless loop, recursion that goes too deep, or a very large array or string is stopped, and the previous config is kept. The global and profile scripts share about 3 seconds in total. A script that times out is skipped on the next start until you edit it.\n- Process names in custom rules can contain spaces, for example `Google Chrome Helper`. A new PROCESS-PATH rule matches a full program path. Full paths saved under PROCESS-NAME are moved to PROCESS-PATH automatically.\n- When switching to TUN fails on desktop, a copyable notice stays on screen. When reinstalling helps, Connection Repair shows a \"Reinstall service\" button. The macOS text no longer mentions Wintun.\n- Apple content domains used by Weather, Maps, Apple Music and the App Store resolve through domestic DNS and connect directly, and they stay in place after a subscription update.\n- While signed out, sign-in, registration and password reset connect to the server directly instead of going through a leftover proxy. Sign-in errors show a stable code instead of a meaningless one.\n",
+  "sourceCommit": "fe053c464bbbeae6d7dacafada1d7b07267f9ecb",
+  "sha256SumsSha256": "71a2a876403ef75491a08c2aa767a2d176ae10c05fe2f988e8ee0b129f6b6cb1",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-android-arm64-v8a.apk",
-      "sha256": "4b35b45c59cc00ee71189b0e23cfc46bd66f3b74069db2616f7170fbaf000724"
+      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-android-arm64-v8a.apk",
+      "sha256": "faf32735befa82d4c09e1ab59c9f880e16148eca07712dc6c16354e682a93163"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-android-armeabi-v7a.apk",
-      "sha256": "3304fa8d93bdd57caa2898017747eeca88b799a8ea829e27864fb8a115d7f995"
+      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-android-armeabi-v7a.apk",
+      "sha256": "1dbc2aa11ee8e14854d7b6698cda4c3ba07810707f8181777f2dd22a180a4052"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-android-x86_64.apk",
-      "sha256": "38e0736412920a47f09cd9067a52e11a13faf8d23f2224325251bc0079fe8025"
+      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-android-x86_64.apk",
+      "sha256": "663b793a570eb69d2600c25ee070ce92cdb24dce8f8d043389969b73b17c14e2"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-android-universal.apk",
-      "sha256": "bd13cccd000edc6997c2f6cd1c9da30a7af198ea8863063e853f74fc9951a73d"
+      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-android-universal.apk",
+      "sha256": "6f996be540c6e68a068a7ec674cdab3bfed048cf992791c1b956e3086051f38e"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-ios.ipa",
-      "sha256": "4bdb745e4bd978e8ca2000998a6da6dac949ab8e784098d91cab3ec447c7c89f"
+      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-ios.ipa",
+      "sha256": "cf20774b3320be5595713d5dd0b30a1b480bc5bc1a63a582d7b8b877c011e382"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-macos-universal.dmg",
-      "sha256": "bb9d53c7b59e6336d61c61cc5cc97eb388b88bc80665e5a25516e321c8d55648",
+      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-macos-universal.dmg",
+      "sha256": "d0fe00239d82b281bf2fcde7f396ef61c946dc2a01a543acfe32b6d385c5f590",
       "minimumSystemVersion": "13.0"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-windows-amd64-setup.exe",
-      "sha256": "2863f47a5253608f16c581f56a49925c1004fb0ce0ad3693946dba0df7cc53ec"
+      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-windows-amd64-setup.exe",
+      "sha256": "9e26877bb85dbf6ba6fd2ed86a8fa29dc969643450dfd7bb3e2f2d1f9327dfb6"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-windows-amd64-portable.zip",
-      "sha256": "5572bb6fbe4be12cf409b588862fc2d422221badcff68705baa45e54e764daf2"
+      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-windows-amd64-portable.zip",
+      "sha256": "32c8663c0afd5cfb2e29283e5c29c824d24d2e634ec599fd1a148c059038c8d7"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-linux-amd64.AppImage",
-      "sha256": "428c2ad7dcc2c8341f308f89331b2c918ebf6f7839e2d41cd27164bc16ea726e"
+      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-linux-amd64.AppImage",
+      "sha256": "10d2fbfd49d4f8e4d7ea28288a0fe53807edf74490709f67c48039794ffff0b3"
     }
   },
   "compatibility": {
@@ -84,10 +84,10 @@
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "64479d7d1d0b85177ce0d90ede436d2d18b8849c74f5286ca61c15fd4b33d6bd",
-    "sha256SumsSha256": "abe1f029a61a7262aeacb3fb2fb9c7ef9c3ecb1cb74ec9734b35ce61fc61f748",
-    "payloadBundleSha256": "501e8a91456bb59d68c096bced9118766602e0ed519f98b90d071cc274e96605",
+    "candidateSha256": "8daf44df126c39029305ca93a35009de3ff97dca178a60099e15cf0be17c5066",
+    "sha256SumsSha256": "71a2a876403ef75491a08c2aa767a2d176ae10c05fe2f988e8ee0b129f6b6cb1",
+    "payloadBundleSha256": "04fe8274d5ec92b5b28293ef6aab91b3e7e05574d0dba5dfa7cdf09ec37140c1",
     "payloadCount": 19
   },
-  "sig": "ed25519:p9M1Edz16Rfu+9XAYvv1bRRXRWXgNSP/FMd4U2ga/6Mj2bfjGKw2juAhx0iMyo0Mr8zkT6L+PPXxN8xUl6ZZBw=="
+  "sig": "ed25519:vM8H97eF52H4/jfhcw6VftShiZp+mzemwHDdPzdAD9BgTmkuvP6kEDlw6OfrFytFsosF1nCW+OUc+adDQxDbDg=="
 }

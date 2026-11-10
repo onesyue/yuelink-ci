@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.170",
+  "channel": "stable",
+  "publishedAt": "2026-11-08T20:19:02Z",
+  "expiresAt": "2026-12-13T20:19:02Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "HY2 安静时更稳\n\n- HY2 空闲超时提到 120 秒。丢几个保活包不再在 30 秒断线。\n",
+  "notesEn": "Quiet HY2 sessions stay up\n\n- The HY2 idle timeout is 120 seconds, so a few lost keepalives no longer drop the session at 30 seconds.\n",
+  "sourceCommit": "e9403d381d61bfe6f26fd27654c6dd9fdd025c04",
+  "sha256SumsSha256": "abe1f029a61a7262aeacb3fb2fb9c7ef9c3ecb1cb74ec9734b35ce61fc61f748",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-android-arm64-v8a.apk",
+      "sha256": "4b35b45c59cc00ee71189b0e23cfc46bd66f3b74069db2616f7170fbaf000724"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-android-armeabi-v7a.apk",
+      "sha256": "3304fa8d93bdd57caa2898017747eeca88b799a8ea829e27864fb8a115d7f995"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-android-x86_64.apk",
+      "sha256": "38e0736412920a47f09cd9067a52e11a13faf8d23f2224325251bc0079fe8025"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-android-universal.apk",
+      "sha256": "bd13cccd000edc6997c2f6cd1c9da30a7af198ea8863063e853f74fc9951a73d"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-ios.ipa",
+      "sha256": "4bdb745e4bd978e8ca2000998a6da6dac949ab8e784098d91cab3ec447c7c89f"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-macos-universal.dmg",
+      "sha256": "bb9d53c7b59e6336d61c61cc5cc97eb388b88bc80665e5a25516e321c8d55648",
+      "minimumSystemVersion": "13.0"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-windows-amd64-setup.exe",
+      "sha256": "2863f47a5253608f16c581f56a49925c1004fb0ce0ad3693946dba0df7cc53ec"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-windows-amd64-portable.zip",
+      "sha256": "5572bb6fbe4be12cf409b588862fc2d422221badcff68705baa45e54e764daf2"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.170/YueLink-1.3.170-linux-amd64.AppImage",
+      "sha256": "428c2ad7dcc2c8341f308f89331b2c918ebf6f7839e2d41cd27164bc16ea726e"
+    }
+  },
+  "compatibility": {
+    "schemaVersion": 1,
+    "policyRevision": 1,
+    "effectiveAt": "2026-10-15T00:00:00Z",
+    "transitionDays": 90,
+    "enforcement": "observe",
+    "unknownClient": "unverified",
+    "releases": [
+      {
+        "product": "sing-box",
+        "version": "1.13.21",
+        "releasedAt": "2026-08-30T11:24:04Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.13.21/sing-box-1.13.21-linux-arm64.tar.gz",
+          "sha256": "3e30b876c9a93c19e503e2a2d6249cf05e6a26766553d4b61e1daf48223f304f"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      },
+      {
+        "product": "sing-box",
+        "version": "1.14.3",
+        "releasedAt": "2026-10-09T05:35:00Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-linux-arm64.tar.gz",
+          "sha256": "29dae24d76bea3bc62d07dd3e60cfc12003de7debbd6b768df9be9c68360174e"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      }
+    ],
+    "policySourceSha256": "f1a12d625595963fb3c16b69ac216101c733fd21f18aad8b95c7ccdefada58b4"
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "64479d7d1d0b85177ce0d90ede436d2d18b8849c74f5286ca61c15fd4b33d6bd",
+    "sha256SumsSha256": "abe1f029a61a7262aeacb3fb2fb9c7ef9c3ecb1cb74ec9734b35ce61fc61f748",
+    "payloadBundleSha256": "501e8a91456bb59d68c096bced9118766602e0ed519f98b90d071cc274e96605",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:p9M1Edz16Rfu+9XAYvv1bRRXRWXgNSP/FMd4U2ga/6Mj2bfjGKw2juAhx0iMyo0Mr8zkT6L+PPXxN8xUl6ZZBw=="
+}
