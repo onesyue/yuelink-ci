@@ -21,6 +21,11 @@ The adaptation leaves `CODE_SIGNING_ALLOWED=NO`, the other disabled-signing
 settings, the four omitted SDK signing calls and the signer sandbox in place. Success requires actual Swift compilation events for both
 targets and fresh app and extension executables. It does not archive, sign,
 install or distribute them.
+The unsigned `xcodebuild` build invocation passes
+`DISABLE_XCFRAMEWORK_SIGNATURE_VALIDATION=YES`, which skips XCFramework
+signature validation without signing or opening the codesign/ldid sandbox.
+A signature-classified failure is neither unsigned-compile success nor the
+missing-argument negative control.
 The existing deploy key is reused without adding credentials or permissions;
 workflow `contents: read` does not establish that key's server-side access mode.
 

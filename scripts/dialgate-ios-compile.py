@@ -58,6 +58,14 @@ PACKAGE_PLUGIN_ARGUMENTS = [
     "-skipPackageSignatureValidation",
 ]
 
+# Vendored media XCFrameworks are unsigned. Production builds sign them later.
+# This verifier denies codesign and ldid, so the unsigned build skips
+# XCFramework signature validation instead of re-signing. The override is
+# applied only to the xcodebuild build invocation.
+UNSIGNED_XCFRAMEWORK_SETTINGS = [
+    "DISABLE_XCFRAMEWORK_SIGNATURE_VALIDATION=YES",
+]
+
 
 def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -457,6 +465,7 @@ def compile_command(
         "-resultBundlePath",
         str(result),
         *SIGNING_SETTINGS,
+        *UNSIGNED_XCFRAMEWORK_SETTINGS,
         "build",
     ]
 
@@ -486,7 +495,7 @@ def signing_disabled(settings: str, target: str) -> dict:
 
 
 COMPILE_DIAGNOSTIC_PATTERNS = {
-    "signature_verification_failed": r"\bsignature\b[^\n]*(?:cannot be verified|could not be verified|verification failed)\b|\b(?:failed|unable) to verify (?:the )?signature\b",
+    "signature_verification_failed": r"\bsignature\b[^\n]*(?:cannot be verified|could not be verified|cannot be validated|verification failed|may have been compromised)\b|\b(?:failed|unable) to verify (?:the )?signature\b",
     "artifact_file_missing": r"\bfile\b[^\n]*\bcannot be opened\b[^\n]*\bdoes not exist\b",
     "plugin_validation_failed": r"\bplug-?ins?\b[^\n]*(?:failed validation|validation failed)|validation[^\n]*(?:failed|failure)[^\n]*\bplug-?ins?\b",
     "plugin_approval_required": r"\bplug-?ins?\b[^\n]*(?:must be enabled|must be approved|requires approval|not trusted|is disabled)",
