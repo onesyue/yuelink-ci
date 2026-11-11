@@ -29,10 +29,14 @@ implement the new interface before this step can succeed. Build does not move th
 root `update.json`, and its success does not establish a rollout. Pull requests
 run Policy CI; they do not trigger the release builder or its implicit dial candidate.
 
-The independent promotion/edge selector is a follow-up part of R2-1, not enabled
-by this archive-only change. The released 1.3.174 client provides no stable install
-identity: a future network-IP bucket cannot prove 10% of installations. No routes
-or production objects are changed by this PR.
+The [independent promotion/edge selector](docs/staged-update-rollout.md) changes
+only a CAS-protected plan in a separate bucket after verifying the original
+signed archive and build proof. It requires explicit network-IP acknowledgement,
+soft-only manifests and no second client-side cohort filter. The released
+1.3.174 client provides no stable installation identity: network-IP buckets do
+not establish 10% installation coverage. Deployment, independent credentials,
+all-host routing and operational acceptance remain pending; this PR activates
+none of them.
 
 ## Release contract
 

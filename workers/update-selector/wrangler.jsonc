@@ -1,0 +1,17 @@
+{
+  "name": "yuelink-update-selector",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-07-30",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [],
+  "r2_buckets": [
+    {"binding": "ARCHIVES", "bucket_name": "yuelink-dist"},
+    {"binding": "PLANS", "bucket_name": "REQUIRES_SEPARATE_ROLLOUT_PLAN_BUCKET"}
+  ],
+  "vars": {
+    "ALLOWED_HOSTS": "",
+    "LEGACY_ROOT_SHA256": "",
+    "LEGACY_ROOT_EXPIRES_AT": ""
+  }
+}

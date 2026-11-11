@@ -23,6 +23,7 @@ EXPECTED_ACTION_YAML = {
     ".github/workflows/ephemeral-signer-bridge.yml",
     ".github/workflows/manifest-health.yml",
     ".github/workflows/policy-ci.yml",
+    ".github/workflows/promote-update-rollout.yml",
     ".github/workflows/prune-r2.yml",
     ".github/workflows/r2-lock-attestation.yml",
     ".github/workflows/source-attestation.yml",
