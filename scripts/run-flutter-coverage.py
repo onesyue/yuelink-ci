@@ -242,6 +242,22 @@ ENGINE_SHUTDOWN_ERRORS = {
 }
 
 
+# flutter_tester can segfault or lose its VM service while coverage is being
+# collected after every test already passed. Depending on timing the tool then
+# hangs until `timeout` fires (124) or exits with its generic test failure code
+# (1). Both are admitted only together with an `engine_shutdown_fault` report;
+# any failed test terminal, unknown error or other exit code still refuses.
+ENGINE_FAULT_EXIT_CODES = frozenset({1, 124})
+TIMEOUT_EXIT_CODE = 124
+
+
+def recoverable(exit_code: int, classification: str) -> bool:
+    """Whether a nonzero group attempt may be re-executed in smaller parts."""
+    if classification == "engine_shutdown_fault":
+        return exit_code in ENGINE_FAULT_EXIT_CODES
+    return exit_code == TIMEOUT_EXIT_CODE and classification == "no_recorded_failure"
+
+
 def timeout_classification(report: Path) -> str:
     """Admit only known loading/coverage shutdown errors, never test failures."""
     suites, started = {}, {}
@@ -542,6 +558,37 @@ def main() -> None:
                 raise RuntimeError("flutter group produced no result")
             return result
 
+        def preserve(attempt: str, report: Path, lcov: Path | None, exit_code: int) -> str:
+            """Keep the first failed attempt and its classification before any retry."""
+            original = out / f"{attempt}.initial.jsonl"
+            shutil.copyfile(report, original)
+            if lcov is not None and lcov.is_file():
+                shutil.copyfile(lcov, out / f"{attempt}.initial.info")
+            classification = timeout_classification(original)
+            (out / f"{attempt}.timeout.json").write_text(json.dumps({
+                "classification": classification, "exit_code": exit_code, "report": original.name,
+            }, indent=2) + "\n")
+            return classification
+
+        def retry_single(index: int, attempt: str, path: str) -> tuple[Path, Path]:
+            """Re-run one file once after an engine shutdown fault; never twice."""
+            retry_report = out / f"{attempt}.retry.jsonl"
+            retry_lcov = out / f"{attempt}.retry.info"
+            result = invoke(index, [path], retry_report, retry_lcov)
+            if result.returncode:
+                clear_compiler_cache()
+                classification = timeout_classification(retry_report)
+                (out / f"{attempt}.retry.timeout.json").write_text(json.dumps({
+                    "classification": classification, "exit_code": result.returncode,
+                    "report": retry_report.name,
+                }, indent=2) + "\n")
+                if classification == "recorded_failure":
+                    raise ValueError(f"single-file retry for {path} recorded a failure; see {retry_report.name}")
+                raise ValueError(
+                    f"engine shutdown fault timed out for file {path}; "
+                    f"single-file retry limit reached; see {retry_report.name}")
+            return retry_report, retry_lcov
+
         def stitch(index: int, tests: list[str], report: Path, lcov: Path) -> None:
             """Bisect engine-fault timeouts and stitch validated successful leaves."""
             leaves: list[tuple[Path, Path]] = []
@@ -556,21 +603,16 @@ def main() -> None:
                     half_result = invoke(index, half, half_report, half_lcov)
                     if half_result.returncode:
                         clear_compiler_cache()
-                        if half_result.returncode == 124:
-                            original = out / f"{attempt}.initial.jsonl"
-                            shutil.copyfile(half_report, original)
-                            classification = timeout_classification(original)
-                            (out / f"{attempt}.timeout.json").write_text(json.dumps({
-                                "classification": classification, "report": original.name,
-                            }, indent=2) + "\n")
-                            if classification == "engine_shutdown_fault":
-                                if len(half) == 1:
-                                    raise ValueError(
-                                        f"engine shutdown fault timed out for file {half[0]}; "
-                                        f"single-file retry limit reached; see {original.name}")
+                        code = half_result.returncode
+                        classification = preserve(attempt, half_report, None, code)
+                        if code in ENGINE_FAULT_EXIT_CODES and classification == "engine_shutdown_fault":
+                            if len(half) == 1:
+                                half_report, half_lcov = retry_single(index, attempt, half[0])
+                            else:
                                 split(half, half_path)
                                 continue
-                        raise subprocess.CalledProcessError(half_result.returncode, half_result.args)
+                        else:
+                            raise subprocess.CalledProcessError(code, half_result.args)
                     cases(half_report, worker, half, counter)
                     if not half_lcov.is_file():
                         raise ValueError(f"coverage report missing for group {index} half {half_path}")
@@ -620,24 +662,26 @@ def main() -> None:
                 report = out / f"{index}.jsonl"
                 lcov = out / f"{index}.info"
                 result = invoke(index, tests, report, lcov)
-                if result.returncode == 124 and mode == "directory_groups" and len(tests) > 1:
+                if result.returncode:
                     clear_compiler_cache()
+                    code = result.returncode
                     # Preserve the first attempt even if successful halves replace
-                    # the canonical report. A timeout never erases a real failure.
-                    original = out / f"{index}.initial.jsonl"
-                    shutil.copyfile(report, original)
-                    if lcov.is_file():
-                        shutil.copyfile(lcov, out / f"{index}.initial.info")
-                    classification = timeout_classification(original)
-                    (out / f"{index}.timeout.json").write_text(json.dumps({
-                        "classification": classification, "report": original.name,
-                    }, indent=2) + "\n")
-                    if classification == "recorded_failure":
-                        raise ValueError(f"timed-out group {index} recorded a failure; see {original.name}")
-                    stitch(index, tests, report, lcov)
-                elif result.returncode:
-                    clear_compiler_cache()
-                    raise subprocess.CalledProcessError(result.returncode, result.args)
+                    # the canonical report. A retry never erases a real failure.
+                    classification = preserve(str(index), report, lcov, code)
+                    if mode != "directory_groups" or not recoverable(code, classification):
+                        if classification == "recorded_failure":
+                            raise ValueError(
+                                f"failed group {index} (exit {code}) recorded a failure; "
+                                f"see {index}.initial.jsonl")
+                        raise subprocess.CalledProcessError(code, result.args)
+                    if len(tests) > 1:
+                        stitch(index, tests, report, lcov)
+                    elif classification == "engine_shutdown_fault":
+                        retry_report, retry_lcov = retry_single(index, str(index), tests[0])
+                        shutil.copyfile(retry_report, report)
+                        shutil.copyfile(retry_lcov, lcov)
+                    else:
+                        raise subprocess.CalledProcessError(code, result.args)
                 observed, visible = cases(report, worker, tests, counter)
                 if not lcov.is_file():
                     raise ValueError(f"coverage report missing for file {index}")
