@@ -46,6 +46,15 @@ SIGNING_SETTINGS = [
     "EXPANDED_CODE_SIGN_IDENTITY=",
 ]
 
+# Flutter's non-prefetch xcodebuild passes these flags
+# (packages/flutter_tools/lib/src/ios/xcodeproj.dart). They skip headless
+# Swift package plugin trust and signature prompts. They do not sign, and
+# they do not weaken the codesign/ldid sandbox.
+PACKAGE_PLUGIN_ARGUMENTS = [
+    "-skipPackagePluginValidation",
+    "-skipPackageSignatureValidation",
+]
+
 
 def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -429,6 +438,7 @@ def compile_command(
     return [
         "xcodebuild",
         *([MANIFEST_SANDBOX_ARGUMENT] if manifest_recovery else []),
+        *PACKAGE_PLUGIN_ARGUMENTS,
         "-workspace",
         "ios/Runner.xcworkspace",
         "-scheme",
@@ -693,6 +703,54 @@ def compiler_diagnostics(text: str) -> dict:
     }
 
 
+def xcresult_error_messages(payload: object) -> str:
+    """Return xcresult error messages. Locations and source URLs stay out."""
+    if not isinstance(payload, dict):
+        return ""
+    errors = payload.get("errors")
+    if not isinstance(errors, list):
+        return ""
+    lines: list[str] = []
+    for item in errors:
+        if not isinstance(item, dict):
+            continue
+        message = item.get("message")
+        if isinstance(message, str) and message.strip():
+            lines.append(message)
+    return "\n".join(lines)
+
+
+def read_xcresult_errors(bundle: Path) -> str:
+    """Read allowlisted error text from a run-local bundle, or nothing."""
+    if not bundle.is_dir():
+        return ""
+    try:
+        completed = subprocess.run(
+            [
+                "/usr/bin/xcrun",
+                "xcresulttool",
+                "get",
+                "build-results",
+                "--path",
+                str(bundle),
+                "--compact",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    if completed.returncode != 0 or not completed.stdout:
+        return ""
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return ""
+    return xcresult_error_messages(payload)
+
+
 def compile_evidence(text: str, failed: bool = False) -> dict:
     targets = [
         target
@@ -912,9 +970,11 @@ def verify(args: argparse.Namespace) -> int:
             private / "compile",
             timeout=1800,
         )
-        evidence = compile_evidence(
-            (private / "compile").read_text(errors="replace"), failed=code != 0
-        )
+        compile_text = (private / "compile").read_text(errors="replace")
+        bundle_errors = read_xcresult_errors(private / "compile.xcresult")
+        if bundle_errors:
+            compile_text += "\n" + bundle_errors
+        evidence = compile_evidence(compile_text, failed=code != 0)
         receipt["evidence"] = evidence
         receipt["compiler_exit"] = code
         receipt["stage"] = "validate-compile-signing"

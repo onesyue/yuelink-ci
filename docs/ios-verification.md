@@ -9,9 +9,13 @@ Go 1.27.4. Its result participates in the required native compilation summary.
 
 The helper checks clean recursive source identity and removed Git checkout
 credentials, prepares the actual FFI archive, resolves Flutter Swift packages,
-checks both targets' signing settings, and invokes `xcodebuild ... build`.
-Success requires actual Swift compilation events for both targets and fresh app
-and extension executables. It does not archive, sign, install or distribute them.
+checks both targets' signing settings, and invokes `xcodebuild ... build`
+with Flutter's `-skipPackagePluginValidation` and
+`-skipPackageSignatureValidation`. Those flags skip headless Swift package
+plugin trust prompts. They leave `CODE_SIGNING_ALLOWED=NO` and the signer
+sandbox in place. Success requires actual Swift compilation events for both
+targets and fresh app and extension executables. It does not archive, sign,
+install or distribute them.
 The existing deploy key is reused without adding credentials or permissions;
 workflow `contents: read` does not establish that key's server-side access mode.
 
@@ -26,9 +30,11 @@ media signature verification runs separately. An unavailable sandbox fails the
 job instead of weakening the boundary.
 
 Raw subprocess logs, build settings, SDK copies, products and xcresults remain
-run-local. Only the allowlisted receipt is uploaded. Its negative diagnostic is
-restricted to the missing `extensionProfile` compiler error, without source
-snippets, credentials, UUIDs or unrelated log text.
+run-local. Only the allowlisted receipt is uploaded. Error `message` strings
+from the run-local xcresult are scanned with that same allowlist; `sourceURL`
+and the bundle stay on the runner. Its negative diagnostic is restricted to
+the missing `extensionProfile` compiler error, without source snippets,
+credentials, UUIDs or unrelated log text.
 
 ## Negative control
 
