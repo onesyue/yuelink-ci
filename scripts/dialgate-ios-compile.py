@@ -46,10 +46,10 @@ SIGNING_SETTINGS = [
     "EXPANDED_CODE_SIGN_IDENTITY=",
 ]
 
-# Flutter's non-prefetch xcodebuild passes these flags
-# (packages/flutter_tools/lib/src/ios/xcodeproj.dart). They skip headless
-# Swift package plugin trust and signature prompts. They do not sign, and
-# they do not weaken the codesign/ldid sandbox.
+# Explicit verification-only adaptation for the reviewed source/artifact set.
+# These skip package plugin and signature validation, not just prompts. Pinned
+# Flutter's actual build passes skipPackageValidation=false; these are not its
+# default build flags. They neither sign nor relax the codesign/ldid sandbox.
 PACKAGE_PLUGIN_ARGUMENTS = [
     "-skipPackagePluginValidation",
     "-skipPackageSignatureValidation",
@@ -751,7 +751,12 @@ def read_xcresult_errors(bundle: Path) -> str:
     return xcresult_error_messages(payload)
 
 
-def compile_evidence(text: str, failed: bool = False) -> dict:
+def compile_evidence(
+    text: str, failed: bool = False, *, xcresult_errors: str = ""
+) -> dict:
+    # Only the actual compile stream can prove command execution. Structured
+    # error messages may contain command-shaped text but are diagnostic evidence.
+    diagnostic_text = text + ("\n" + xcresult_errors if xcresult_errors else "")
     targets = [
         target
         for target in ("Runner", "PacketTunnel")
@@ -770,14 +775,14 @@ def compile_evidence(text: str, failed: bool = False) -> dict:
     )
     missing = re.search(
         r"AppDelegate\.swift:\d+:\d+: error: missing argument for parameter 'extensionProfile' in call",
-        text,
+        diagnostic_text,
     )
     return {
         "compiled_targets": targets,
         "signing_operation": signing,
         "expected_negative_diagnostic": missing is not None,
         "diagnostic": missing.group(0) if missing else None,
-        **(compiler_diagnostics(text) if failed else {}),
+        **(compiler_diagnostics(diagnostic_text) if failed else {}),
     }
 
 
@@ -972,9 +977,9 @@ def verify(args: argparse.Namespace) -> int:
         )
         compile_text = (private / "compile").read_text(errors="replace")
         bundle_errors = read_xcresult_errors(private / "compile.xcresult")
-        if bundle_errors:
-            compile_text += "\n" + bundle_errors
-        evidence = compile_evidence(compile_text, failed=code != 0)
+        evidence = compile_evidence(
+            compile_text, failed=code != 0, xcresult_errors=bundle_errors
+        )
         receipt["evidence"] = evidence
         receipt["compiler_exit"] = code
         receipt["stage"] = "validate-compile-signing"

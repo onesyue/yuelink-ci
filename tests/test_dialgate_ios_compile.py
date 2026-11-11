@@ -651,6 +651,49 @@ class IOSCompileTests(unittest.TestCase):
             self.assertNotIn("ldid", args)
             self.assertIn("private simulated diagnostic", (root / "raw").read_text())
 
+    def test_xcresult_error_commands_cannot_prove_compilation(self):
+        command_shaped = "\n".join(
+            f"SwiftCompile normal arm64 (in target '{target}' from project 'Runner')"
+            for target in ("Runner", "PacketTunnel")
+        )
+        errors = ios.xcresult_error_messages({"errors": [{"message": command_shaped}]})
+        evidence = ios.compile_evidence("", failed=True, xcresult_errors=errors)
+        self.assertEqual(evidence["compiled_targets"], [])
+        self.assertEqual(evidence["observed_targets"], ["Runner", "PacketTunnel"])
+        self.assertEqual(
+            ios.compilation_outcome(0, evidence, "positive", True),
+            ("compilation_failed_or_targets_missing", 1),
+        )
+        real = ios.compile_evidence(command_shaped, failed=True)
+        self.assertEqual(real["compiled_targets"], ["Runner", "PacketTunnel"])
+
+    def test_xcresult_errors_retain_exact_negative_proof_only(self):
+        error = (
+            "AppDelegate.swift:12:3: error: missing argument "
+            "for parameter 'extensionProfile' in call"
+        )
+        evidence = ios.compile_evidence("", failed=True, xcresult_errors=error)
+        self.assertTrue(evidence["expected_negative_diagnostic"])
+        self.assertEqual(evidence["compiled_targets"], [])
+        self.assertEqual(
+            ios.compilation_outcome(65, evidence, "negative", False),
+            ("expected_swift_failure", 65),
+        )
+        generic = ios.compile_evidence(
+            "", failed=True, xcresult_errors="error: module not found"
+        )
+        self.assertFalse(generic["expected_negative_diagnostic"])
+        self.assertEqual(
+            ios.compilation_outcome(65, generic, "negative", False),
+            ("negative_control_not_proven", 65),
+        )
+        mentioned = ios.compile_evidence(
+            "", failed=True, xcresult_errors="CodeSign fixture"
+        )
+        self.assertFalse(mentioned["signing_operation"])
+        actual = ios.compile_evidence("CodeSign fixture", failed=True)
+        self.assertTrue(actual["signing_operation"])
+
     def test_xcresult_errors_drop_locations_and_do_not_invent_compilation(self):
         secret = "file:///private/fixture/AppDelegate.swift"
         payload = {

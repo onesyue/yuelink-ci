@@ -10,10 +10,15 @@ Go 1.27.4. Its result participates in the required native compilation summary.
 The helper checks clean recursive source identity and removed Git checkout
 credentials, prepares the actual FFI archive, resolves Flutter Swift packages,
 checks both targets' signing settings, and invokes `xcodebuild ... build`
-with Flutter's `-skipPackagePluginValidation` and
-`-skipPackageSignatureValidation`. Those flags skip headless Swift package
-plugin trust prompts. They leave `CODE_SIGNING_ALLOWED=NO` and the signer
-sandbox in place. Success requires actual Swift compilation events for both
+with `-skipPackagePluginValidation` and `-skipPackageSignatureValidation` as
+an explicit verification-only adaptation for the exact reviewed source and
+locked artifact set. These skip package plugin approval and package signature
+validation, not just prompts. Pinned Flutter 3.47.8's actual build uses
+`skipPackageValidation: false`; these are not its default build flags. This lane
+does not establish that package signatures were verified, and the existing
+source/lockfile, isolated SDK and media-artifact checks retain their own scope.
+The adaptation leaves `CODE_SIGNING_ALLOWED=NO`, the other disabled-signing
+settings, the four omitted SDK signing calls and the signer sandbox in place. Success requires actual Swift compilation events for both
 targets and fresh app and extension executables. It does not archive, sign,
 install or distribute them.
 The existing deploy key is reused without adding credentials or permissions;
@@ -32,7 +37,10 @@ job instead of weakening the boundary.
 Raw subprocess logs, build settings, SDK copies, products and xcresults remain
 run-local. Only the allowlisted receipt is uploaded. Error `message` strings
 from the run-local xcresult are scanned with that same allowlist; `sourceURL`
-and the bundle stay on the runner. Its negative diagnostic is restricted to
+and the bundle stay on the runner. Supplemental error text can contribute
+closed diagnostic categories and the exact missing-argument error, but never
+compiled-target or signing-operation command evidence. Those command facts
+come only from the actual compiler stream. Its negative diagnostic is restricted to
 the missing `extensionProfile` compiler error, without source snippets,
 credentials, UUIDs or unrelated log text.
 
