@@ -14,6 +14,13 @@ Environment (empty means absent):
   YUELINK_UPDATE_ROLLOUT_SALT
   YUELINK_UPDATE_ROLLOUT_PERCENT
   YUELINK_UPDATE_FORCE_PLATFORMS   comma-separated platform keys
+
+Reviewed force policy (policy/update-force.json, optional):
+  {"version": "X.Y.Z", "force": "soft"|"hard",
+   "forceReason": "security"|"incompatible"}
+It applies only to a candidate whose version equals `version`, so it never
+carries over to a later release by accident. A missing file changes nothing.
+Without `forcePlatforms`, `force: hard` applies to every platform.
 """
 
 from __future__ import annotations
@@ -52,6 +59,37 @@ def parse_force_platforms(raw: str | None) -> list[str] | None:
     if len(names) != len(set(names)):
         raise ValueError("forcePlatforms contains a duplicate platform name")
     return names
+
+
+FORCE_POLICY_KEYS = {"version", "force", "forceReason"}
+
+
+def load_force_policy(path: Path | None) -> dict | None:
+    if path is None or not path.exists():
+        return None
+    value = json.loads(path.read_bytes())
+    if not isinstance(value, dict) or set(value) != FORCE_POLICY_KEYS:
+        raise ValueError("force policy must have exactly version, force, forceReason")
+    if not isinstance(value["version"], str) or re.fullmatch(
+        r"[0-9]+\.[0-9]+\.[0-9]+", value["version"]
+    ) is None:
+        raise ValueError("force policy version must be X.Y.Z")
+    if value["force"] not in {"soft", "hard"}:
+        raise ValueError("force policy force must be soft or hard")
+    if value["forceReason"] not in {"security", "incompatible"}:
+        raise ValueError("force policy forceReason must be security or incompatible")
+    return value
+
+
+def apply_force_policy(manifest: dict, policy: dict | None) -> bool:
+    """Attach force/forceReason when the policy names this exact version."""
+    if policy is None or manifest.get("version") != policy["version"]:
+        return False
+    if "force" in manifest or "forceReason" in manifest:
+        raise ValueError("candidate already carries force keys")
+    manifest["force"] = policy["force"]
+    manifest["forceReason"] = policy["forceReason"]
+    return True
 
 
 def apply_rollout(
@@ -94,6 +132,11 @@ def main() -> int:
         "--force-platforms",
         default=os.environ.get("YUELINK_UPDATE_FORCE_PLATFORMS"),
     )
+    parser.add_argument(
+        "--force-policy",
+        type=Path,
+        default=Path(__file__).resolve().parents[1] / "policy/update-force.json",
+    )
     args = parser.parse_args()
     verifier = load_verifier(args.verifier)
     manifest = json.loads(args.manifest.read_bytes())
@@ -105,6 +148,7 @@ def main() -> int:
         percent=args.percent,
         force_platforms=parse_force_platforms(args.force_platforms),
     )
+    changed = apply_force_policy(manifest, load_force_policy(args.force_policy)) or changed
     # Shape only. The unsigned candidate does not yet carry promotionEvidence,
     # so the full signed-manifest policy must not run here.
     verifier._validate_rollout_extension(manifest)
