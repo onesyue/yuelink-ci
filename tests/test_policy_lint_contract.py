@@ -9,6 +9,7 @@ while; this repo now runs the same pinned binary plus ShellCheck on *.sh.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import unittest
@@ -17,6 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_CI = ROOT / ".github" / "workflows" / "policy-ci.yml"
 SHELLCHECK = shutil.which("shellcheck")
+LINT_BYPASS = re.compile(r"""(?<!\S)['"]?--?ignore(?:['"]?(?:[=\s]|$))|SHELLCHECK_OPTS|shellcheck disable""")
 
 
 def shell_scripts() -> list[Path]:
@@ -39,9 +41,19 @@ class PolicyLintContractTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
         # Lint config must not be able to switch checks off.
-        for forbidden in ("-ignore", "SHELLCHECK_OPTS", "shellcheck disable"):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, text)
+        # Match the lint bypass flag, not npm's safer --ignore-scripts option.
+        self.assertIsNone(LINT_BYPASS.search(text))
+
+    def test_lint_bypass_flag_negative_controls(self) -> None:
+        text = POLICY_CI.read_text(encoding="utf-8")
+        marker = '"$destination/actionlint" .github/workflows/*.yml'
+        self.assertIn(marker, text)
+        self.assertIn('npm ci --ignore-scripts', text)
+        for flag in ('-ignore .*', '--ignore .*', '-ignore=.*', '--ignore=.*',
+                     "'-ignore' '.*'", "'--ignore=.*'", '"-ignore" ".*"', '"--ignore=.*"'):
+            with self.subTest(flag=flag):
+                mutated = text.replace(marker, '"$destination/actionlint" ' + flag + ' .github/workflows/*.yml', 1)
+                self.assertIsNotNone(LINT_BYPASS.search(mutated))
 
     def test_scan_surface_is_not_empty(self) -> None:
         names = {p.name for p in shell_scripts()}

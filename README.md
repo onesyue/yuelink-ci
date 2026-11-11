@@ -27,7 +27,9 @@ Build step invokes `promote_in_pipeline.sh archive-only VERSION`, with mode firs
 an old source rejects that argument before side effects. The private source must
 implement the new interface before this step can succeed. Build does not move the
 root `update.json`, and its success does not establish a rollout. Pull requests
-run Policy CI; they do not trigger the release builder or its implicit dial candidate.
+run offline Policy CI checks; they do not trigger the release builder, its implicit
+dial candidate, or the live manifest read. The live read is limited to master pushes
+and explicit manual runs on master.
 
 The [independent promotion/edge selector](docs/staged-update-rollout.md) changes
 only a CAS-protected plan in a separate bucket after verifying the original
