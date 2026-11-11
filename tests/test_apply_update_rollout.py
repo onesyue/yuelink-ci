@@ -170,6 +170,13 @@ class ApplyUpdateRolloutAliasTest(unittest.TestCase):
             self.assertIn("global hard", completed.stderr)
             self.assertEqual(path.read_bytes(), raw)
 
+    def test_repository_does_not_carry_a_global_force_policy(self) -> None:
+        policy = ROOT / "policy/update-force.json"
+        self.assertFalse(
+            policy.exists(),
+            "global hard lives in this file on master; this branch must not carry it",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
