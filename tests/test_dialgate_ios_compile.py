@@ -273,6 +273,12 @@ class IOSCompileTests(unittest.TestCase):
             self.assertIn(
                 ios.MANIFEST_SANDBOX_ARGUMENT, ios.compile_command(root, root, True)
             )
+            for recovery in (False, True):
+                command = ios.compile_command(root, root, recovery)
+                for flag in ios.PACKAGE_PLUGIN_ARGUMENTS:
+                    self.assertEqual(command.count(flag), 1)
+                self.assertNotIn("codesign", command)
+                self.assertNotIn("ldid", command)
 
     def test_config_recovery_is_single_exact_nested_failure_and_keeps_first(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -639,7 +645,83 @@ class IOSCompileTests(unittest.TestCase):
                 "-allowProvisioningUpdates",
             ):
                 self.assertNotIn(forbidden, args)
+            for flag in ios.PACKAGE_PLUGIN_ARGUMENTS:
+                self.assertEqual(args.count(flag), 1)
+            self.assertNotIn("codesign", args)
+            self.assertNotIn("ldid", args)
             self.assertIn("private simulated diagnostic", (root / "raw").read_text())
+
+    def test_xcresult_errors_drop_locations_and_do_not_invent_compilation(self):
+        secret = "file:///private/fixture/AppDelegate.swift"
+        payload = {
+            "errors": [
+                {
+                    "issueType": "Swift Compiler Error",
+                    "message": (
+                        "AppDelegate.swift:1001:72: error: missing argument "
+                        "for parameter 'extensionProfile' in call"
+                    ),
+                    "sourceURL": secret,
+                    "targetName": "Runner",
+                },
+                {"message": "could not resolve host fixture.invalid"},
+                "not-an-object",
+                {"message": 12},
+            ],
+            "warnings": [
+                {
+                    "message": (
+                        "AppDelegate.swift:1:1: error: missing argument "
+                        "for parameter 'extensionProfile' in call"
+                    )
+                }
+            ],
+        }
+        text = ios.xcresult_error_messages(payload)
+        self.assertNotIn(secret, text)
+        self.assertNotIn("sourceURL", text)
+        evidence = ios.compile_evidence(text, failed=True)
+        self.assertTrue(evidence["expected_negative_diagnostic"])
+        self.assertEqual(evidence["compiled_targets"], [])
+        self.assertNotIn(secret, json.dumps(evidence))
+        self.assertFalse(
+            ios.compile_evidence(
+                ios.xcresult_error_messages({"warnings": payload["warnings"]}),
+                failed=True,
+            )["expected_negative_diagnostic"]
+        )
+        self.assertFalse(
+            ios.compile_evidence(
+                ios.xcresult_error_messages(
+                    {"errors": [{"message": "could not resolve host fixture.invalid"}]}
+                ),
+                failed=True,
+            )["expected_negative_diagnostic"]
+        )
+        self.assertEqual(ios.xcresult_error_messages({"errors": "nope"}), "")
+        self.assertEqual(ios.xcresult_error_messages([]), "")
+        self.assertEqual(
+            ios.read_xcresult_errors(Path("/tmp/lane-c-missing-xcresult")), ""
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory) / "compile.xcresult"
+            bundle.mkdir()
+            failed = subprocess.CompletedProcess(
+                args=[], returncode=1, stdout="", stderr="tool failed"
+            )
+            with patch.object(ios.subprocess, "run", return_value=failed) as invoked:
+                self.assertEqual(ios.read_xcresult_errors(bundle), "")
+            self.assertEqual(invoked.call_args.args[0][0], "/usr/bin/xcrun")
+            completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(payload), stderr=""
+            )
+            with patch.object(ios.subprocess, "run", return_value=completed):
+                scanned = ios.read_xcresult_errors(bundle)
+        self.assertNotIn(secret, scanned)
+        scanned_evidence = ios.compile_evidence(scanned, failed=True)
+        self.assertTrue(scanned_evidence["expected_negative_diagnostic"])
+        self.assertEqual(scanned_evidence["compiled_targets"], [])
+        self.assertNotIn(secret, json.dumps(scanned_evidence))
 
     def test_resolved_settings_require_both_no_flags_and_empty_identities(self):
         settings = dict(x.split("=", 1) for x in ios.SIGNING_SETTINGS)
@@ -790,9 +872,12 @@ class IOSCompileTests(unittest.TestCase):
             "ios_swift_compile", generator.job(workflow, "dial_gate_summary")
         )
         policy = json.loads((ROOT / "policy/dialgate-source.json").read_text())
+        self.assertEqual(policy["iosCompileMode"], "negative")
         self.assertEqual(
-            (policy["sourcePr"], policy["sourceCommit"]), (131, ios.POSITIVE_SOURCE)
+            (policy["sourcePr"], policy["sourceCommit"]),
+            (133, "1b28d5fb1e8122a03d46279e03f27fcf8ee191a7"),
         )
+        self.assertNotEqual(policy["sourceCommit"], ios.POSITIVE_SOURCE)
 
     def test_negative_and_unrelated_failure_can_never_turn_required_check_green(self):
         evidence = {
