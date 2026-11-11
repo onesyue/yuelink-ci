@@ -35,7 +35,15 @@ from `Build YueLink`, so release-completion listeners do not consume its runs.
 The same bound candidate also runs ten scoped Linux test targets covering the
 updater (including its startup-wiring contract), Dart crash receiver and last-good
 configuration recovery with the canonical pinned Flutter SDK, UTC and concurrency 2.
-These tests do not establish Android native crash-handler behavior.
+The same source also runs an unsigned `:app:compileDebugKotlin` job with the
+canonical Java/Flutter/Android SDK versions. Its pre-execution task-graph guard
+rejects release, signing, application packaging, installation, publication and
+native compilation tasks, while allowing required library JAR and Flutter asset
+compilation. The retained graph and log must show an executed Kotlin task; skipped,
+cached and NO-SOURCE tasks do not count. These checks establish compilation and
+Dart behavior, not Android native crash-handler runtime behavior.
+The exact job set is source binding, Linux client tests, Android Kotlin compilation,
+five-platform dial matrix, and dial summary.
 Its artifacts are verification evidence, not release authorization. Change the
 reviewed source manifest explicitly when testing a different integration head.
 
@@ -68,6 +76,10 @@ from the private YueLink template with explicit private-source checkout patches.
 The public workflow is the release executor; the private file remains the
 canonical editable template and a gate input. Do not hand-maintain two builders
 or delete the template. Check parity before every builder change.
+An explicit public security overlay preserves master PR50's Go 1.27.4 upgrade
+when a frozen private template still uses 1.27.3; already upgraded 1.27.4 templates
+remain unchanged and unknown versions fail closed. Source and builder/toolchain
+identities are distinct: old Go 1.27.3 verification does not prove the new builder.
 
 The public [key-recovery workflow](.github/workflows/backup-critical-workstation-keys.yml)
 is manual and hosted. The private counterpart supports an ephemeral recovery

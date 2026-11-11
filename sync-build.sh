@@ -46,6 +46,14 @@ def must_replace(old, new, label):
         sys.exit(f"::error:: 锚点不唯一({label}, {s.count(old)} 处)—— 手动同步。")
     s = s.replace(old, new, 1)
 
+# Public master PR50 pins Go 1.27.4 for GO-2026-6859. Frozen private
+# candidates may retain 1.27.3; never let a mirror refresh downgrade the builder.
+go_versions = re.findall(r"^  GO_VERSION: '([^']+)'$", s, re.M)
+if len(re.findall(r"^\s*GO_VERSION:", s, re.M)) != 1 or go_versions not in (["1.27.3"], ["1.27.4"]):
+    sys.exit("::error:: unreviewed or ambiguous Go toolchain in private template")
+if go_versions == ["1.27.3"]:
+    must_replace("  GO_VERSION: '1.27.3'", "  # 2026-11-11: Go 1.27.4 addresses GO-2026-6859 (net/http MaxBytesReader race).\n  GO_VERSION: '1.27.4'", "public-Go-security-overlay")
+
 # 1) 顶部 banner
 must_replace(
 """name: Build YueLink
