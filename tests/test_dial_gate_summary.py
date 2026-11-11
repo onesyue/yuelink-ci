@@ -6,7 +6,6 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
 import textwrap
 import unittest
@@ -14,11 +13,13 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PLATFORMS = ('windows', 'macos', 'linux', 'android', 'ios')
 PROTOCOLS = ('vless-reality-tfo', 'vless-reality', 'vless-ws-tls', 'hysteria2')
+CANDIDATE = 'a' * 40
+BASELINE = 'b' * 40
 
 
 class DialGateSummaryTests(unittest.TestCase):
     def reports(self) -> dict:
-        return {platform: {'platform': platform, 'pass': True, 'rows': [
+        return {platform: {'platform': platform, 'candidate_revision': CANDIDATE, 'baseline_revision': BASELINE, 'pass': True, 'rows': [
             {'protocol': protocol, 'pass': True,
              'baseline_samples': 20, 'candidate_samples': 20,
              'baseline_ok': 20, 'candidate_ok': 20,
@@ -26,18 +27,31 @@ class DialGateSummaryTests(unittest.TestCase):
              'baseline_p95_ms': 5, 'candidate_p95_ms': 5}
             for protocol in PROTOCOLS]} for platform in PLATFORMS}
 
-    def run_summary(self, reports: dict) -> subprocess.CompletedProcess:
+    def run_summary(self, reports: dict, *, raw_revision: str = CANDIDATE) -> subprocess.CompletedProcess:
         workflow = (ROOT / '.github/workflows/build.yml').read_text()
+        identity_step = workflow.split('- name: Verify dial report source identity\n', 1)[1].split('      - name:', 1)[0]
+        identity_script = textwrap.dedent(identity_step.split('run: |\n', 1)[1])
         body = workflow.split('- name: Write the platform table\n', 1)[1]
         script = textwrap.dedent(body.split("python3 - <<'PY'\n", 1)[1].split('\n          PY', 1)[0])
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            (root / '.dial-verifier').symlink_to(ROOT, target_is_directory=True)
             for name, report in reports.items():
                 path = root / 'dial-reports' / ('dial-gate-' + name)
                 path.mkdir(parents=True)
                 (path / 'gate.json').write_text(json.dumps(report))
-            return subprocess.run([sys.executable, '-c', script], cwd=root,
-                                  env={**os.environ, 'GITHUB_STEP_SUMMARY': str(root / 'summary')},
+                for role, revision in (('candidate', raw_revision), ('baseline', BASELINE)):
+                    (path / f'{role}.json').write_text(json.dumps({
+                        'platform': name, 'role': role, 'revision': revision,
+                        'proxies': dict.fromkeys(PROTOCOLS, {}),
+                    }))
+            combined = identity_script + "\npython3 - <<'PY'\n" + script + "\nPY\n"
+            return subprocess.run(['bash', '-e', '-c', combined], cwd=root,
+                                  env={**os.environ, 'GITHUB_STEP_SUMMARY': str(root / 'summary'),
+                                       'EXPECTED_CANDIDATE_REVISION': CANDIDATE,
+                                       'EXPECTED_BASELINE_REVISION': BASELINE,
+                                       'DIAL_BUILDER_SHA': 'c' * 40,
+                                       'DIAL_SOURCE_PR': '113', 'DIAL_VERIFICATION_ONLY': 'true'},
                                   capture_output=True, text=True, check=False)
 
     def test_complete_twenty_protocol_rows_pass(self) -> None:
@@ -48,6 +62,11 @@ class DialGateSummaryTests(unittest.TestCase):
         result = self.run_summary(reports)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.count('| pass |'), 21)  # header plus 20 rows
+
+    def test_raw_source_mismatch_stops_real_summary_before_table(self) -> None:
+        result = self.run_summary(self.reports(), raw_revision='d' * 40)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn('| platform |', result.stdout)
 
     def test_incomplete_or_malformed_evidence_fails(self) -> None:
         cases = []

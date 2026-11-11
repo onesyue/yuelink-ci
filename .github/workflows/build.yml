@@ -14,14 +14,13 @@ name: Build YueLink
 #   • vX.Y.Z signed tag → stable release
 #   • every non-stable tag is rejected before source/R2 access
 #   • workflow_dispatch
-#   • pull_request runs only the dial gate; release jobs stay on signed tags
+#   • pull_request verification uses the separate YueLink dial verification workflow
 #
 # Analyze + integration tests live in ci.yml (master/PR/manual). The release
 # preflight below independently re-runs every hard gate, so a tag cannot race
 # or bypass a sibling workflow.
 
 on:
-  pull_request:
   push:
     # GitHub's tag filter is only the coarse trigger. source_binding below
     # enforces exact stable vX.Y.Z syntax before querying source evidence.
@@ -41,10 +40,6 @@ on:
         type: choice
         default: all
         options: [all, android, ios, macos, windows, linux]
-      dialgate_candidate_ref:
-        description: 'Optional yuelink ref for the dial-gate candidate'
-        required: false
-        type: string
 
 concurrency:
   # Tags and manual runs share one queue. A pull request uses its own
@@ -1845,6 +1840,7 @@ jobs:
     # to tag pushes — branch dispatches stop at the build matrix.
     if: >-
       always() &&
+      github.event_name == 'push' &&
       startsWith(github.ref, 'refs/tags/') &&
       needs.preflight.result == 'success' &&
       needs.source_binding.result == 'success' &&
@@ -2597,6 +2593,8 @@ jobs:
       contents: read
       actions: write
     env:
+      EXPECTED_CANDIDATE_REVISION: ${{ needs.source_binding.outputs.source_commit }}
+      EXPECTED_BASELINE_REVISION: '576460aedc31690b85ccb529f519a43024e19930'
       CANDIDATE_DIR: ${{ github.workspace }}/candidate
       BASELINE_DIR: ${{ github.workspace }}/baseline
       DIALGATE_OUT: ${{ github.workspace }}/dial-out
@@ -2660,7 +2658,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: ${{ github.event.inputs.dialgate_candidate_ref || (github.event_name == 'pull_request' && 'feat/real-dial-gate-20261111') || needs.source_binding.outputs.source_commit }}
+          ref: ${{ needs.source_binding.outputs.source_commit }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           path: candidate
           fetch-depth: 1
@@ -2759,10 +2757,28 @@ jobs:
       contents: read
       actions: read
     steps:
+      - name: Checkout exact public report verifier
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: .dial-verifier
+          persist-credentials: false
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           pattern: dial-gate-*
           path: dial-reports
+      - name: Verify dial report source identity
+        shell: bash
+        env:
+          EXPECTED_CANDIDATE_REVISION: ${{ needs.source_binding.outputs.source_commit }}
+          EXPECTED_BASELINE_REVISION: '576460aedc31690b85ccb529f519a43024e19930'
+          DIAL_BUILDER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          DIAL_SOURCE_PR: ''
+          DIAL_VERIFICATION_ONLY: 'false'
+        run: |
+          python3 .dial-verifier/scripts/verify-dial-report-identity.py \
+            --reports dial-reports --candidate "$EXPECTED_CANDIDATE_REVISION" \
+            --baseline "$EXPECTED_BASELINE_REVISION"
       - name: Write the platform table
         shell: bash
         run: |

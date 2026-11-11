@@ -20,6 +20,7 @@ EXPECTED_ACTION_YAML = {
     ".github/actions/setup-flutter/action.yml",
     ".github/workflows/backup-critical-workstation-keys.yml",
     ".github/workflows/build.yml",
+    ".github/workflows/dialgate-verify.yml",
     ".github/workflows/ephemeral-signer-bridge.yml",
     ".github/workflows/manifest-health.yml",
     ".github/workflows/policy-ci.yml",

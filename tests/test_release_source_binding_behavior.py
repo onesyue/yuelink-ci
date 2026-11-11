@@ -323,7 +323,7 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
     def test_all_public_source_checkouts_and_summary_are_bound(self) -> None:
         self.assertEqual(
             self.workflow.count("ref: ${{ needs.source_binding.outputs.source_commit }}"),
-            3,
+            4,  # preflight, package build, release assembly, and the dial candidate
         )
         self.assertEqual(
             self.workflow.count('[ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ]'),

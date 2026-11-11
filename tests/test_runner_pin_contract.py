@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -45,10 +46,12 @@ class RunnerPinContractTests(unittest.TestCase):
         "private yuelink checkout not present (set YUELINK_SRC)",
     )
     def test_build_yml_equals_sync_output(self) -> None:
-        result = subprocess.run(
-            ["bash", str(ROOT / "sync-build.sh"), "--check", str(PRIVATE)],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0, result.stdout + result.stderr
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                ["bash", str(ROOT / "sync-build.sh"), "--check", str(PRIVATE.resolve())],
+                cwd=directory,
+                capture_output=True,
+                text=True,
+            )
+            assert result.returncode == 0, result.stdout + result.stderr
+            assert list(Path(directory).iterdir()) == []
