@@ -42,7 +42,11 @@ That Linux job first runs `go test -p 2 ./dialgate/...` and
 from the same candidate's `core` directory with canonical Go 1.27.4 and
 `GOTOOLCHAIN=local`. Ordered raw
 attempt telemetry and gate regressions retain a separate log in the same artifact;
-a failed Go test fails the job. The final integrated source must be explicitly bound
+a failed Go test fails the job. The Linux job also runs only
+`scripts/ci/test_dialgate_device_wrappers.py` with offline mocks. The existing
+Windows matrix parses `core/dialgate/device/windows.ps1` with PowerShell
+`Parser.ParseFile`; it does not execute that wrapper or contact a real device.
+The final integrated source must be explicitly bound
 before these new checks execute; directory review alone is not execution evidence.
 The same source also runs an unsigned `:app:compileDebugKotlin` job with the
 canonical Java/Flutter/Android SDK versions. Its pre-execution task-graph guard

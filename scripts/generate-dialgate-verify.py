@@ -114,6 +114,11 @@ LINUX_CLIENT_TESTS = '''  linux_client_tests:
         env:
           EXPECTED_CANDIDATE: ${{ needs.dial_source_binding.outputs.candidate_commit }}
         run: python3 ../.client-verifier/scripts/dialgate-binding.py confirm --checkout . --expected "$EXPECTED_CANDIDATE"
+      - name: Test device wrappers with offline mocks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/test_dialgate_device_wrappers.py 2>&1 | tee "$RUNNER_TEMP/linux-device-wrapper-tests.log"
       - name: Set up canonical Go regression toolchain
         uses: actions/setup-go@__GO_INSTALLER__
         with:
@@ -169,6 +174,7 @@ LINUX_CLIENT_TESTS = '''  linux_client_tests:
           path: |
             ${{ runner.temp }}/linux-client-tests.log
             ${{ runner.temp }}/linux-dialgate-go-tests.log
+            ${{ runner.temp }}/linux-device-wrapper-tests.log
           if-no-files-found: warn
           retention-days: 14
 
@@ -264,6 +270,20 @@ ANDROID_KOTLIN_COMPILE = '''  android_kotlin_compile:
 '''
 
 
+WINDOWS_DEVICE_SYNTAX = '''      - name: Parse device wrapper syntax without execution
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = (Resolve-Path -LiteralPath 'candidate/core/dialgate/device/windows.ps1').Path
+          $tokens = $null
+          $parseErrors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors.Count -ne 0) { throw 'Device wrapper PowerShell syntax is invalid' }
+
+'''
+
+
 def job(workflow: str, name: str) -> str:
     start = re.search(rf'^  {re.escape(name)}:\s*$', workflow, re.M)
     if start is None:
@@ -307,7 +327,12 @@ def generate(workflow: str) -> str:
         if name == 'dial':
             if 'github.event.pull_request.head.sha' in block:
                 raise ValueError('private candidate must not use the public builder PR head')
-            dial = block
+            anchor = '      - name: Checkout dial-gate baseline v1.3.174\n'
+            if block.count(anchor) != 1 or block.count('          path: candidate\n') != 1:
+                raise ValueError('canonical candidate checkout boundary changed')
+            if block.index('          path: candidate\n') >= block.index(anchor):
+                raise ValueError('candidate checkout must precede syntax parsing')
+            dial = block.replace(anchor, WINDOWS_DEVICE_SYNTAX + anchor, 1)
         else:
             block = block.replace("          DIAL_SOURCE_PR: ''", "          DIAL_SOURCE_PR: ${{ needs.dial_source_binding.outputs.source_pr }}")
             block = block.replace("          DIAL_VERIFICATION_ONLY: 'false'", "          DIAL_VERIFICATION_ONLY: 'true'")
