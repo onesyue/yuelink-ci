@@ -42,17 +42,17 @@ class RolloutAdmissionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'rollout percentage'):
                 ADMISSION.policy(dict(self.candidate, **extra), NOW)
         ADMISSION.policy(self.candidate, NOW)
-        with self.assertRaisesRegex(ValueError, 'global hard'):
+        with self.assertRaisesRegex(ValueError, 'non-iOS'):
             ADMISSION.policy(dict(
                 self.candidate, force='hard', forceReason='security',
                 forcePlatforms=['ios', 'windows-amd64-setup'],
             ), NOW)
-        with self.assertRaisesRegex(ValueError, 'global hard'):
+        with self.assertRaisesRegex(ValueError, 'forceDeadline'):
             ADMISSION.policy(dict(
                 self.candidate, force='soft', forceDeadline='2026-12-01T00:00:00Z',
                 forceReason='security',
             ), NOW)
-        with self.assertRaisesRegex(ValueError, 'iOS is never forced'):
+        with self.assertRaisesRegex(ValueError, 'non-iOS'):
             ADMISSION.policy(dict(
                 self.candidate, force='soft',
                 forcePlatforms=['ios', 'windows-amd64-setup'],
@@ -63,9 +63,9 @@ class RolloutAdmissionTests(unittest.TestCase):
                 self.candidate, force='soft', platformForce='hard',
                 forceReason='security', forcePlatforms=names,
             ), NOW)
-        with self.assertRaisesRegex(ValueError, 'every non-iOS'):
+        with self.assertRaisesRegex(ValueError, 'global with no forcePlatforms'):
             ADMISSION.policy(self.candidate, NOW, force='hard', force_reason='security')
-        with self.assertRaisesRegex(ValueError, 'every non-iOS'):
+        with self.assertRaisesRegex(ValueError, 'global with no forcePlatforms'):
             ADMISSION.policy(dict(
                 self.candidate, force='soft', platformForce='hard', forceReason='security',
                 forcePlatforms=['windows-amd64-setup'],
@@ -75,6 +75,8 @@ class RolloutAdmissionTests(unittest.TestCase):
             forceReason='incompatible', forcePlatforms=names,
         )
         ADMISSION.policy(hard, NOW, force='hard', force_reason='incompatible')
+        global_hard = dict(self.candidate, force='hard', forceReason='security')
+        ADMISSION.policy(global_hard, NOW, force='hard', force_reason='security')
 
     def synthetic_binding(self):
         # These synthetic checksum bytes do NOT claim a production signature.
@@ -156,16 +158,27 @@ class RolloutAdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'does not match this archive'):
             self.prepare({**args, 'previous': previous})
 
-    def test_hard_admission_keeps_global_force_soft(self):
-        names = sorted(name for name in self.candidate['platforms'] if not str(name).startswith('ios'))
+    def test_global_hard_admission_forces_every_platform(self):
         self.candidate['force'] = 'hard'
+        self.candidate['forceReason'] = 'security'
+        self.candidate.pop('forcePlatforms', None)
+        self.candidate.pop('platformForce', None)
+        args = self.arguments()
+        result = self.prepare({**args, 'force': 'hard', 'force_reason': 'security'})
+        self.assertEqual(result['force'], 'hard')
+        self.assertEqual(result['iosForce'], 'hard')
+        self.assertEqual(result['legacyClientForce'], 'hard')
+        self.assertEqual(result['forceReason'], 'security')
+        self.assertNotIn('forcePlatforms', result)
+        self.assertNotIn('platformForce', result)
+
+    def test_selective_platform_force_keeps_ios_a_prompt(self):
+        names = sorted(name for name in self.candidate['platforms'] if not str(name).startswith('ios'))
+        self.candidate['force'] = 'soft'
+        self.candidate['platformForce'] = 'hard'
         self.candidate['forceReason'] = 'security'
         self.candidate['forcePlatforms'] = names
         args = self.arguments()
-        with self.assertRaisesRegex(ValueError, 'global hard'):
-            self.prepare({**args, 'force': 'hard', 'force_reason': 'security'})
-        self.candidate['force'] = 'soft'
-        self.candidate['platformForce'] = 'hard'
         result = self.prepare({**args, 'force': 'hard', 'force_reason': 'security'})
         self.assertEqual(result['force'], 'hard')
         self.assertEqual(result['iosForce'], 'soft')

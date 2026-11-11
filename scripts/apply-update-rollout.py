@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Deprecated alias for an unsigned candidate force policy.
 
-Unset and explicit soft inputs delegate to ``apply-update-force.py``.
-``force=hard`` is rejected. It is not rewritten into ``platformForce``.
+Unset, soft, and global hard inputs delegate to ``apply-update-force.py``.
+``force=hard`` stays global and is not rewritten into ``platformForce``.
 Platform-force inputs belong on the new helper. Percentage rollout is rejected.
 """
 
@@ -33,12 +33,7 @@ _present = FORCE._present
 
 
 def apply_force(manifest: dict, *, force: str | None, reason: str | None) -> bool:
-    """Delegate soft and unset policy. Reject the retired hard alias."""
-    if _present(force) == "hard":
-        raise ValueError(
-            "operator force=hard is retired; set platform-force=hard and an "
-            "explicit non-iOS list on apply-update-force.py"
-        )
+    """Delegate soft, unset, and global hard policy."""
     return FORCE.apply_policy(
         manifest,
         force=force,
@@ -78,11 +73,6 @@ def main() -> int:
     ]
     if retired:
         raise ValueError("percentage rollout is not accepted")
-    if _present(args.force) == "hard":
-        raise ValueError(
-            "operator force=hard is retired; set platform-force=hard and an "
-            "explicit non-iOS list on apply-update-force.py"
-        )
     FORCE.process_manifest(
         args.manifest,
         verifier_path=args.verifier,

@@ -44,33 +44,18 @@ class RolloutCommandTests(unittest.TestCase):
         self.assertNotIn("reads only force", result.stdout)
         self.assertNotIn("percent", result.stdout)
 
-    def test_hard_admission_keeps_global_force_soft(self) -> None:
+    def test_hard_admission_is_global_and_includes_ios(self) -> None:
         result = self.execute({
             "PROMOTE_FORCE": "hard",
             "PROMOTE_FORCE_REASON": "security",
         })
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Admitted hard root policy", result.stdout)
-        self.assertIn("wireForce=soft", result.stdout)
-        self.assertIn("platformForce=hard", result.stdout)
-        self.assertIn(
-            "global force stays soft so 1.3.174 remains a prompt, including iOS",
-            result.stdout,
-        )
-        listed = next(
-            line for line in result.stdout.splitlines() if line.startswith("forcePlatforms=")
-        )
-        names = listed.split("=", 1)[1].split(",")
-        self.assertEqual(len(names), 8)
-        self.assertNotIn("ios", names)
-        self.assertTrue(all(not name.startswith("ios") for name in names))
-        for required in (
-            "android-arm64-v8a",
-            "linux-amd64-appimage",
-            "macos-universal",
-            "windows-amd64-setup",
-        ):
-            self.assertIn(required, names)
+        self.assertIn("every platform is forced, including iOS", result.stdout)
+        self.assertIn("wireForce=hard", result.stdout)
+        self.assertIn("forceReason=security", result.stdout)
+        self.assertNotIn("forcePlatforms=", result.stdout)
+        self.assertNotIn("platformForce", result.stdout)
 
     def test_invalid_policy_never_succeeds(self) -> None:
         for changes in (

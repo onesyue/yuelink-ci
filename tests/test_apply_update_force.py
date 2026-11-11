@@ -1,7 +1,8 @@
-"""Canonical four-input force helper. Selected platforms only."""
+"""Canonical force helper. Global hard covers every platform, including iOS."""
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import json
 import os
@@ -10,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,12 +85,65 @@ class ApplyUpdateForceTest(unittest.TestCase):
         hole = self.manifest()
         hole["force"] = "hard"
         hole["forceReason"] = "security"
-        hole["forcePlatforms"] = self.non_ios(hole)
         self.assertEqual(APPLY.legacy_client_tier(hole), "hard")
-        self.assertEqual(APPLY.current_client_tier(hole, "ios"), "soft")
-        self.assertEqual(APPLY.current_client_tier(hole, "windows-amd64-setup"), "soft")
-        with self.assertRaisesRegex(ValueError, "global hard"):
-            APPLY.apply_policy(hole, force=None, platform_force=None, reason=None, platforms=None)
+        self.assertEqual(APPLY.current_client_tier(hole, "ios"), "hard")
+        self.assertEqual(APPLY.current_client_tier(hole, "windows-amd64-setup"), "hard")
+        self.assertFalse(APPLY.apply_policy(
+            hole, force=None, platform_force=None, reason=None, platforms=None,
+        ))
+
+    def test_global_hard_validates_and_signs(self) -> None:
+        policy = json.loads((ROOT / "policy/update-force.json").read_text())
+        self.assertEqual(set(policy), {"version", "force", "forceReason"})
+        self.assertEqual(policy["force"], "hard")
+        self.assertIn(policy["forceReason"], {"security", "incompatible"})
+        self.assertNotIn("forcePlatforms", policy)
+        manifest = self.manifest()
+        verifier = APPLY.load_verifier(VERIFIER)
+        self.assertTrue(APPLY.apply_policy(
+            manifest, force=policy["force"], platform_force=None,
+            reason=policy["forceReason"], platforms=None, verifier=verifier,
+        ))
+        self.assertEqual(manifest["force"], "hard")
+        self.assertEqual(manifest["forceReason"], policy["forceReason"])
+        self.assertNotIn("forcePlatforms", manifest)
+        self.assertNotIn("platformForce", manifest)
+        self.assertEqual(APPLY.legacy_client_tier(manifest), "hard")
+        self.assertEqual(APPLY.current_client_tier(manifest, "ios"), "hard")
+        self.assertEqual(APPLY.current_client_tier(manifest, "windows-amd64-setup"), "hard")
+        verifier._validate_rollout_extension(manifest)
+        verifier._validate_manifest_policy(manifest)
+        manifest["keyId"] = verifier.CURRENT_KEY_ID
+        with tempfile.TemporaryDirectory() as directory:
+            private = Path(directory) / "isolated.pem"
+            subprocess.run(
+                ["openssl", "genpkey", "-algorithm", "ED25519", "-out", str(private)],
+                check=True, capture_output=True,
+            )
+            public = subprocess.check_output(
+                ["openssl", "pkey", "-in", str(private), "-pubout", "-outform", "DER"]
+            )
+            public_b64 = base64.b64encode(public[-32:]).decode()
+            payload = Path(directory) / "payload"
+            payload.write_bytes(
+                verifier.SIGNATURE_DOMAIN + verifier._canonical_json(manifest).encode()
+            )
+            signature = subprocess.check_output([
+                "openssl", "pkeyutl", "-sign", "-inkey", str(private),
+                "-rawin", "-in", str(payload),
+            ])
+            sealed = dict(manifest)
+            sealed["sig"] = "ed25519:" + base64.b64encode(signature).decode()
+            raw = json.dumps(sealed).encode()
+            with mock.patch.object(verifier, "CURRENT_PUBLIC_KEY_B64", public_b64):
+                verified = verifier._verify_signed_manifest(raw)
+            self.assertEqual(verified["force"], "hard")
+            self.assertNotIn("forcePlatforms", verified)
+            verifier._validate_rollout_extension(verified)
+            tampered = raw.replace(b'"force": "hard"', b'"force": "soft"', 1)
+            with mock.patch.object(verifier, "CURRENT_PUBLIC_KEY_B64", public_b64):
+                with self.assertRaises(verifier.ManifestError):
+                    verifier._verify_signed_manifest(tampered)
 
     def test_one_selected_platform_leaves_the_others_soft(self) -> None:
         manifest = self.manifest()

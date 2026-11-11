@@ -20,32 +20,27 @@ version, `force` (`soft` or `hard`), and `force_reason` when force is hard.
 The workflow admits that policy and exits. It has no cloud credentials and
 no permission to write the root.
 
-`soft` is the post-dial website manifest: a prompt on every platform, with
-no `forcePlatforms` list and no `platformForce`. A hard request is operator
-intent. The signed global `force` stays `soft`. The manifest sets
-`platformForce` to `hard` for the explicit non-iOS asset list, with
-`forceReason` of `security` or `incompatible`. There is no `forceDeadline`.
-The archive helper is `scripts/apply-update-force.py`. `--force hard` is
-rejected instead of being rewritten into `platformForce`. A hard archive
-policy requires `platform-force=hard`, a reason, and the selected asset keys.
-Omitted non-iOS platforms stay prompts.
+`soft` is a prompt on every platform, with no `forcePlatforms` list and no
+`platformForce`. A hard request writes global `force: hard` and `forceReason`
+(`security` or `incompatible`) and does not write `forcePlatforms` or
+`platformForce`. That forces every platform, including iOS. Shipped 1.3.174
+reads `force`, so the same global value forces it too. There is no
+`forceDeadline` on a new root. Percentage rollout is rejected.
+
+The archive helper is `scripts/apply-update-force.py`. `--force hard` stays
+global. A selective archive policy is still `--platform-force hard`, a reason,
+and an explicit non-iOS asset list. Omitted platforms stay prompts.
+`policy/update-force.json` is the checked-in global hard policy for its named
+version.
 
 ## Three readers
 
-| Reader | What it honors | Manifest from a hard request |
+| Reader | What it honors | Manifest from a global hard request |
 | --- | --- | --- |
-| 1.3.174 | `force` and `forceDeadline` only | Prompt on every platform, including iOS |
-| Agreed new client | `platformForce: hard` on the listed platforms; iOS stays a prompt | Non-iOS hard, iOS prompt |
-| Publisher | Rejects global hard, a deadline, rollout fields, and any iOS name | iOS is never a member |
-
-Shipped 1.3.174 does not read `platformForce` or `forcePlatforms`. The first
-migration of those installs can only prompt, on desktop and on iOS. A new
-root is refused when global `force` is hard or a deadline is present,
-because that client would force iOS as well. Draft yuelink#122
-(`ad68ef80`) parses `platformForce` and keeps iOS a prompt, including for a
-historical global hard. It is not merged. Shipped 1.3.174 does not parse
-`platformForce`. The producer tests do not execute that Dart suite.
+| 1.3.174 | `force` and `forceDeadline` only | Hard on every platform, including iOS |
+| Current client | `force: hard` on every platform; `platformForce` only when the global force stays soft | Hard on every platform, including iOS |
+| Publisher | Emits global hard with no `forcePlatforms`; still rejects percentage fields and a deadline | No platform list |
 
 Historical signed manifests may still contain `rollout` or a global hard
-`force`. The shared verifier still checks those objects. The new producer
-and this root admission do not emit or admit them.
+`force`. The shared verifier still checks those objects. New producers emit
+global hard and do not emit a percentage.

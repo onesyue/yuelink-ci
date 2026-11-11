@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Attach an explicit force policy to an unsigned candidate.
 
-Global ``force`` stays soft. ``--force hard`` is rejected and is never
-rewritten into ``platformForce``. A hard update is ``--platform-force hard``
-plus ``--force-reason`` and an explicit comma-separated asset list. Only the
-named non-iOS platforms are selected. Percentage rollout is rejected.
+``--force hard`` plus ``--force-reason`` writes global ``force: hard`` and
+``forceReason`` with no ``forcePlatforms`` and no ``platformForce``. That
+forces every platform, including iOS. A selective hard update remains
+``--platform-force hard`` plus an explicit non-iOS asset list. Percentage
+rollout is rejected.
 """
 
 from __future__ import annotations
@@ -64,14 +65,13 @@ def legacy_client_tier(manifest: dict) -> str:
 def current_client_tier(manifest: dict, platform: str) -> str:
     """Producer-side reader for the bytes this publisher emits.
 
-    Only ``platformForce: hard`` forces, and never iOS. Historical ``force: soft``
-    plus ``forcePlatforms`` stays soft. Shipped 1.3.174 does not read
-    ``platformForce``. Draft yuelink#122 (``ad68ef80``) does, and it also keeps
-    iOS soft when a historical manifest is global hard. This helper does not
-    reimplement that draft and does not replace its tests.
+    ``force: hard`` or ``forceDeadline`` forces every platform, including iOS.
+    ``platformForce: hard`` forces only the named platforms. Shipped 1.3.174
+    reads ``force`` and ignores ``platformForce``; ``legacy_client_tier`` is
+    that reader.
     """
-    if platform == IOS or platform.startswith("ios"):
-        return "soft"
+    if manifest.get("force") == "hard" or "forceDeadline" in manifest:
+        return "hard"
     if manifest.get("platformForce") != "hard":
         return "soft"
     names = manifest.get("forcePlatforms")
@@ -92,7 +92,7 @@ def _parse_names(text: str, manifest: dict, allowed: set[str]) -> list[str]:
     names = []
     for name in parts:
         if name == IOS or name.startswith("ios"):
-            raise ValueError("iOS is never forced")
+            raise ValueError("platformForce must name non-iOS platforms")
         if name not in allowed:
             raise ValueError(f"unknown platform {name}")
         if name not in platforms:
@@ -112,7 +112,7 @@ def apply_policy(
 ) -> bool:
     """Merge an explicit policy. Returns whether the object changed.
 
-    ``force=hard`` is rejected. It is not translated into ``platformForce``.
+    ``force=hard`` stays global. It is not rewritten into ``platformForce``.
     """
     if not isinstance(manifest, dict):
         raise ValueError("manifest must be a JSON object")
@@ -125,18 +125,27 @@ def apply_policy(
     reason_text = _present(reason)
     list_text = _present(platforms)
     if force_text == "hard":
-        raise ValueError(
-            "operator force=hard would force 1.3.174 including iOS; "
-            "set platform-force=hard and an explicit non-iOS list"
+        if reason_text not in REASONS:
+            raise ValueError("hard enforcement requires forceReason")
+        if platform_text is not None or list_text is not None:
+            raise ValueError("global hard does not take a platform list")
+        changed = (
+            manifest.get("force") != "hard"
+            or manifest.get("forceReason") != reason_text
+            or "forcePlatforms" in manifest
+            or "platformForce" in manifest
         )
+        manifest["force"] = "hard"
+        manifest["forceReason"] = reason_text
+        manifest.pop("forcePlatforms", None)
+        manifest.pop("platformForce", None)
+        return changed
     if force_text not in {None, "soft"}:
-        raise ValueError("force must be soft")
+        raise ValueError("force must be soft or hard")
     if platform_text is None:
         if reason_text is not None or list_text is not None:
             raise ValueError("a platform list or reason requires platform-force=hard")
         if force_text is None:
-            if manifest.get("force") == "hard":
-                raise ValueError("global hard would force 1.3.174 including iOS")
             return False
         changed = (
             manifest.get("force") != "soft"
@@ -227,10 +236,6 @@ def process_manifest(
         verifier=verifier,
     )
     verifier._validate_rollout_extension(manifest)
-    if legacy_client_tier(manifest) == "hard":
-        raise ValueError("global hard would force 1.3.174 including iOS")
-    if current_client_tier(manifest, IOS) != "soft":
-        raise ValueError("iOS is never forced")
     if not changed:
         return
     encoded = json.dumps(

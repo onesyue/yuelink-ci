@@ -59,24 +59,30 @@ platforms = {
     "linux-amd64-appimage": {},
 }
 manifest = {"schemaVersion": 1, "platforms": platforms}
-asset_keys = sorted(name for name in platforms if name != "ios")
 module.apply_policy(
     manifest,
-    force="soft",
-    platform_force="hard" if force == "hard" else None,
+    force=force,
+    platform_force=None,
     reason=reason or None,
-    platforms=",".join(asset_keys) if force == "hard" else None,
+    platforms=None,
 )
-if module.legacy_client_tier(manifest) != "soft":
-    raise SystemExit("global hard would force 1.3.174 including iOS")
-if module.current_client_tier(manifest, "ios") != "soft":
-    raise SystemExit("iOS is never forced")
-if "rollout" in manifest or "percent" in manifest or manifest.get("force") == "hard":
-    raise SystemExit("global hard and percentage rollout are not accepted")
-print(f"Admitted {force} root policy for {version} over {baseline}; iOS stays a prompt")
-print(f"wireForce={manifest.get('force')}")
+if "rollout" in manifest or "percent" in manifest:
+    raise SystemExit("percentage rollout is not accepted")
 if force == "hard":
-    print("global force stays soft so 1.3.174 remains a prompt, including iOS")
-    print(f"platformForce={manifest['platformForce']}")
-    print("forcePlatforms=" + ",".join(manifest["forcePlatforms"]))
+    if module.legacy_client_tier(manifest) != "hard":
+        raise SystemExit("global hard must force every platform, including iOS")
+    if module.current_client_tier(manifest, "ios") != "hard":
+        raise SystemExit("global hard must force iOS")
+    if "forcePlatforms" in manifest or "platformForce" in manifest:
+        raise SystemExit("global hard does not take forcePlatforms")
+    print(f"Admitted hard root policy for {version} over {baseline}; every platform is forced, including iOS")
+    print(f"wireForce={manifest.get('force')}")
+    print(f"forceReason={manifest.get('forceReason')}")
+else:
+    if module.legacy_client_tier(manifest) != "soft":
+        raise SystemExit("soft policy must stay a prompt")
+    if module.current_client_tier(manifest, "ios") != "soft":
+        raise SystemExit("soft policy must leave iOS a prompt")
+    print(f"Admitted soft root policy for {version} over {baseline}; iOS stays a prompt")
+    print(f"wireForce={manifest.get('force')}")
 PY

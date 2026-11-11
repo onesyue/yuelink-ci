@@ -37,29 +37,45 @@ def read_json(raw: bytes):
 def policy(manifest: dict, now: datetime, *, force: str = 'soft', force_reason: str | None = None) -> None:
     if 'rollout' in manifest or 'percent' in manifest:
         raise ValueError('rollout percentage fields are not accepted')
-    if manifest.get('force') == 'hard' or 'forceDeadline' in manifest:
-        raise ValueError('global hard would force 1.3.174 including iOS')
+    if 'forceDeadline' in manifest:
+        raise ValueError('forceDeadline is not accepted')
     names = manifest.get('forcePlatforms')
     if names is not None and (
             not isinstance(names, list) or any(not isinstance(name, str) for name in names)
             or any(name == 'ios' or name.startswith('ios') for name in names)):
-        raise ValueError('iOS is never forced')
+        raise ValueError('platformForce must name non-iOS platforms')
     signed_force = manifest.get('force', 'soft')
-    if signed_force != 'soft' or not isinstance(signed_force, str):
-        raise ValueError('new roots keep global force soft')
+    if signed_force not in {'soft', 'hard'} or not isinstance(signed_force, str):
+        raise ValueError('force must be soft or hard')
     if force == 'soft':
-        if manifest.get('platformForce') or names is not None or force_reason:
+        if signed_force != 'soft' or manifest.get('platformForce') or names is not None or force_reason:
             raise ValueError('soft promotion rejects a platform-force manifest')
     elif force == 'hard':
         if force_reason not in {'security', 'incompatible'}:
             raise ValueError('hard enforcement requires forceReason')
         platforms = manifest.get('platforms')
-        if not isinstance(platforms, dict) or 'ios' not in platforms:
-            raise ValueError('ios platform is required so it can be excluded from force')
-        expected = sorted(name for name in platforms if isinstance(name, str) and name != 'ios' and not name.startswith('ios'))
-        if (manifest.get('platformForce') != 'hard' or manifest.get('forceReason') != force_reason
-                or names != expected):
-            raise ValueError('platform force must stay globally soft and list every non-iOS platform')
+        if not isinstance(platforms, dict):
+            raise ValueError('candidate platforms are missing')
+        expected = sorted(
+            name for name in platforms
+            if isinstance(name, str) and name != 'ios' and not name.startswith('ios')
+        )
+        global_hard = (
+            signed_force == 'hard'
+            and manifest.get('forceReason') == force_reason
+            and not manifest.get('platformForce')
+            and names is None
+        )
+        selective = (
+            signed_force == 'soft'
+            and manifest.get('platformForce') == 'hard'
+            and manifest.get('forceReason') == force_reason
+            and names == expected
+        )
+        if not global_hard and not selective:
+            raise ValueError(
+                'hard force must be global with no forcePlatforms, or list every non-iOS platform'
+            )
     else:
         raise ValueError('force must be soft or hard')
     if VERIFIER._utc_timestamp(manifest['expiresAt'], 'expiresAt') <= now:
@@ -150,14 +166,22 @@ def prepare(*, baseline_raw: bytes, candidate_raw: bytes, binding_raw: bytes, bu
             raise ValueError('existing promotion archive identity drifted')
         if previous.get('candidate') != new or previous.get('baseline') != old or previous.get('force') != force:
             raise ValueError('existing promotion record does not match this archive')
+    global_hard = (
+        force == 'hard'
+        and candidate.get('force') == 'hard'
+        and not candidate.get('platformForce')
+        and not candidate.get('forcePlatforms')
+    )
     result = {'schemaVersion': 1, 'mode': 'root-manifest', 'force': force,
               'baseline': old, 'candidate': new, 'archiveIdentity': identity,
               'archiveBindingSha256': digest(binding_raw),
               'legacyClientForce': candidate.get('force', 'soft'),
-              'iosForce': 'soft',
+              'iosForce': 'hard' if global_hard else 'soft',
               'promotion': {'builderCommit': promotion_builder, 'runId': promotion_run,
                             'workflow': '.github/workflows/promote-update-rollout.yml', 'ref': 'refs/heads/master'}}
-    if force == 'hard':
+    if global_hard:
+        result['forceReason'] = force_reason
+    elif force == 'hard':
         result['platformForce'] = 'hard'
         result['forceReason'] = force_reason
         result['forcePlatforms'] = candidate['forcePlatforms']
@@ -183,9 +207,11 @@ def main() -> None:
                      initial_root=(directory / 'initial-root.json').read_bytes() if (directory / 'initial-root.json').exists() else None,
                      promotion_builder=args.promotion_builder, promotion_run=args.promotion_run)
     (directory / 'next-plan.json').write_text(json.dumps(result, sort_keys=True, separators=(',', ':')) + '\n')
-    print(f"Admitted {result['force']} root policy; iOS stays a prompt")
-    if force == 'hard':
-        print('global force stays soft so 1.3.174 remains a prompt, including iOS')
+    if result.get('iosForce') == 'hard':
+        print(f"Admitted {result['force']} root policy; every platform is forced, including iOS")
+    else:
+        print(f"Admitted {result['force']} root policy; iOS stays a prompt")
+    if result.get('platformForce') == 'hard':
         print('platformForce=' + result['platformForce'])
 
 

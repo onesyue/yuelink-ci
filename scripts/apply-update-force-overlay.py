@@ -60,9 +60,10 @@ COMMENT_B = (
     "          # downgrade an already-updated install.\n"
 )
 COMMENT_C = (
-    "          # Apply the reviewed force policy before signing. Global force stays\n"
-    "          # soft for legacy readers; only explicit platformForce enables hard\n"
-    "          # enforcement on the named non-iOS platforms. Never modify signed bytes.\n"
+    "          # Apply the reviewed force policy before signing. Global force hard\n"
+    "          # with a reason and no forcePlatforms forces every platform, including\n"
+    "          # iOS. platformForce still names non-iOS platforms only. Never modify\n"
+    "          # signed bytes.\n"
 )
 
 

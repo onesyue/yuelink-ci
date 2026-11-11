@@ -1,4 +1,4 @@
-"""Deprecated force alias. Soft and unset delegate; hard is not rewritten."""
+"""Deprecated force alias. Soft, unset, and global hard delegate."""
 
 from __future__ import annotations
 
@@ -60,13 +60,20 @@ class ApplyUpdateRolloutAliasTest(unittest.TestCase):
         self.assertEqual(APPLY.legacy_client_tier(soft), "soft")
         self.assertEqual(APPLY.current_client_tier(soft, "windows-amd64-setup"), "soft")
 
-    def test_operator_hard_is_rejected_without_translation(self) -> None:
+    def test_operator_hard_stays_global(self) -> None:
         original = self.manifest()
-        before = json.dumps(original, sort_keys=True)
-        with self.assertRaisesRegex(ValueError, "operator force=hard is retired"):
-            APPLY.apply_force(original, force="hard", reason="security")
-        self.assertEqual(json.dumps(original, sort_keys=True), before)
+        self.assertTrue(APPLY.apply_force(original, force="hard", reason="security"))
+        self.assertEqual(original["force"], "hard")
+        self.assertEqual(original["forceReason"], "security")
         self.assertNotIn("platformForce", original)
+        self.assertNotIn("forcePlatforms", original)
+        self.assertEqual(APPLY.legacy_client_tier(original), "hard")
+        self.assertEqual(APPLY.current_client_tier(original, "ios"), "hard")
+        missing = self.manifest()
+        before = json.dumps(missing, sort_keys=True)
+        with self.assertRaisesRegex(ValueError, "forceReason"):
+            APPLY.apply_force(missing, force="hard", reason=None)
+        self.assertEqual(json.dumps(missing, sort_keys=True), before)
 
     def test_historical_shapes_stay_rejected_or_soft(self) -> None:
         historical = self.manifest()
@@ -79,9 +86,9 @@ class ApplyUpdateRolloutAliasTest(unittest.TestCase):
         hole["force"] = "hard"
         hole["forceReason"] = "security"
         self.assertEqual(APPLY.legacy_client_tier(hole), "hard")
-        self.assertEqual(APPLY.current_client_tier(hole, "windows-amd64-setup"), "soft")
-        with self.assertRaisesRegex(ValueError, "global hard"):
-            APPLY.apply_force(hole, force=None, reason=None)
+        self.assertEqual(APPLY.current_client_tier(hole, "ios"), "hard")
+        self.assertEqual(APPLY.current_client_tier(hole, "windows-amd64-setup"), "hard")
+        self.assertFalse(APPLY.apply_force(hole, force=None, reason=None))
 
         deadline = self.manifest()
         deadline["forceDeadline"] = "2026-12-01T00:00:00Z"
@@ -132,7 +139,6 @@ class ApplyUpdateRolloutAliasTest(unittest.TestCase):
             {"YUELINK_UPDATE_PLATFORM_FORCE": "hard"},
             {"PROMOTE_PERCENT": "10", "YUELINK_UPDATE_FORCE": "hard", "YUELINK_UPDATE_FORCE_REASON": "security"},
             {"YUELINK_UPDATE_FORCE": "hard"},
-            {"YUELINK_UPDATE_FORCE": "hard", "YUELINK_UPDATE_FORCE_REASON": "incompatible"},
             {"YUELINK_UPDATE_FORCE": "soft", "YUELINK_UPDATE_FORCE_REASON": "security"},
             {"YUELINK_UPDATE_FORCE": "wide"},
         ):
@@ -141,16 +147,20 @@ class ApplyUpdateRolloutAliasTest(unittest.TestCase):
                 self.assertNotEqual(completed.returncode, 0, completed.stdout)
                 self.assertEqual(before, after)
 
-    def test_cli_operator_hard_names_the_replacement_helper(self) -> None:
-        completed, before, after = self.run_cli({
+    def test_cli_operator_hard_signs_a_global_force(self) -> None:
+        completed, _before, after = self.run_cli({
             "YUELINK_UPDATE_FORCE": "hard",
             "YUELINK_UPDATE_FORCE_REASON": "security",
         })
-        self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("apply-update-force.py", completed.stderr)
-        self.assertEqual(before, after)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        manifest = json.loads(after)
+        self.assertEqual(manifest["force"], "hard")
+        self.assertEqual(manifest["forceReason"], "security")
+        self.assertNotIn("forcePlatforms", manifest)
+        self.assertNotIn("platformForce", manifest)
+        self.assertEqual(APPLY.current_client_tier(manifest, "ios"), "hard")
 
-    def test_cli_rejects_global_hard_without_rewriting(self) -> None:
+    def test_cli_keeps_an_existing_global_hard(self) -> None:
         env = {key: value for key, value in os.environ.items() if key not in RETIRED}
         original = self.manifest()
         original["force"] = "hard"
@@ -166,16 +176,19 @@ class ApplyUpdateRolloutAliasTest(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertNotEqual(completed.returncode, 0, completed.stdout)
-            self.assertIn("global hard", completed.stderr)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertEqual(path.read_bytes(), raw)
+            kept = json.loads(path.read_bytes())
+            self.assertNotIn("forcePlatforms", kept)
+            self.assertEqual(APPLY.current_client_tier(kept, "ios"), "hard")
 
-    def test_repository_does_not_carry_a_global_force_policy(self) -> None:
-        policy = ROOT / "policy/update-force.json"
-        self.assertFalse(
-            policy.exists(),
-            "global hard lives in this file on master; this branch must not carry it",
-        )
+    def test_repository_force_policy_is_global_hard(self) -> None:
+        policy = json.loads((ROOT / "policy/update-force.json").read_text())
+        self.assertEqual(set(policy), {"version", "force", "forceReason"})
+        self.assertEqual(policy["force"], "hard")
+        self.assertEqual(policy["forceReason"], "security")
+        self.assertNotIn("forcePlatforms", policy)
+        self.assertRegex(policy["version"], r"^[0-9]+\.[0-9]+\.[0-9]+$")
 
 
 if __name__ == "__main__":
