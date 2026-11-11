@@ -114,6 +114,19 @@ LINUX_CLIENT_TESTS = '''  linux_client_tests:
         env:
           EXPECTED_CANDIDATE: ${{ needs.dial_source_binding.outputs.candidate_commit }}
         run: python3 ../.client-verifier/scripts/dialgate-binding.py confirm --checkout . --expected "$EXPECTED_CANDIDATE"
+      - name: Set up canonical Go regression toolchain
+        uses: actions/setup-go@__GO_INSTALLER__
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Run exact-candidate dialgate Go regressions
+        working-directory: candidate/core
+        shell: bash
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          set -euo pipefail
+          go test -p 2 ./dialgate/... 2>&1 | tee "$RUNNER_TEMP/linux-dialgate-go-tests.log"
       - name: Set up reviewed Flutter SDK
         uses: onesyue/yuelink-ci/.github/actions/setup-flutter@__FLUTTER_INSTALLER__ # pinned installer v1
         with:
@@ -142,7 +155,9 @@ LINUX_CLIENT_TESTS = '''  linux_client_tests:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-client-tests
-          path: ${{ runner.temp }}/linux-client-tests.log
+          path: |
+            ${{ runner.temp }}/linux-client-tests.log
+            ${{ runner.temp }}/linux-dialgate-go-tests.log
           if-no-files-found: warn
           retention-days: 14
 
@@ -255,6 +270,9 @@ def generate(workflow: str) -> str:
     installers = set(re.findall(r'uses: onesyue/yuelink-ci/\.github/actions/setup-flutter@([0-9a-f]{40})', workflow))
     if flutter is None or len(installers) != 1:
         raise ValueError('canonical workflow must have one reviewed Flutter SDK and installer')
+    go_installers = set(re.findall(r'uses: actions/setup-go@([0-9a-f]{40})', workflow))
+    if len(go_installers) != 1:
+        raise ValueError('canonical workflow must have one reviewed Go installer')
     baseline = re.search(r'^      EXPECTED_BASELINE_REVISION: [\'\"]?([0-9a-f]{40})[\'\"]?\s*$', workflow, re.M)
     if go is None or baseline is None:
         raise ValueError('canonical workflow must pin Go and the exact baseline revision')
@@ -284,7 +302,7 @@ def generate(workflow: str) -> str:
             block = block.replace("          DIAL_VERIFICATION_ONLY: 'false'", "          DIAL_VERIFICATION_ONLY: 'true'")
             summary = block
     header = HEADER.replace('__GO_VERSION__', go[1]).replace('__FLUTTER_VERSION__', flutter[1]).replace('__BASELINE__', baseline[1]).replace('__CHECKOUT__', CHECKOUT)
-    client = LINUX_CLIENT_TESTS.replace('__CHECKOUT__', CHECKOUT).replace('__FLUTTER_INSTALLER__', next(iter(installers)))
+    client = LINUX_CLIENT_TESTS.replace('__CHECKOUT__', CHECKOUT).replace('__FLUTTER_INSTALLER__', next(iter(installers))).replace('__GO_INSTALLER__', next(iter(go_installers)))
     android = ANDROID_KOTLIN_COMPILE.replace('__CHECKOUT__', CHECKOUT).replace('__FLUTTER_INSTALLER__', next(iter(installers)))
     return header + client + android + dial + '\n' + summary
 

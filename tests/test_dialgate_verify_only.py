@@ -182,6 +182,66 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
                 self.assertEqual(Path(call['cwd']), candidate.resolve())
                 self.assertEqual((root / 'linux-client-tests.log').read_text(), 'test report\n')
 
+    def assert_go_regression_contract(self, workflow: str) -> None:
+        job = builder.job(workflow, 'linux_client_tests')
+        canonical = (ROOT / '.github/workflows/build.yml').read_text()
+        installers = set(re.findall(r'uses: actions/setup-go@([0-9a-f]{40})', canonical))
+        self.assertEqual(len(installers), 1)
+        self.assertIn('uses: actions/setup-go@' + next(iter(installers)), job)
+        self.assertIn('go-version: ${{ env.GO_VERSION }}', job)
+        self.assertIn("  GO_VERSION: '1.27.4'", workflow)
+        self.assertIn('ref: ${{ needs.dial_source_binding.outputs.candidate_commit }}', job)
+        marker = '- name: Run exact-candidate dialgate Go regressions\n'
+        self.assertEqual(job.count(marker), 1)
+        self.assertLess(job.index('Confirm client test source identity'), job.index(marker))
+        step = job.split(marker, 1)[1].split('      - name:', 1)[0]
+        self.assertIn('working-directory: candidate/core', step)
+        self.assertIn('GOTOOLCHAIN: local', step)
+        script = textwrap.dedent(step.split('run: |\n', 1)[1])
+        self.assertIn('${{ runner.temp }}/linux-dialgate-go-tests.log', job)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); core = root / 'candidate/core'; core.mkdir(parents=True)
+            fake = root / 'go'
+            fake.write_text("#!/usr/bin/env python3\nimport json, os, pathlib, sys\n"
+                            "pathlib.Path(os.environ['CALLS']).write_text(json.dumps({'args':sys.argv[1:], 'toolchain':os.environ.get('GOTOOLCHAIN'), 'cwd':os.getcwd()}))\n"
+                            "print('synthetic Go test report')\nraise SystemExit(int(os.environ['FAKE_EXIT']))\n")
+            fake.chmod(0o755)
+            env = {**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH'],
+                   'RUNNER_TEMP': str(root), 'CALLS': str(root / 'calls'), 'GOTOOLCHAIN': 'local'}
+            for code in (0, 17):
+                result = subprocess.run(['bash', '-c', script], cwd=core,
+                                        env={**env, 'FAKE_EXIT': str(code)}, capture_output=True, text=True)
+                self.assertEqual(result.returncode, code, result.stderr)
+                call = json.loads((root / 'calls').read_text())
+                self.assertEqual(call['args'], ['test', '-p', '2', './dialgate/...'])
+                self.assertEqual(call['toolchain'], 'local')
+                self.assertEqual(Path(call['cwd']), core.resolve())
+                self.assertEqual((root / 'linux-dialgate-go-tests.log').read_text(), 'synthetic Go test report\n')
+
+    def test_go_regressions_use_exact_source_toolchain_scope_and_propagate_failure(self) -> None:
+        self.assert_go_regression_contract((ROOT / '.github/workflows/dialgate-verify.yml').read_text())
+
+    def test_go_regression_contract_negative_controls(self) -> None:
+        workflow = (ROOT / '.github/workflows/dialgate-verify.yml').read_text()
+        job = builder.job(workflow, 'linux_client_tests')
+        for before, after in (
+            ('Run exact-candidate dialgate Go regressions', 'Removed Go regression step'),
+            ('working-directory: candidate/core', 'working-directory: candidate'),
+            ('go test -p 2 ./dialgate/...', 'go test -p 2 ./...'),
+            ('GOTOOLCHAIN: local', 'GOTOOLCHAIN: auto'),
+            ('set -euo pipefail\n          go test', 'set -eu\n          go test'),
+            ('ref: ${{ needs.dial_source_binding.outputs.candidate_commit }}', 'ref: master'),
+        ):
+            with self.subTest(mutation=after):
+                mutated = workflow.replace(job, job.replace(before, after, 1), 1)
+                with self.assertRaises(AssertionError):
+                    self.assert_go_regression_contract(mutated)
+
+    def test_generator_rejects_ambiguous_go_installer(self) -> None:
+        canonical = (ROOT / '.github/workflows/build.yml').read_text()
+        with self.assertRaisesRegex(ValueError, 'one reviewed Go installer'):
+            builder.generate(canonical + '\n# uses: actions/setup-go@' + '0' * 40 + '\n')
+
     def test_summary_uses_this_runs_artifacts_and_trusted_identity_checker(self) -> None:
         workflow = (ROOT / '.github/workflows/dialgate-verify.yml').read_text()
         summary = builder.job(workflow, 'dial_gate_summary')

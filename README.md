@@ -35,6 +35,11 @@ from `Build YueLink`, so release-completion listeners do not consume its runs.
 The same bound candidate also runs ten scoped Linux test targets covering the
 updater (including its startup-wiring contract), Dart crash receiver and last-good
 configuration recovery with the canonical pinned Flutter SDK, UTC and concurrency 2.
+That Linux job first runs `go test -p 2 ./dialgate/...` from the same candidate's
+`core` directory with canonical Go 1.27.4 and `GOTOOLCHAIN=local`. Ordered raw
+attempt telemetry and gate regressions retain a separate log in the same artifact;
+a failed Go test fails the job. The final integrated source must be explicitly bound
+before these new checks execute; directory review alone is not execution evidence.
 The same source also runs an unsigned `:app:compileDebugKotlin` job with the
 canonical Java/Flutter/Android SDK versions. Its pre-execution task-graph guard
 rejects release, signing, application packaging, installation, publication and
@@ -44,6 +49,8 @@ cached and NO-SOURCE tasks do not count. These checks establish compilation and
 Dart behavior, not Android native crash-handler runtime behavior.
 The exact job set is source binding, Linux client tests, Android Kotlin compilation,
 five-platform dial matrix, and dial summary.
+Policy CI pull-request runs skip the live manifest read; that read is restricted
+to master pushes and explicit manual runs on master.
 Its artifacts are verification evidence, not release authorization. Change the
 reviewed source manifest explicitly when testing a different integration head.
 
