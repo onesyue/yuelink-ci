@@ -124,7 +124,7 @@ must_replace(
 """      - name: Checkout dial-gate candidate
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: ${{ github.event.inputs.dialgate_candidate_ref || (github.event_name == 'pull_request' && 'feat/real-dial-gate-20261111') || needs.source_binding.outputs.source_commit }}
+          ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || needs.source_binding.outputs.source_commit }}
           path: candidate
           fetch-depth: 1
           submodules: recursive
@@ -134,7 +134,7 @@ must_replace(
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: ${{ github.event.inputs.dialgate_candidate_ref || (github.event_name == 'pull_request' && 'feat/real-dial-gate-20261111') || needs.source_binding.outputs.source_commit }}
+          ref: ${{ needs.source_binding.outputs.source_commit }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           path: candidate
           fetch-depth: 1
@@ -142,6 +142,18 @@ must_replace(
           persist-credentials: false
 """,
 "dial-gate-candidate-checkout")
+
+# Public PR verification uses a distinct workflow name so Build listeners
+# cannot reach release archive auditing from a verification run.
+must_replace("on:\n  pull_request:\n", "on:\n", "public-release-triggers")
+must_replace(
+    "#   • pull_request runs only the dial gate; release jobs stay on signed tags",
+    "#   • pull_request verification uses the separate YueLink dial verification workflow",
+    "public-pr-workflow-comment")
+must_replace(
+    "      EXPECTED_CANDIDATE_REVISION: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || needs.source_binding.outputs.source_commit }}\n",
+    "      EXPECTED_CANDIDATE_REVISION: ${{ needs.source_binding.outputs.source_commit }}\n",
+    "public-dial-source-identity")
 
 # 6) dial-gate baseline checkout.
 must_replace(
@@ -223,9 +235,13 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
     diff -u "$DST" "$GENERATED" || true
     exit 1
   fi
+  python3 "$SCRIPT_DIR/scripts/generate-dialgate-verify.py" --build "$GENERATED" \
+    --output "$SCRIPT_DIR/.github/workflows/dialgate-verify.yml" --check
   echo "✓ 公开 CI build.yml 与私有仓发布工作流同步"
   exit 0
 fi
 
 cp "$GENERATED" "$DST"
+python3 "$SCRIPT_DIR/scripts/generate-dialgate-verify.py" --build "$SCRIPT_DIR/$DST" \
+  --output "$SCRIPT_DIR/.github/workflows/dialgate-verify.yml"
 echo "✓ build.yml 已同步。现在 git diff 核对一遍,然后 commit + push。"

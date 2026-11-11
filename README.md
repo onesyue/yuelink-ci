@@ -20,6 +20,24 @@ The [policy workflow](.github/workflows/policy-ci.yml) also owns pinned actionli
 and ShellCheck commands. Tests are `unittest.TestCase` methods; discovery rejects
 unreachable cases. For a small change, select the affected test module.
 
+## Verification-only dial checks
+
+`YueLink dial verification` is generated from the release workflow's five-platform
+dial matrix by `sync-build.sh`. Same-repository pull requests use the reviewed
+`policy/dialgate-source.json` fields `sourceRepository`, `sourcePr`, and
+`sourceCommit`; branch dispatches require `source_pr` and an exact `source_sha`.
+The private PR head must still equal that commit when binding begins. Every
+platform then checks out that exact snapshot, and all raw reports and verdicts
+must name it and the pinned baseline. Fork PRs and tag dispatches cannot enter.
+
+This workflow has no package publication or signing jobs and has a distinct name
+from `Build YueLink`, so release-completion listeners do not consume its runs.
+The same bound candidate also runs the scoped updater, Dart crash-receiver and
+last-good configuration recovery regressions on Linux with the canonical pinned Flutter SDK, UTC and concurrency 2.
+These tests do not establish Android native crash-handler behavior.
+Its artifacts are verification evidence, not release authorization. Change the
+reviewed source manifest explicitly when testing a different integration head.
+
 ## Release contract
 
 Finalize, review and sign the public builder and private source before requesting

@@ -1,8 +1,35 @@
-diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
-index 7c5468e..801931f 100644
 --- a/.github/workflows/build.yml
 +++ b/.github/workflows/build.yml
-@@ -2759,10 +2759,29 @@ jobs:
+@@ -2746,10 +2746,28 @@
+       contents: read
+       actions: read
+     steps:
++      - name: Checkout exact public report verifier
++        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
++        with:
++          ref: ${{ github.event.pull_request.head.sha || github.sha }}
++          path: .dial-verifier
++          persist-credentials: false
+       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+         with:
+           pattern: dial-gate-*
+           path: dial-reports
++      - name: Verify dial report source identity
++        shell: bash
++        env:
++          EXPECTED_CANDIDATE_REVISION: ${{ needs.source_binding.outputs.source_commit }}
++          EXPECTED_BASELINE_REVISION: '576460aedc31690b85ccb529f519a43024e19930'
++          DIAL_BUILDER_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
++          DIAL_SOURCE_PR: ''
++          DIAL_VERIFICATION_ONLY: 'false'
++        run: |
++          python3 .dial-verifier/scripts/verify-dial-report-identity.py \
++            --reports dial-reports --candidate "$EXPECTED_CANDIDATE_REVISION" \
++            --baseline "$EXPECTED_BASELINE_REVISION"
+       - name: Write the platform table
+         shell: bash
+         run: |
+@@ -2757,10 +2775,29 @@
            import json, os, sys
            from pathlib import Path
            want = ["windows", "macos", "linux", "android", "ios"]
