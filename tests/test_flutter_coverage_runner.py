@@ -87,7 +87,14 @@ if os.environ.get('SPLIT_TIMEOUT')=='once' and len(files)>1 and (not os.environ.
         marker.write_text('1')
         if os.environ.get('BEFORE_TIMEOUT'):
             print(os.environ['BEFORE_TIMEOUT'], flush=True)
-        sys.exit(124)
+        sys.exit(int(os.environ.get('SPLIT_EXIT_CODE', '124')))
+if os.environ.get('SINGLE_FAULT') and files==[os.environ['SINGLE_FAULT']]:
+    marker=Path('single-fault-count')
+    seen=int(marker.read_text()) if marker.exists() else 0
+    if seen<int(os.environ.get('SINGLE_FAULT_TIMES','1')):
+        marker.write_text(str(seen+1))
+        print(os.environ['BEFORE_TIMEOUT'], flush=True)
+        sys.exit(int(os.environ.get('SPLIT_EXIT_CODE', '124')))
 if os.environ.get('HALF_ENGINE_TIMEOUT') and '.half' in args[args.index('--coverage-path')+1] and len(files)>int(os.environ.get('HALF_SUCCESS_SIZE', '0')):
     fault = len(files)<=int(os.environ.get('HALF_FAULT_SIZE', '8'))
     print(os.environ.get('HALF_TIMEOUT_EVENTS', os.environ['BEFORE_TIMEOUT']) if fault else os.environ['BEFORE_TIMEOUT'], flush=True)
@@ -998,7 +1005,7 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
                 self.assertEqual([json.loads(line) for line in original.read_text().splitlines()], events)
                 index = original.name.split('.')[0]
                 self.assertEqual(json.loads((out / f"{index}.timeout.json").read_text()), {
-                    "classification": "engine_shutdown_fault", "report": original.name})
+                    "classification": "engine_shutdown_fault", "exit_code": 124, "report": original.name})
                 for part in (0, 1):
                     attempt = json.loads((out / f"{index}.half{part}.execution.json").read_text())
                     self.assertEqual(attempt["exit_code"], 0)
@@ -1035,8 +1042,13 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
         self.assertIn("single-file retry limit reached", result.stderr)
         out = self.root / "coverage/source-gate"
         self.assertEqual(len(list(out.glob("*.half*.initial.jsonl"))), 1)
-        classification, = out.glob("*.half*.timeout.json")
-        self.assertEqual(json.loads(classification.read_text())["classification"], "engine_shutdown_fault")
+        # The single file gets exactly one bounded retry; both faults are kept.
+        first, = out.glob("*.half0.timeout.json")
+        retry, = out.glob("*.half0.retry.timeout.json")
+        self.assertEqual(len(list(out.glob("*.half*.timeout.json"))), 2)
+        for classification in (first, retry):
+            self.assertEqual(json.loads(classification.read_text())["classification"], "engine_shutdown_fault")
+        self.assertFalse(list(out.glob("*.half0.retry.retry*")))
         self.assertFalse((self.root / "coverage/lcov.info").exists())
 
     def test_nested_engine_shutdown_timeouts_recover_from_successful_leaves(self):
@@ -1053,7 +1065,7 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
             evidence = out / f"{index}.half{path}.initial.jsonl"
             self.assertEqual([json.loads(line) for line in evidence.read_text().splitlines()], events)
             self.assertEqual(json.loads((out / f"{index}.half{path}.timeout.json").read_text()), {
-                "classification": "engine_shutdown_fault", "report": evidence.name})
+                "classification": "engine_shutdown_fault", "exit_code": 124, "report": evidence.name})
         for path in ("00", "01", "10", "11"):
             attempt = json.loads((out / f"{index}.half{path}.execution.json").read_text())
             self.assertEqual(attempt["exit_code"], 0)
@@ -1085,6 +1097,78 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
                     classification, = out.glob("*.half00.timeout.json")
                     self.assertEqual(json.loads(classification.read_text())["classification"], "recorded_failure")
                 self.assertFalse((self.root / "coverage/lcov.info").exists())
+
+    def test_engine_fault_with_generic_exit_one_recovers_with_auditable_halves(self):
+        groups = self.prepare_timeout_groups()
+        for message in sorted(RUNNER.ENGINE_SHUTDOWN_ERRORS):
+            with self.subTest(message=message):
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                events = self.engine_timeout_events(message) + [{"type": "done", "success": False}]
+                result = self.run_engine_timeout(groups, events, SPLIT_EXIT_CODE="1")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                out = self.root / "coverage/source-gate"
+                original, = out.glob("*.initial.jsonl")
+                index = original.name.split('.')[0]
+                self.assertEqual(json.loads((out / f"{index}.timeout.json").read_text()), {
+                    "classification": "engine_shutdown_fault", "exit_code": 1, "report": original.name})
+                self.assertEqual(json.loads((out / f"{index}.execution.json").read_text())["exit_code"], 1)
+                for part in (0, 1):
+                    attempt = json.loads((out / f"{index}.half{part}.execution.json").read_text())
+                    self.assertEqual(attempt["exit_code"], 0)
+                self.assertEqual(json.loads((out / "execution.json").read_text())["status"], "COMPLETE")
+
+    def test_generic_exit_one_without_engine_fault_never_recovers(self):
+        groups = self.prepare_timeout_groups()
+        engine = self.engine_timeout_events("Shell subprocess crashed with segmentation fault.")
+        for events, needle in (
+            ([], "CalledProcessError"),
+            ([{"type": "done", "success": True}], "CalledProcessError"),
+            (engine + [{"type": "testDone", "testID": 2, "result": "failure"}], "recorded a failure"),
+            (self.engine_timeout_events("getSourceReport: unknown error"), "recorded a failure"),
+        ):
+            with self.subTest(events=events):
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                result = self.run_engine_timeout(groups, events, SPLIT_EXIT_CODE="1")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(needle, result.stderr)
+                out = self.root / "coverage/source-gate"
+                original, = out.glob("*.initial.jsonl")
+                self.assertTrue(original.with_name(original.name.replace(".initial.jsonl", ".timeout.json")).is_file())
+                self.assertFalse(list(out.glob("*.half*.jsonl")))
+                self.assertFalse((self.root / "coverage/lcov.info").exists())
+
+    def test_isolated_single_file_engine_fault_retries_exactly_once(self):
+        target = "test/services/rotating_log_file_test.dart"
+        groups = self.prepare_timeout_groups()  # live tree: directory_groups mode
+        events = self.engine_timeout_events("Shell subprocess crashed with segmentation fault.")
+        for code in ("1", "124"):
+            with self.subTest(code=code):
+                shutil.rmtree(self.root / "coverage", ignore_errors=True)
+                for marker in self.root.glob("**/single-fault-count"):
+                    marker.unlink()
+                result = self.run_gate(
+                    SINGLE_FAULT=target, SPLIT_EXIT_CODE=code,
+                    BEFORE_TIMEOUT="\n".join(json.dumps(event) for event in events),
+                    FIXTURE_GROUPS=str(len(groups)), YUELINK_COVERAGE_MAX_WORKERS="1")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                out = self.root / "coverage/source-gate"
+                index = groups.index([target])
+                self.assertEqual(json.loads((out / f"{index}.timeout.json").read_text())["classification"],
+                                 "engine_shutdown_fault")
+                self.assertEqual(json.loads((out / f"{index}.retry.execution.json").read_text())["exit_code"], 0)
+                self.assertEqual((out / f"{index}.jsonl").read_bytes(), (out / f"{index}.retry.jsonl").read_bytes())
+                self.assertEqual(json.loads((out / "execution.json").read_text())["status"], "COMPLETE")
+        shutil.rmtree(self.root / "coverage", ignore_errors=True)
+        for marker in self.root.glob("**/single-fault-count"):
+            marker.unlink()
+        refused = self.run_gate(
+            SINGLE_FAULT=target, SINGLE_FAULT_TIMES="2", SPLIT_EXIT_CODE="1",
+            BEFORE_TIMEOUT="\n".join(json.dumps(event) for event in events),
+            FIXTURE_GROUPS=str(len(groups)), YUELINK_COVERAGE_MAX_WORKERS="1")
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn(f"engine shutdown fault timed out for file {target}", refused.stderr)
+        self.assertIn("single-file retry limit reached", refused.stderr)
+        self.assertFalse((self.root / "coverage/lcov.info").exists())
 
     def test_timeout_halves_must_each_have_terminal_and_coverage(self):
         self.admitted_singleton_corpus()
