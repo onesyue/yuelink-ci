@@ -62,6 +62,20 @@ must_replace(
     "#   • pull_request changes run Policy CI, never this release builder",
     "public-pr-workflow-comment")
 
+# Preserve the public archive boundary label consumed by existing retry tests.
+# The private131 template uses this equivalent reviewed comment; no commands
+# or retry behavior are changed by this normalization.
+private_archive_comment = (
+    "      # Signing/immutable archival does not advance the public update root.\n"
+    "      # Root/cohort promotion belongs to the separately authorized workflow.\n"
+)
+public_archive_comment = (
+    "      # Build/sign and client exposure are separate. Mode comes FIRST so an\n"
+    "      # older private script rejects it as an invalid version before any write.\n"
+)
+if private_archive_comment in s:
+    must_replace(private_archive_comment, public_archive_comment, "public-archive-boundary-comment")
+
 # 1) 顶部 banner
 must_replace(
 """name: Build YueLink
@@ -135,6 +149,13 @@ must_replace(
 """,
 "release-checkout")
 
+# Accept only the two reviewed private candidate-reference profiles. Never
+# restore a hardcoded branch when the template binds its exact PR head.
+dial_refs = ["${{ github.event.inputs.dialgate_candidate_ref || (github.event_name == 'pull_request' && 'feat/real-dial-gate-20261111') || needs.source_binding.outputs.source_commit }}", "${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || needs.source_binding.outputs.source_commit }}"]
+present_dial_refs = [ref for ref in dial_refs if f"          ref: {ref}\n          path: candidate\n" in s]
+if len(present_dial_refs) != 1:
+    sys.exit("::error:: unknown or ambiguous dial candidate source binding")
+dial_ref = present_dial_refs[0]
 # 5) dial-gate candidate checkout. Unique because of path: candidate.
 must_replace(
 """      - name: Checkout dial-gate candidate
@@ -145,7 +166,7 @@ must_replace(
           fetch-depth: 1
           submodules: recursive
           persist-credentials: false
-""",
+""".replace("${{ github.event.inputs.dialgate_candidate_ref || (github.event_name == 'pull_request' && 'feat/real-dial-gate-20261111') || needs.source_binding.outputs.source_commit }}", dial_ref),
 """      - name: Checkout dial-gate candidate
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -156,7 +177,7 @@ must_replace(
           fetch-depth: 1
           submodules: recursive
           persist-credentials: false
-""",
+""".replace("${{ github.event.inputs.dialgate_candidate_ref || (github.event_name == 'pull_request' && 'feat/real-dial-gate-20261111') || needs.source_binding.outputs.source_commit }}", dial_ref),
 "dial-gate-candidate-checkout")
 
 # 6) dial-gate baseline checkout.

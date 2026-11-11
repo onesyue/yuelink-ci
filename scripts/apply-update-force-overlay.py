@@ -9,29 +9,23 @@ fail before any write. An already canonical step is left unchanged.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
-
 STEP = "      - name: Generate updater manifest candidate\n"
 SIGN = "      - name: Sign immutable release archive\n"
-ATTESTED = (
-    "          ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}\n"
-)
+ATTESTED = "          ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}\n"
 ENV_FORCE = "          YUELINK_UPDATE_FORCE: ${{ vars.YUELINK_UPDATE_FORCE }}\n"
-ENV_PLATFORM = (
-    "          YUELINK_UPDATE_PLATFORM_FORCE: ${{ vars.YUELINK_UPDATE_PLATFORM_FORCE }}\n"
-)
+ENV_PLATFORM = "          YUELINK_UPDATE_PLATFORM_FORCE: ${{ vars.YUELINK_UPDATE_PLATFORM_FORCE }}\n"
 ENV_REASON = (
     "          YUELINK_UPDATE_FORCE_REASON: ${{ vars.YUELINK_UPDATE_FORCE_REASON }}\n"
 )
-ENV_PLATFORMS = (
-    "          YUELINK_UPDATE_FORCE_PLATFORMS: ${{ vars.YUELINK_UPDATE_FORCE_PLATFORMS }}\n"
+ENV_PLATFORMS = "          YUELINK_UPDATE_FORCE_PLATFORMS: ${{ vars.YUELINK_UPDATE_FORCE_PLATFORMS }}\n"
+ENV_SALT = (
+    "          YUELINK_UPDATE_ROLLOUT_SALT: ${{ vars.YUELINK_UPDATE_ROLLOUT_SALT }}\n"
 )
-ENV_SALT = "          YUELINK_UPDATE_ROLLOUT_SALT: ${{ vars.YUELINK_UPDATE_ROLLOUT_SALT }}\n"
-ENV_PERCENT = (
-    "          YUELINK_UPDATE_ROLLOUT_PERCENT: ${{ vars.YUELINK_UPDATE_ROLLOUT_PERCENT }}\n"
-)
+ENV_PERCENT = "          YUELINK_UPDATE_ROLLOUT_PERCENT: ${{ vars.YUELINK_UPDATE_ROLLOUT_PERCENT }}\n"
 
 PROFILE_A = ATTESTED + ENV_SALT + ENV_PERCENT + ENV_PLATFORMS
 PROFILE_B = ATTESTED + ENV_FORCE + ENV_REASON
@@ -70,12 +64,37 @@ def _step_body(source: str) -> str:
     if source.count(STEP) != 1:
         raise ValueError("updater candidate step is missing or duplicated")
     start = source.index(STEP)
-    rest = source[start + len(STEP):]
+    rest = source[start + len(STEP) :]
     marker = "\n      - name: "
     end = rest.find(marker)
     if end < 0:
         raise ValueError("updater candidate step has no following step")
-    return source[start:start + len(STEP) + end]
+    return source[start : start + len(STEP) + end]
+
+
+def _validate_executable_call(source: str, body: str, call: str) -> None:
+    """Accept the one reviewed direct command, not shell text containing it."""
+    run = "        run: |\n"
+    if body.count(run) != 1 or body.index(run) >= body.index(call):
+        raise ValueError("force helper must belong to the named candidate run")
+    # This reviewed candidate step has no heredocs. Other steps do (receipts),
+    # so reject only an indirect/quoted caller inside this policy step.
+    commands = [line for line in body.splitlines() if not line.lstrip().startswith("#")]
+    if any("<<" in line for line in commands):
+        raise ValueError("force helper cannot be supplied through a heredoc")
+    lines = source.splitlines()
+    references = [
+        index
+        for index, line in enumerate(lines)
+        if not line.lstrip().startswith("#")
+        and re.search(r"apply-update-(?:force|rollout)\.py", line)
+    ]
+    expected = call.splitlines()
+    if (
+        len(references) != 1
+        or lines[references[0] : references[0] + len(expected)] != expected
+    ):
+        raise ValueError("force helper must be the unique exact executable invocation")
 
 
 def transform(source: str) -> str:
@@ -89,15 +108,27 @@ def transform(source: str) -> str:
     }
     present = [name for name, count in profiles.items() if count]
     if any(count > 1 for count in profiles.values()) or len(present) != 1:
-        raise ValueError("updater force environment block is unknown, mixed or duplicated")
+        raise ValueError(
+            "updater force environment block is unknown, mixed or duplicated"
+        )
     old_calls = body.count(CALL_OLD)
     new_calls = body.count(CALL_NEW)
     if old_calls + new_calls != 1:
-        raise ValueError("updater force helper is missing, duplicated or not executable")
+        raise ValueError(
+            "updater force helper is missing, duplicated or not executable"
+        )
     call = CALL_NEW if new_calls else CALL_OLD
+    _validate_executable_call(source, body, call)
     if source.index(call) > source.index(SIGN):
         raise ValueError("updater force helper is after signing")
     profile = present[0]
+    expected_env = {"a": PROFILE_A, "b": PROFILE_B, "c": PROFILE_C}[profile]
+    policy_keys = re.findall(r"^\s*(YUELINK_UPDATE_[A-Z_]+):", body, re.MULTILINE)
+    expected_keys = re.findall(
+        r"^\s*(YUELINK_UPDATE_[A-Z_]+):", expected_env, re.MULTILINE
+    )
+    if policy_keys != expected_keys:
+        raise ValueError("force environment has extra, duplicate or reordered keys")
     if profile == "c" and new_calls == 1:
         if body.count(COMMENT_C) != 1 or "YUELINK_UPDATE_ROLLOUT_" in body:
             raise ValueError("canonical force block is incomplete or mixed")
@@ -126,4 +157,6 @@ if __name__ == "__main__":
     try:
         apply(Path(sys.argv[1]))
     except (ValueError, IndexError) as exc:
-        raise SystemExit(str(exc) or "usage: apply-update-force-overlay.py <workflow>") from exc
+        raise SystemExit(
+            str(exc) or "usage: apply-update-force-overlay.py <workflow>"
+        ) from exc

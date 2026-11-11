@@ -40,10 +40,6 @@ on:
         type: choice
         default: all
         options: [all, android, ios, macos, windows, linux]
-      dialgate_candidate_ref:
-        description: 'Optional yuelink ref for the dial-gate candidate'
-        required: false
-        type: string
 
 concurrency:
   # Tags and manual runs share one queue. A pull request uses its own
@@ -1844,6 +1840,7 @@ jobs:
     # to tag pushes — branch dispatches stop at the build matrix.
     if: >-
       always() &&
+      github.event_name == 'push' &&
       startsWith(github.ref, 'refs/tags/') &&
       needs.preflight.result == 'success' &&
       needs.source_binding.result == 'success' &&
@@ -1852,7 +1849,7 @@ jobs:
     needs: [source_binding, build, preflight, dial_gate, dial_gate_summary]
     runs-on: ubuntu-24.04
     # Signing credentials remain in yuelink-release. This job archives the
-    # signed candidate only; root/rollout promotion is a separate action.
+    # signed candidate only; root promotion is a separate action.
     # Do not infer reviewer protection from the environment name.
     environment: yuelink-release
     permissions:
@@ -2547,7 +2544,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64:-}" ]; then
-            echo "::error::updater signing key is not configured; signed archive was NOT created and root was not changed"
+            echo "::error::UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64 secret is not configured; release archive was NOT signed"
             exit 1
           fi
           python3 - "$NATIVE_MEDIA_SOURCE_RECEIPT" "$TAG" "$ATTESTED_SOURCE_COMMIT" <<'PYRECEIPT'
@@ -2584,6 +2581,8 @@ jobs:
       contents: read
       actions: write
     env:
+      EXPECTED_CANDIDATE_REVISION: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || needs.source_binding.outputs.source_commit }}
+      EXPECTED_BASELINE_REVISION: '576460aedc31690b85ccb529f519a43024e19930'
       CANDIDATE_DIR: ${{ github.workspace }}/candidate
       BASELINE_DIR: ${{ github.workspace }}/baseline
       DIALGATE_OUT: ${{ github.workspace }}/dial-out
@@ -2647,7 +2646,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: ${{ github.event.inputs.dialgate_candidate_ref || (github.event_name == 'pull_request' && 'feat/real-dial-gate-20261111') || needs.source_binding.outputs.source_commit }}
+          ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || needs.source_binding.outputs.source_commit }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           path: candidate
           fetch-depth: 1
