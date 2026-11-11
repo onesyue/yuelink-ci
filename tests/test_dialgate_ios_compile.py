@@ -75,8 +75,85 @@ class IOSCompileTests(unittest.TestCase):
             )
             self.assertNotIn("fixture stop", json.dumps(receipt))
 
+    def test_plugin_identifier_is_not_plugin_failure(self):
+        for text in (
+            "error: FlutterGeneratedPluginSwiftPackage failed",
+            "error: PluginFixtureIdentifier has errors",
+            "error: sandbox PluginFixtureIdentifier not permitted",
+        ):
+            result = ios.compile_evidence(text, failed=True)
+            self.assertNotIn("plugin_execution_failed", result["diagnostic_codes"])
+            self.assertNotIn("plugin_sandbox_denied", result["diagnostic_codes"])
+            self.assertNotIn("plugin", result["failure_token_counts"])
+        self.assertIn(
+            "plugin_execution_failed",
+            ios.compile_evidence("error: plugin failed", failed=True)[
+                "diagnostic_codes"
+            ],
+        )
+
+    def test_failure_vocabulary_is_closed_and_counts_only_failure_context(self):
+        text = (
+            "SwiftCompile success\nordinary sandbox read write\n"
+            "error: rsync sandbox deny read write framework xcframework missing\n"
+            "Command PhaseScriptExecution failed with a nonzero exit code\n"
+            "The following build commands failed:\n"
+            "  SwiftEmitModule normal arm64 /private/secret-path\n"
+            'error: token=signing password=validation https://fixture.invalid/module /private/framework "secret-module" 12345678-1234-1234-1234-123456789abc\n'
+        )
+        result = ios.compile_evidence(text, failed=True)
+        counts = result["failure_token_counts"]
+        self.assertEqual(result["failure_line_count"], 4)
+        self.assertEqual(counts["sandbox"], 1)
+        self.assertEqual(counts["read"], 1)
+        self.assertEqual(counts["framework"], 1)
+        self.assertEqual(counts["SwiftEmitModule"], 1)
+        self.assertEqual(counts["PhaseScriptExecution"], 1)
+        for excluded in ("SwiftCompile", "signing", "validation", "module"):
+            self.assertNotIn(excluded, counts)
+        self.assertTrue(set(counts) <= set(ios.FAILURE_TOKENS))
+        for secret in (
+            "secret-path",
+            "fixture.invalid",
+            "secret-module",
+            "12345678-1234-1234-1234-123456789abc",
+            "password=",
+            "token=",
+        ):
+            self.assertNotIn(secret, json.dumps(result))
+        unknown = ios.compile_evidence("error: opaque_fixture_identifier", failed=True)
+        self.assertEqual(unknown["diagnostic_codes"], ["unclassified_compiler_failure"])
+        self.assertEqual(unknown["failure_token_counts"], {"error": 1})
+
+    def test_failure_vocabulary_excludes_complete_credentials_and_relative_paths(self):
+        for suffix in (
+            'token="plugin validation"',
+            "authorization: Bearer plugin",
+            "password='module framework' signing",
+            "module/plugin.swift",
+            r"module\plugin.swift",
+            "./module/plugin.swift:12:3",
+            "\"module 'plugin' framework\"",
+            r'"module \"plugin\" framework"',
+            '"module plugin',
+        ):
+            with self.subTest(suffix=suffix):
+                self.assertEqual(
+                    ios.failure_vocabulary("error: " + suffix),
+                    {"failure_line_count": 1, "failure_token_counts": {"error": 1}},
+                )
+        self.assertEqual(
+            ios.failure_vocabulary('error: token="plugin validation"\nerror: module'),
+            {
+                "failure_line_count": 2,
+                "failure_token_counts": {"error": 2, "module": 1},
+            },
+        )
+
     def test_actual_compile_diagnostics_cover_fixed_categories_only(self):
         examples = {
+            "plugin_validation_failed": "plugin failed validation",
+            "plugin_approval_required": "plugin must be enabled",
             "plugin_execution_failed": "build tool plugin failed",
             "plugin_sandbox_denied": "plugin sandbox execution denied",
             "macro_execution_failed": "external macro implementation type cannot be found",
