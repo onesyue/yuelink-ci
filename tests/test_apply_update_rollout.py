@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import sys
+import tempfile
 import subprocess
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/apply-update-rollout.py"
@@ -72,13 +76,52 @@ class ApplyUpdateRolloutTest(unittest.TestCase):
                 ROOT / "scripts/verify-update-manifest.py"
             )._validate_rollout_extension(bad)
 
-    def test_cli_leaves_bytes_alone_without_environment(self, tmp_path=None) -> None:
-        path = ROOT / "tests/fixtures/update-manifest-v1.json"
-        completed = subprocess.run(
-            ["python3", str(SCRIPT), "--manifest", str(path)],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
+    def run_cli(self, overrides: dict[str, str]) -> tuple[subprocess.CompletedProcess, bytes, bytes]:
+        env = {key: value for key, value in os.environ.items() if key not in {
+            "YUELINK_UPDATE_ROLLOUT_SALT", "YUELINK_UPDATE_ROLLOUT_PERCENT",
+            "YUELINK_UPDATE_FORCE_PLATFORMS",
+        }}
+        env.update(overrides)
+        before = (ROOT / "tests/fixtures/update-manifest-v1.json").read_bytes()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "candidate.json"
+            path.write_bytes(before)
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT), "--manifest", str(path)],
+                env=env, capture_output=True, text=True, check=False,
+            )
+            return completed, before, path.read_bytes()
+
+    def test_cli_leaves_bytes_alone_without_environment(self) -> None:
+        with mock.patch.dict(os.environ, {
+            "YUELINK_UPDATE_ROLLOUT_SALT": "ambient",
+            "YUELINK_UPDATE_ROLLOUT_PERCENT": "25",
+            "YUELINK_UPDATE_FORCE_PLATFORMS": "ios",
+        }):
+            completed, before, after = self.run_cli({})
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertNotIn("rollout", json.loads(path.read_text()))
+        self.assertEqual(before, after)
+
+    def test_cli_applies_explicit_environment(self) -> None:
+        completed, before, after = self.run_cli({
+            "YUELINK_UPDATE_ROLLOUT_SALT": "cohort",
+            "YUELINK_UPDATE_ROLLOUT_PERCENT": "10",
+            "YUELINK_UPDATE_FORCE_PLATFORMS": "ios",
+        })
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertNotEqual(before, after)
+        manifest = json.loads(after)
+        self.assertEqual(manifest["rollout"], {"salt": "cohort", "percent": 10})
+        self.assertEqual(manifest["forcePlatforms"], ["ios"])
+
+    def test_cli_invalid_environment_never_rewrites_candidate(self) -> None:
+        for overrides in (
+            {"YUELINK_UPDATE_ROLLOUT_SALT": "cohort"},
+            {"YUELINK_UPDATE_ROLLOUT_SALT": "cohort", "YUELINK_UPDATE_ROLLOUT_PERCENT": "101"},
+            {"YUELINK_UPDATE_FORCE_PLATFORMS": "missing"},
+            {"YUELINK_UPDATE_FORCE_PLATFORMS": "ios,ios"},
+        ):
+            with self.subTest(overrides=overrides):
+                completed, before, after = self.run_cli(overrides)
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertEqual(before, after)

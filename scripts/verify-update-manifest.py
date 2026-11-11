@@ -262,15 +262,21 @@ def _validate_ios_store_url(raw: Any) -> None:
         raise ManifestError(
             "iosStoreUrl must be an App Store or TestFlight HTTPS link"
         )
-    parsed = urllib.parse.urlparse(raw)
-    if (
-        parsed.scheme != "https"
-        or parsed.username
-        or parsed.password
-        or parsed.port is not None
-        or parsed.hostname not in {"apps.apple.com", "testflight.apple.com"}
-        or len(parsed.path) < 2
-    ):
+    try:
+        parsed = urllib.parse.urlparse(raw)
+        invalid = (
+            parsed.scheme != "https"
+            or parsed.username
+            or parsed.password
+            or parsed.port is not None
+            or parsed.hostname not in {"apps.apple.com", "testflight.apple.com"}
+            or len(parsed.path) < 2
+        )
+    except ValueError as exc:
+        raise ManifestError(
+            "iosStoreUrl must be an App Store or TestFlight HTTPS link"
+        ) from exc
+    if invalid:
         raise ManifestError(
             "iosStoreUrl must be an App Store or TestFlight HTTPS link"
         )
@@ -315,12 +321,14 @@ def _validate_rollout_extension(manifest: dict[str, Any]) -> None:
                 "forcePlatforms must name distinct platforms on this manifest"
             )
 
-    if "force" in manifest and manifest["force"] not in {"soft", "hard"}:
+    if "force" in manifest and (
+        not isinstance(manifest["force"], str) or manifest["force"] not in {"soft", "hard"}
+    ):
         raise ManifestError("force must be soft or hard")
-    if "forceReason" in manifest and manifest["forceReason"] not in {
-        "security",
-        "incompatible",
-    }:
+    if "forceReason" in manifest and (
+        not isinstance(manifest["forceReason"], str)
+        or manifest["forceReason"] not in {"security", "incompatible"}
+    ):
         raise ManifestError("forceReason must be security or incompatible")
     if "forceDeadline" in manifest:
         deadline = manifest["forceDeadline"]

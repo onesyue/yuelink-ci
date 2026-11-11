@@ -238,6 +238,25 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         listed["forcePlatforms"] = ["ios", "windows-amd64-setup"]
         verifier._validate_manifest_policy(listed)
 
+    def test_optional_force_fields_reject_invalid_types_consistently(self) -> None:
+        for field in ("force", "forceReason"):
+            for value in ([], {}, None, True, 1):
+                with self.subTest(field=field, value=value):
+                    with self.assertRaises(verifier.ManifestError):
+                        verifier._validate_rollout_extension({field: value})
+
+    def test_ios_store_url_rejects_malformed_authority_consistently(self) -> None:
+        for url in (
+            "https://apps.apple.com:invalid/app/example",
+            "https://apps.apple.com:99999/app/example",
+            "https://[apps.apple.com/app/example",
+        ):
+            with self.subTest(url=url):
+                with self.assertRaises(verifier.ManifestError):
+                    verifier._validate_rollout_extension({"iosStoreUrl": url})
+        for url in ("https://apps.apple.com/app/example", "https://testflight.apple.com/join/example"):
+            verifier._validate_rollout_extension({"iosStoreUrl": url})
+
     def test_current_promoted_production_root_is_valid(self) -> None:
         raw = CURRENT_PROMOTED_FIXTURE.read_bytes()
         manifest = json.loads(raw)
