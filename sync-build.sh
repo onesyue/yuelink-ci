@@ -214,6 +214,9 @@ PY
 # Apply with exact context; a source-template change must be reconciled explicitly.
 patch --batch --fuzz=0 --forward "$GENERATED" < "$SCRIPT_DIR/scripts/public-release-retry.patch"
 
+# Public release admission requires complete five-platform protocol evidence.
+patch --batch --fuzz=0 --forward "$GENERATED" < "$SCRIPT_DIR/scripts/public-dial-summary.patch"
+
 if [ "$CHECK_ONLY" -eq 1 ]; then
   if ! cmp -s "$GENERATED" "$DST"; then
     echo "::error::公开 CI build.yml 与私有仓发布工作流不同步。"
