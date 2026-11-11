@@ -75,6 +75,192 @@ class IOSCompileTests(unittest.TestCase):
             )
             self.assertNotIn("fixture stop", json.dumps(receipt))
 
+    def test_manifest_wrapper_delegates_exact_argv_and_exit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ios.install_manifest_xcrun(root)
+            script = (root / "xcrun").read_text()
+            self.assertEqual(script.count("exec /usr/bin/xcrun"), 2)
+            delegate = root / "delegate"
+            delegate.write_text(
+                '#!/usr/bin/env python3\nimport os,sys,json\nopen(os.environ["CALLS"],"w").write(json.dumps(sys.argv[1:]))\nsys.exit(19)\n'
+            )
+            delegate.chmod(0o755)
+            # Substitute only the OS executable in this isolated recording fixture.
+            (root / "xcrun").write_text(script.replace("/usr/bin/xcrun", str(delegate)))
+            env = dict(os.environ, CALLS=str(root / "calls"))
+            for args, expected in (
+                (
+                    ["xcodebuild", "-list", "space value"],
+                    [
+                        "xcodebuild",
+                        ios.MANIFEST_SANDBOX_ARGUMENT,
+                        "-list",
+                        "space value",
+                    ],
+                ),
+                (["swift", "--version"], ["swift", "--version"]),
+                (["--find", "xcodebuild"], ["--find", "xcodebuild"]),
+            ):
+                result = subprocess.run(
+                    [str(root / "xcrun"), *args],
+                    env=env,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 19)
+                self.assertEqual(json.loads((root / "calls").read_text()), expected)
+            self.assertNotIn(
+                ios.MANIFEST_SANDBOX_ARGUMENT, ios.compile_command(root, root)
+            )
+            self.assertIn(
+                ios.MANIFEST_SANDBOX_ARGUMENT, ios.compile_command(root, root, True)
+            )
+
+    def test_config_recovery_is_single_exact_nested_failure_and_keeps_first(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            guard = root / "guard-bin"
+            guard.mkdir()
+            receipt = {}
+            seen = []
+
+            def record(command, cwd, env, log):
+                seen.append(command)
+                log.write_text(
+                    "sandbox-exec: sandbox_apply: Operation not permitted"
+                    if len(seen) == 1
+                    else "ok"
+                )
+                return 1 if len(seen) == 1 else 0
+
+            with patch.object(ios, "run", side_effect=record):
+                self.assertTrue(
+                    ios.config_with_recovery(
+                        ["flutter", "build", "ios"],
+                        root,
+                        {},
+                        root,
+                        root / "no-sign.sb",
+                        receipt,
+                    )
+                )
+            self.assertEqual(len(seen), 2)
+            self.assertEqual(seen[0], seen[1])
+            self.assertEqual(
+                seen[0][:3], ["/usr/bin/sandbox-exec", "-f", str(root / "no-sign.sb")]
+            )
+            self.assertEqual(receipt["config_recovery"]["attempts"], 1)
+            self.assertTrue(receipt["config_recovery"]["completed"])
+            first = receipt["config_recovery"]["first_failure"]
+            self.assertEqual(first["exit_code"], 1)
+            self.assertEqual(first["stage"], "config")
+            self.assertIn("nested_sandbox_denied", first["diagnostic_codes"])
+            self.assertEqual(receipt["preparation_result"]["exit_code"], 0)
+            with patch.object(ios, "run") as process, self.assertRaises(ValueError):
+                ios.config_with_recovery(
+                    ["unused"], root, {}, root, root / "no-sign.sb", receipt
+                )
+            process.assert_not_called()
+
+    def test_config_second_attempt_cancellation_preserves_failure_and_signer_marker_blocks_retry(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "guard-bin").mkdir()
+            receipt = {}
+            calls = []
+
+            def cancelled_retry(command, cwd, env, log):
+                calls.append(command)
+                if len(calls) == 2:
+                    raise KeyboardInterrupt
+                log.write_text("sandbox_apply: Operation not permitted")
+                return 1
+
+            with (
+                patch.object(ios, "run", side_effect=cancelled_retry),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                ios.config_with_recovery(
+                    ["flutter"], root, {}, root, root / "profile", receipt
+                )
+            self.assertEqual(len(calls), 2)
+            self.assertFalse(receipt["config_recovery"]["completed"])
+            self.assertEqual(
+                receipt["config_recovery"]["first_failure"]["exit_code"], 1
+            )
+            self.assertEqual(receipt["preparation_result"]["outcome"], "cancelled")
+            (root / "signing-violation").write_text("signing attempt rejected")
+            calls.clear()
+            with (
+                patch.object(ios, "run", side_effect=cancelled_retry) as process,
+                self.assertRaises(ValueError),
+            ):
+                ios.config_with_recovery(
+                    ["flutter"], root, {}, root, root / "profile", {}
+                )
+            self.assertEqual(process.call_count, 1)
+
+    def test_config_recovery_rejects_unknown_network_signer_and_cancellation(self):
+        failures = [
+            "unknown failure",
+            "Operation not permitted",
+            "sandbox_apply: Permission denied",
+            "sandbox_apply: Operation not permitted\nfailed to connect",
+            "sandbox_apply: Operation not permitted\ndeny process-exec /usr/bin/codesign",
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for text in failures:
+                receipt = {}
+
+                def failed(command, cwd, env, log, text=text):
+                    log.write_text(text)
+                    return 1
+
+                with (
+                    patch.object(ios, "run", side_effect=failed) as process,
+                    self.assertRaises(ValueError),
+                ):
+                    ios.config_with_recovery(
+                        ["flutter"], root, {}, root, root / "profile", receipt
+                    )
+                self.assertEqual(process.call_count, 1)
+                self.assertNotIn("config_recovery", receipt)
+            for interruption in (
+                KeyboardInterrupt(),
+                subprocess.TimeoutExpired("fixture", 1),
+            ):
+                with (
+                    patch.object(ios, "run", side_effect=interruption) as process,
+                    self.assertRaises(type(interruption)),
+                ):
+                    ios.config_with_recovery(
+                        ["flutter"], root, {}, root, root / "profile", {}
+                    )
+                self.assertEqual(process.call_count, 1)
+            (root / "guard-bin").mkdir()
+
+            def always_nested(command, cwd, env, log):
+                log.write_text("sandbox_apply_container: Operation not permitted")
+                return 7
+
+            receipt = {}
+            with (
+                patch.object(ios, "run", side_effect=always_nested) as process,
+                self.assertRaises(ValueError),
+            ):
+                ios.config_with_recovery(
+                    ["flutter"], root, {}, root, root / "profile", receipt
+                )
+            self.assertEqual(process.call_count, 2)
+            self.assertFalse(receipt["config_recovery"]["completed"])
+            self.assertEqual(
+                receipt["config_recovery"]["first_failure"]["exit_code"], 7
+            )
+
     def test_preparation_failure_records_only_fixed_diagnostics(self):
         sensitive = "secret=fixture-only /private/fixture-path https://fixture.invalid/sub 12345678-1234-1234-1234-123456789abc"
         with tempfile.TemporaryDirectory() as directory:
@@ -120,6 +306,9 @@ class IOSCompileTests(unittest.TestCase):
 
     def test_diagnostic_enum_examples_and_timeout_remain_fail_closed(self):
         examples = {
+            "nested_sandbox_denied": "sandbox-exec: sandbox_apply: Operation not permitted",
+            "signer_execution_denied": "deny process-exec /usr/bin/codesign",
+            "package_network_failure": "could not resolve host",
             "signing_attempt_rejected": "Code signing is required",
             "sandbox_denied": "sandbox: deny process-exec",
             "unavailable_xcode_sdk": "SDK iphoneos cannot be located",

@@ -255,11 +255,15 @@ PREPARATION_STAGES = frozenset(
         "ffi-build",
         "ffi-copy",
         "config",
+        "config-retry",
         "settings-Runner",
         "settings-PacketTunnel",
     }
 )
 DIAGNOSTIC_PATTERNS = {
+    "nested_sandbox_denied": r"\bsandbox_apply(?:_container)?: Operation not permitted\b",
+    "signer_execution_denied": r"(?:deny|denied|not permitted)[^\n]*(?:codesign|ldid)|(?:codesign|ldid)[^\n]*(?:deny|denied|not permitted)",
+    "package_network_failure": r"could not resolve host|connection timed out|failed to connect|network is unreachable|certificate verify failed",
     "signing_attempt_rejected": r"signing attempt rejected|code signing is required|requires a development team|no signing certificate|no profiles for",
     "sandbox_denied": r"sandbox[^\n]*(?:deny|denied)|operation not permitted",
     "unavailable_xcode_sdk": r"SDK[^\n]*(?:cannot be located|not found|not installed)|unable to find a destination|Xcode installation is incomplete",
@@ -325,6 +329,69 @@ def require_run(
         raise ValueError("preparation command failed")
 
 
+MANIFEST_SANDBOX_ARGUMENT = "-IDEPackageSupportDisableManifestSandbox=YES"
+
+
+def install_manifest_xcrun(directory: Path) -> None:
+    wrapper = directory / "xcrun"
+    if wrapper.exists():
+        raise ValueError("manifest wrapper already exists")
+    wrapper.write_text(
+        "#!/bin/sh\n"
+        'if [ "${1-}" = xcodebuild ]; then\n'
+        "  shift\n"
+        '  exec /usr/bin/xcrun xcodebuild -IDEPackageSupportDisableManifestSandbox=YES "$@"\n'
+        "fi\n"
+        'exec /usr/bin/xcrun "$@"\n'
+    )
+    wrapper.chmod(0o755)
+
+
+def config_with_recovery(
+    command: list[str],
+    root: Path,
+    env: dict,
+    private: Path,
+    profile: Path,
+    receipt: dict,
+) -> bool:
+    # A second call cannot spend another retry, even after a failed recovery.
+    if "config_recovery" in receipt:
+        raise ValueError("config recovery already attempted")
+    guarded = protected_command(command, profile)
+    try:
+        require_run(guarded, root, env, private / "config", receipt)
+        return False
+    except ValueError:
+        failure = receipt.get("preparation_result", {})
+        codes = set(failure.get("diagnostic_codes", []))
+        forbidden = {
+            "signing_attempt_rejected",
+            "signer_execution_denied",
+            "package_network_failure",
+        }
+        if (
+            failure.get("stage") != "config"
+            or failure.get("outcome") != "failure"
+            or "nested_sandbox_denied" not in codes
+            or codes & forbidden
+            or (private / "signing-violation").exists()
+        ):
+            raise
+        receipt["config_recovery"] = {
+            "attempts": 1,
+            "reason": "nested_sandbox_denied",
+            "first_failure": failure,
+            "completed": False,
+        }
+    receipt["stage"] = "install-manifest-xcrun"
+    install_manifest_xcrun(private / "guard-bin")
+    # Same real config command, still enclosed by the original signer sandbox.
+    require_run(guarded, root, env, private / "config-retry", receipt)
+    receipt["config_recovery"]["completed"] = True
+    return True
+
+
 def validate_go_version(text: str, receipt: dict) -> None:
     receipt["stage"] = "validate-go-version"
     if "go version go1.27.4 " not in text:
@@ -356,9 +423,12 @@ def compilation_outcome(
     return "compilation_failed_or_targets_missing", code if code != 0 else 1
 
 
-def compile_command(derived: Path, result: Path) -> list[str]:
+def compile_command(
+    derived: Path, result: Path, manifest_recovery: bool = False
+) -> list[str]:
     return [
         "xcodebuild",
+        *([MANIFEST_SANDBOX_ARGUMENT] if manifest_recovery else []),
         "-workspace",
         "ios/Runner.xcworkspace",
         "-scheme",
@@ -556,12 +626,18 @@ def verify(args: argparse.Namespace) -> int:
                 "config",
             ),
         ]
+        manifest_recovery = False
         for command, label in commands:
             receipt["stage"] = label
             guarded = (
                 command if label == "media" else protected_command(command, profile)
             )
-            require_run(guarded, root, env, private / label, receipt)
+            if label == "config":
+                manifest_recovery = config_with_recovery(
+                    command, root, env, private, profile, receipt
+                )
+            else:
+                require_run(guarded, root, env, private / label, receipt)
             if label == "go-version":
                 validate_go_version((private / label).read_text(), receipt)
         receipt["stage"] = "ffi-artifact-identity"
@@ -573,6 +649,7 @@ def verify(args: argparse.Namespace) -> int:
         for target in ("Runner", "PacketTunnel"):
             command = [
                 "xcodebuild",
+                *([MANIFEST_SANDBOX_ARGUMENT] if manifest_recovery else []),
                 "-project",
                 "ios/Runner.xcodeproj",
                 "-target",
@@ -585,7 +662,13 @@ def verify(args: argparse.Namespace) -> int:
                 "-showBuildSettings",
                 "-json",
             ]
-            require_run(command, root, env, private / ("settings-" + target), receipt)
+            require_run(
+                protected_command(command, profile),
+                root,
+                env,
+                private / ("settings-" + target),
+                receipt,
+            )
             receipt["stage"] = "validate-settings-" + target
             receipt["settings"][target] = signing_disabled(
                 (private / ("settings-" + target)).read_text(), target
@@ -597,7 +680,10 @@ def verify(args: argparse.Namespace) -> int:
         receipt["stage"] = "actual-xcodebuild"
         code = run(
             protected_command(
-                compile_command(derived, private / "compile.xcresult"), profile
+                compile_command(
+                    derived, private / "compile.xcresult", manifest_recovery
+                ),
+                profile,
             ),
             root,
             env,

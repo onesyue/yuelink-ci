@@ -31,6 +31,19 @@ class AndroidCompilationTests(unittest.TestCase):
             with self.subTest(graph=graph), self.assertRaises(ValueError):
                 GUARD.validate(graph)
 
+    def test_only_exact_observed_resource_merge_is_admitted(self) -> None:
+        exact = task(':app:packageDebugResources', 'com.android.build.gradle.tasks.MergeResources_Decorated')
+        GUARD.validate([task(':app:compileDebugKotlin'), exact])
+        for changed in (
+            task(exact['path'], 'com.android.build.gradle.tasks.PackageApplication'),
+            task(exact['path'], 'com.android.build.gradle.tasks.MergeResources'),
+            task(':app:packageReleaseResources', exact['type']),
+            task(':app:packageDebug', exact['type']),
+            task(':app:bundleDebugResources', exact['type']),
+        ):
+            with self.subTest(task=changed), self.assertRaises(ValueError):
+                GUARD.validate([task(':app:compileDebugKotlin'), changed])
+
     def test_forbidden_graph_tasks_fail_before_execution(self) -> None:
         for path, kind in (
             (':app:packageDebug', 'PackageApplication'),
