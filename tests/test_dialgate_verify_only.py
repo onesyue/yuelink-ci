@@ -119,6 +119,7 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
             'needs.source_binding.result': 'success', 'needs.preflight.result': 'success',
             'needs.dial_gate_summary.result': 'success',
             'needs.dial_source_binding.outputs.ios_compile_mode': 'positive',
+            'needs.dial_source_binding.outputs.verification_scope': 'full',
         }
         for event, ref, expected_verify, expected_release in (
             ('pull_request', 'refs/pull/46/merge', True, False),
@@ -333,3 +334,60 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
         self.assertNotIn('run-id:', summary)
         self.assertNotIn('repository:', summary)
         self.assertIn('needs.dial_source_binding.outputs.candidate_commit', summary)
+
+
+    def test_scope_job_matrix_and_native_summary_execute_fail_closed(self) -> None:
+        workflow = (ROOT / '.github/workflows/dialgate-verify.yml').read_text()
+        summary = builder.job(workflow, 'native_compile_summary')
+        self.assertIn("'iOS-only unsigned compilation summary' || 'Required native compilation summary'", summary)
+        script = textwrap.dedent(summary.split('        run: |\n', 1)[1])
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)/'summary'
+            for scope in ('full', 'ios-only', '', 'unknown'):
+                for mode in ('positive', 'negative', 'unknown'):
+                    for binding in ('success', 'failure', 'skipped', 'cancelled'):
+                        values = {'needs.dial_source_binding.result': binding,
+                                  'needs.dial_source_binding.outputs.ios_compile_mode': mode,
+                                  'needs.dial_source_binding.outputs.verification_scope': scope,
+                                  'needs.dial_gate.result': 'success'}
+                        expected = binding == 'success' and scope == 'full' and mode == 'positive'
+                        for job in ('linux_client_tests', 'android_kotlin_compile', 'dial_gate', 'dial_gate_summary'):
+                            self.assertEqual(admitted(workflow, job, values), expected)
+                        # A failed binding never starts actual compilation. Scope
+                        # validation itself occurs in that mandatory binding job.
+                        self.assertEqual(admitted(workflow, 'ios_swift_compile', values), binding == 'success')
+                        for ios in ('success', 'failure', 'skipped', 'cancelled'):
+                            for android in ('success', 'failure', 'skipped', 'cancelled'):
+                                output.unlink(missing_ok=True)
+                                env = {**os.environ, 'BINDING': binding, 'SCOPE': scope, 'MODE': mode,
+                                       'IOS': ios, 'ANDROID': android, 'SOURCE': 'a'*40,
+                                       'BUILDER': 'b'*40, 'GITHUB_STEP_SUMMARY': str(output)}
+                                result = subprocess.run(['bash', '-c', script], env=env, capture_output=True)
+                                expected_pass = (binding == 'success' and mode == 'positive' and ios == 'success'
+                                                 and ((scope == 'full' and android == 'success')
+                                                      or (scope == 'ios-only' and android == 'skipped')))
+                                self.assertEqual(result.returncode == 0, expected_pass, (scope, mode, binding, ios, android))
+                                text = output.read_text() if output.exists() else ''
+                                if expected_pass and scope == 'ios-only':
+                                    self.assertIn('iOS-only unsigned compilation passed', text)
+                                    self.assertIn('Android/Linux/dial were not run', text)
+                                    self.assertIn('p95 results remain separate', text)
+                                    self.assertNotIn('Bound Android and unsigned iOS compilation passed', text)
+                                if expected_pass and scope == 'full':
+                                    self.assertIn('Bound Android and unsigned iOS compilation passed', text)
+                                if expected_pass:
+                                    self.assertIn('source: '+'a'*40, text)
+                                    self.assertIn('builder: '+'b'*40, text)
+                                    self.assertIn('Verification scope: '+scope, text)
+
+    def test_scope_policy_and_output_are_explicit_and_full_is_default(self) -> None:
+        workflow = (ROOT / '.github/workflows/dialgate-verify.yml').read_text()
+        self.assertIn('verification_scope: ${{ steps.inputs.outputs.verification_scope }}', workflow)
+        inputs = workflow.split('      verification_scope:\n', 1)[1].split('      source_sha:', 1)[0]
+        self.assertIn('default: full', inputs)
+        self.assertIn('options: [full, ios-only]', inputs)
+        manifest = json.loads((ROOT/'policy/dialgate-source.json').read_text())
+        self.assertEqual(manifest['verificationScope'], 'ios-only')
+        self.assertEqual(manifest['sourcePr'], 131)
+        self.assertEqual(manifest['sourceCommit'], '0b5096da3ceeca50b2f0c5185147a62df078e7d0')
+        self.assertEqual(manifest['iosCompileMode'], 'positive')

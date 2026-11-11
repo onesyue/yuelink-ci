@@ -79,7 +79,7 @@ class DialgateSourceBindingTests(unittest.TestCase):
                    'GITHUB_OUTPUT': str(output)}
             result = subprocess.run([sys.executable, str(SCRIPT), 'inputs'], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(output.read_text(), f'source_pr=113\ncandidate_commit={SHA}\nios_compile_mode=positive\n')
+            self.assertEqual(output.read_text(), f'source_pr=113\ncandidate_commit={SHA}\nios_compile_mode=positive\nverification_scope=full\n')
             output.unlink(); env['GITHUB_REF'] = 'refs/tags/v1.3.175'
             result = subprocess.run([sys.executable, str(SCRIPT), 'inputs'], env=env, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
@@ -101,3 +101,43 @@ class DialgateSourceBindingTests(unittest.TestCase):
             git('config', 'core.sshCommand', 'false')
             with self.assertRaises(ValueError):
                 binding.confirm_checkout(path, actual)
+
+
+    def test_scope_defaults_and_keeps_source_tuple_and_pr_precedence(self) -> None:
+        event = self.event()
+        event['inputs']['verification_scope'] = 'ios-only'
+        manifest = self.manifest()
+        self.assertEqual(binding.verification_scope('pull_request', event, manifest), 'full')
+        self.assertEqual(binding.source_input('pull_request', event, '', manifest), (113, SHA, 'positive'))
+        for scope in ('full', 'ios-only'):
+            reviewed = {**manifest, 'verificationScope': scope}
+            self.assertEqual(binding.verification_scope('pull_request', event, reviewed), scope)
+            self.assertEqual(binding.source_input('pull_request', event, '', reviewed), (113, SHA, 'positive'))
+        self.assertEqual(binding.verification_scope('workflow_dispatch', event, None), 'ios-only')
+        del event['inputs']['verification_scope']
+        self.assertEqual(binding.verification_scope('workflow_dispatch', event, None), 'full')
+
+    def test_scope_invalid_rejects_before_output_and_never_changes_source_binding(self) -> None:
+        for value in (None, '', True, 1, [], {}, 'FULL', 'ios', 'ios-only\nsource_pr=1'):
+            event = self.event(); event['inputs']['verification_scope'] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                binding.source_input('workflow_dispatch', event, 'refs/heads/review', None)
+            with self.assertRaises(ValueError):
+                binding.source_input('pull_request', self.event(), '', {**self.manifest(), 'verificationScope': value})
+        for extra in ('scope', 'verification_scope'):
+            with self.assertRaises(ValueError):
+                binding.source_input('pull_request', self.event(), '', {**self.manifest(), extra: 'ios-only'})
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); event = root/'event'; output = root/'output'; manifest = root/'manifest'
+            event.write_text(json.dumps(self.event()))
+            env = {**os.environ, 'GITHUB_EVENT_NAME': 'pull_request', 'GITHUB_EVENT_PATH': str(event), 'GITHUB_OUTPUT': str(output)}
+            for scope in ('ios-only', None):
+                manifest.write_text(json.dumps({**self.manifest(), 'verificationScope': scope}))
+                result = subprocess.run([sys.executable, str(SCRIPT), 'inputs', '--manifest', str(manifest)], env=env, capture_output=True)
+                if scope == 'ios-only':
+                    self.assertEqual(result.returncode, 0)
+                    self.assertEqual(output.read_text(), f'source_pr=113\ncandidate_commit={SHA}\nios_compile_mode=positive\nverification_scope=ios-only\n')
+                    output.unlink()
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertFalse(output.exists())

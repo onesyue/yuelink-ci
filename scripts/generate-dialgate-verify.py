@@ -32,6 +32,12 @@ on:
         type: choice
         default: positive
         options: [positive, negative]
+      verification_scope:
+        description: 'full suite or explicitly iOS-only; neither bypasses release gates'
+        required: false
+        type: choice
+        default: full
+        options: [full, ios-only]
       source_sha:
         description: 'Exact reviewed private PR head (40 lowercase hex)'
         required: true
@@ -62,6 +68,7 @@ jobs:
       baseline_commit: __BASELINE__
       source_pr: ${{ steps.inputs.outputs.source_pr }}
       ios_compile_mode: ${{ steps.inputs.outputs.ios_compile_mode }}
+      verification_scope: ${{ steps.inputs.outputs.verification_scope }}
     steps:
       - name: Checkout exact public verifier and reviewed source manifest
         uses: actions/checkout@__CHECKOUT__ # v6.1.0
@@ -91,7 +98,7 @@ jobs:
 LINUX_CLIENT_TESTS = '''  linux_client_tests:
     name: Linux scoped client regression tests
     needs: [dial_source_binding]
-    if: needs.dial_source_binding.result == 'success' && needs.dial_source_binding.outputs.ios_compile_mode == 'positive'
+    if: needs.dial_source_binding.result == 'success' && needs.dial_source_binding.outputs.ios_compile_mode == 'positive' && needs.dial_source_binding.outputs.verification_scope == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -208,7 +215,7 @@ LINUX_CLIENT_TESTS = '''  linux_client_tests:
 ANDROID_KOTLIN_COMPILE = '''  android_kotlin_compile:
     name: Exact candidate unsigned Android Kotlin compilation
     needs: [dial_source_binding]
-    if: needs.dial_source_binding.result == 'success' && needs.dial_source_binding.outputs.ios_compile_mode == 'positive'
+    if: needs.dial_source_binding.result == 'success' && needs.dial_source_binding.outputs.ios_compile_mode == 'positive' && needs.dial_source_binding.outputs.verification_scope == 'full'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     permissions:
@@ -358,7 +365,7 @@ IOS_SWIFT_COMPILE = '''  ios_swift_compile:
           retention-days: 14
 
   native_compile_summary:
-    name: Required native compilation summary
+    name: ${{ needs.dial_source_binding.outputs.verification_scope == 'ios-only' && 'iOS-only unsigned compilation summary' || 'Required native compilation summary' }}
     needs: [dial_source_binding, android_kotlin_compile, ios_swift_compile]
     if: always()
     runs-on: ubuntu-24.04
@@ -370,18 +377,35 @@ IOS_SWIFT_COMPILE = '''  ios_swift_compile:
         env:
           BINDING: ${{ needs.dial_source_binding.result }}
           MODE: ${{ needs.dial_source_binding.outputs.ios_compile_mode }}
+          SCOPE: ${{ needs.dial_source_binding.outputs.verification_scope }}
+          SOURCE: ${{ needs.dial_source_binding.outputs.candidate_commit }}
+          BUILDER: ${{ github.event.pull_request.head.sha || github.sha }}
           ANDROID: ${{ needs.android_kotlin_compile.result }}
           IOS: ${{ needs.ios_swift_compile.result }}
         run: |
           set -euo pipefail
           test "$BINDING" = success
+          case "$SCOPE" in full|ios-only) ;; *) exit 1 ;; esac
+          echo "Verification scope: $SCOPE; source: $SOURCE; builder: $BUILDER" >> "$GITHUB_STEP_SUMMARY"
           case "$MODE" in
-            positive) test "$ANDROID" = success ;;
-            negative) test "$ANDROID" = skipped ;;
+            positive)
+              case "$SCOPE" in
+                full) test "$ANDROID" = success ;;
+                ios-only) test "$ANDROID" = skipped ;;
+              esac
+              ;;
+            negative)
+              test "$ANDROID" = skipped
+              echo 'Negative control remains red; inspect actual compiler evidence. No positive compilation acceptance.' >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+              ;;
             *) exit 1 ;;
           esac
           test "$IOS" = success
-          echo 'Bound Android and unsigned iOS compilation passed' >> "$GITHUB_STEP_SUMMARY"
+          case "$SCOPE" in
+            full) echo 'Bound Android and unsigned iOS compilation passed' >> "$GITHUB_STEP_SUMMARY" ;;
+            ios-only) echo 'iOS-only unsigned compilation passed. Android/Linux/dial were not run and are not accepted by this check; prior full-suite and p95 results remain separate.' >> "$GITHUB_STEP_SUMMARY" ;;
+          esac
 
 '''
 
@@ -430,9 +454,9 @@ def generate(workflow: str) -> str:
     dial = dial.replace('needs: [source_binding]', 'needs: [dial_source_binding]')
     summary = summary.replace('needs: [source_binding, dial_gate]', 'needs: [dial_source_binding, dial_gate]')
     for name, block in (('dial', dial), ('summary', summary)):
-        expression = "needs.dial_source_binding.result == 'success' && needs.dial_source_binding.outputs.ios_compile_mode == 'positive'"
+        expression = "needs.dial_source_binding.result == 'success' && needs.dial_source_binding.outputs.ios_compile_mode == 'positive' && needs.dial_source_binding.outputs.verification_scope == 'full'"
         if name == 'summary':
-            expression = "always() && needs.dial_source_binding.result == 'success' && needs.dial_gate.result != 'cancelled' && needs.dial_source_binding.outputs.ios_compile_mode == 'positive'"
+            expression = "always() && needs.dial_source_binding.result == 'success' && needs.dial_gate.result != 'cancelled' && needs.dial_source_binding.outputs.ios_compile_mode == 'positive' && needs.dial_source_binding.outputs.verification_scope == 'full'"
         block, count = re.subn(r'    if: >-\n(?:      .*\n)+', f'    if: {expression}\n', block, count=1)
         if count != 1:
             raise ValueError(f'canonical {name} admission changed')
