@@ -23,6 +23,16 @@ TEST_PATHS = (
     "test/modules/auth_post_connect_resync_test.dart",
 )
 MAC_ONLY = "test/core/storage/secure_storage_macos_keychain_test.dart"
+MAC_SKIP_CASES = {
+    (
+        "test/core/storage/auth_token_service_emby_subject_test.dart",
+        "macOS secure-store commit failure propagates and rolls memory back",
+    ),
+    (
+        "test/core/storage/auth_token_service_emby_subject_test.dart",
+        "macOS unreadable secure store fails logout closed without overwriting",
+    ),
+}
 REQUIRED_CASES = (
     "secure host read timeout releases sync and ignores late completion",
     "obsolete secure read cannot install failure or resume sync",
@@ -45,14 +55,58 @@ def summarize(log: Path, source: Path, exit_code: int) -> dict:
     failure_ids: list[str] = []
     done = False
     malformed = False
+    diagnostics = dict.fromkeys(
+        (
+            "non_json_lines",
+            "invalid_events",
+            "invalid_event_arrays",
+            "events_after_done",
+            "duplicate_starts",
+            "duplicate_completions",
+            "completion_without_start",
+            "unknown_suites",
+            "unsuccessful_done",
+            "missing_completions",
+            "hidden_completions",
+            "started_process_events",
+        ),
+        0,
+    )
     for line in log.read_text(errors="replace").splitlines():
         if not line.strip():
             continue
         try:
-            event = json.loads(line)
-            kind = event["type"]
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                diagnostics["non_json_lines"] += 1
+                malformed = True
+                continue
             if done:
+                diagnostics["events_after_done"] += 1
                 raise ValueError("events after done")
+            if isinstance(event, list):
+                # Flutter3.47.8 event_printer.dart emits exactly this auxiliary
+                # one-element event array alongside test_core0.6.18 JSON.
+                # Never retain or print vmServiceUri, even on malformed input.
+                valid = (
+                    len(event) == 1
+                    and isinstance(event[0], dict)
+                    and set(event[0]) == {"event", "params"}
+                    and event[0]["event"] == "test.startedProcess"
+                    and isinstance(event[0]["params"], dict)
+                    and set(event[0]["params"]) == {"vmServiceUri"}
+                    and (
+                        event[0]["params"]["vmServiceUri"] is None
+                        or isinstance(event[0]["params"]["vmServiceUri"], str)
+                    )
+                )
+                if not valid:
+                    diagnostics["invalid_event_arrays"] += 1
+                    raise ValueError("invalid auxiliary event")
+                diagnostics["started_process_events"] += 1
+                continue
+            kind = event["type"]
             if kind == "suite":
                 suite = event["suite"]
                 path = Path(suite["path"])
@@ -73,17 +127,25 @@ def summarize(log: Path, source: Path, exit_code: int) -> dict:
             elif kind == "testStart":
                 test = event["test"]
                 if test["id"] in tests:
+                    diagnostics["duplicate_starts"] += 1
                     raise ValueError("duplicate test")
                 tests[test["id"]] = test
             elif kind == "testDone":
                 ident = event["testID"]
+                if ident not in tests:
+                    diagnostics["completion_without_start"] += 1
+                    raise ValueError("unknown completion")
                 test = tests[ident]
+                if ident in completed:
+                    diagnostics["duplicate_completions"] += 1
+                    raise ValueError("duplicate completion")
                 if (
-                    ident in completed
-                    or type(event["skipped"]) is not bool
+                    type(event["skipped"]) is not bool
                     or type(event["hidden"]) is not bool
                 ):
                     raise ValueError("invalid completion")
+                if event["hidden"]:
+                    diagnostics["hidden_completions"] += 1
                 completed.add(ident)
                 result = event["result"]
                 if result not in ("success", "failure", "error"):
@@ -96,10 +158,11 @@ def summarize(log: Path, source: Path, exit_code: int) -> dict:
                     )
                 elif event["skipped"]:
                     counts["skipped"] += 1
-                    if path == MAC_ONLY:
+                    if path == MAC_ONLY or (path, test["name"]) in MAC_SKIP_CASES:
                         counts["allowed_platform_skipped"] += 1
                 elif not event["hidden"]:
                     if path is None:
+                        diagnostics["unknown_suites"] += 1
                         raise ValueError("unknown suite")
                     counts["passed"] += 1
                     if path == TEST_PATHS[0] and test["name"] in REQUIRED_CASES:
@@ -107,10 +170,13 @@ def summarize(log: Path, source: Path, exit_code: int) -> dict:
             elif kind == "done":
                 done = event.get("success") is True
                 if not done:
+                    diagnostics["unsuccessful_done"] += 1
                     malformed = True
             # Other protocol events contain arbitrary diagnostics; discard them.
         except (ValueError, TypeError, KeyError):
+            diagnostics["invalid_events"] += 1
             malformed = True
+    diagnostics["missing_completions"] = len(set(tests) - completed)
     passed = (
         exit_code == 0
         and done
@@ -124,6 +190,8 @@ def summarize(log: Path, source: Path, exit_code: int) -> dict:
     return {
         "status": "passed" if passed else "failed",
         "counts": counts,
+        "protocol_diagnostics": diagnostics,
+        "allowed_case_skip_count": len(MAC_SKIP_CASES),
         "machine_complete": done and completed == set(tests) and not malformed,
         "required_regressions_passed": len(required),
         "failure_name_sha256": sorted(set(failure_ids)),

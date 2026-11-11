@@ -245,3 +245,125 @@ class AuthStorageTests(unittest.TestCase):
                 if "auth-storage-verify.py" in s.get("run", "")
             ),
         )
+
+    def test_pinned_flutter_started_process_array_never_exports_uri(self):
+        for uri in (None, SECRET):
+            data = events()
+            data.insert(
+                1, [{"event": "test.startedProcess", "params": {"vmServiceUri": uri}}]
+            )
+            actual = self.summary(data)
+            self.assertEqual(actual["status"], "passed")
+            self.assertTrue(actual["machine_complete"])
+            self.assertEqual(
+                actual["protocol_diagnostics"]["started_process_events"], 1
+            )
+            self.assertNotIn(SECRET, json.dumps(actual))
+        valid = {"event": "test.startedProcess", "params": {"vmServiceUri": None}}
+        for bad in (
+            [],
+            [valid, valid],
+            [{**valid, "event": SECRET}],
+            [{**valid, "extra": SECRET}],
+            [
+                {
+                    "event": "test.startedProcess",
+                    "params": {"vmServiceUri": {"secret": SECRET}},
+                }
+            ],
+            [
+                {
+                    "event": "test.startedProcess",
+                    "params": {"vmServiceUri": None, "extra": SECRET},
+                }
+            ],
+        ):
+            data = events()
+            data.insert(1, bad)
+            actual = self.summary(data)
+            self.assertEqual(actual["status"], "failed")
+            self.assertEqual(actual["protocol_diagnostics"]["invalid_event_arrays"], 1)
+            self.assertNotIn(SECRET, json.dumps(actual))
+
+    def test_hidden_loading_completion_is_not_a_pass_and_must_complete(self):
+        data = events()
+        start = {
+            "type": "testStart",
+            "test": {"id": 9, "suiteID": 0, "name": "loading fixture"},
+        }
+        end = {
+            "type": "testDone",
+            "testID": 9,
+            "result": "success",
+            "hidden": True,
+            "skipped": False,
+        }
+        data[1:1] = [start, end]
+        actual = self.summary(data)
+        self.assertEqual(actual["status"], "passed")
+        self.assertEqual(actual["counts"]["passed"], 2)
+        self.assertEqual(actual["protocol_diagnostics"]["hidden_completions"], 1)
+        data.remove(end)
+        actual = self.summary(data)
+        self.assertEqual(actual["status"], "failed")
+        self.assertEqual(actual["protocol_diagnostics"]["missing_completions"], 1)
+
+    def test_protocol_diagnostics_are_closed_counts_and_remain_fail_closed(self):
+        variants = []
+        duplicate = events()
+        duplicate.insert(2, duplicate[1])
+        variants.append((duplicate, "duplicate_starts"))
+        duplicate = events()
+        duplicate.insert(3, duplicate[2])
+        variants.append((duplicate, "duplicate_completions"))
+        missing = events()
+        del missing[1]
+        variants.append((missing, "completion_without_start"))
+        after = events()
+        after.append({"type": "print", "message": SECRET})
+        variants.append((after, "events_after_done"))
+        for data, reason in variants:
+            actual = self.summary(data)
+            self.assertEqual(actual["status"], "failed")
+            self.assertGreater(actual["protocol_diagnostics"][reason], 0)
+            self.assertNotIn(SECRET, json.dumps(actual))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / "machine"
+            log.write_text(
+                SECRET + "\n" + "".join(json.dumps(e) + "\n" for e in events())
+            )
+            actual = verify.summarize(log, root, 0)
+            self.assertEqual(actual["status"], "failed")
+            self.assertEqual(actual["protocol_diagnostics"]["non_json_lines"], 1)
+            self.assertNotIn(SECRET, json.dumps(actual))
+
+    def test_two_macos_skips_require_both_exact_file_and_case(self):
+        self.assertEqual(len(verify.MAC_SKIP_CASES), 2)
+        for path, name in verify.MAC_SKIP_CASES:
+            for actual_path, actual_name, expected in (
+                (path, name, "passed"),
+                (verify.TEST_PATHS[0], name, "failed"),
+                (path, name + " extra", "failed"),
+                (path, SECRET, "failed"),
+            ):
+                data = events()
+                data[-1:-1] = [
+                    {"type": "suite", "suite": {"id": 5, "path": actual_path}},
+                    {
+                        "type": "testStart",
+                        "test": {"id": 9, "suiteID": 5, "name": actual_name},
+                    },
+                    {
+                        "type": "testDone",
+                        "testID": 9,
+                        "result": "success",
+                        "hidden": False,
+                        "skipped": True,
+                    },
+                ]
+                actual = self.summary(data)
+                self.assertEqual(actual["status"], expected)
+                self.assertEqual(actual["counts"]["passed"], 2)
+                self.assertEqual(actual["counts"]["skipped"], 1)
+                self.assertNotIn(SECRET, json.dumps(actual))
