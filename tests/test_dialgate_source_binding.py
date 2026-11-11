@@ -31,6 +31,19 @@ class DialgateSourceBindingTests(unittest.TestCase):
     def test_pr_uses_reviewed_private_commit_not_builder_head(self) -> None:
         self.assertEqual(binding.source_input('pull_request', self.event(), 'refs/pull/46/merge', self.manifest()), (113, SHA))
 
+    def test_committed_manifest_binds_the_reviewed_candidate(self) -> None:
+        manifest = json.loads((ROOT / 'policy/dialgate-source.json').read_text())
+        self.assertEqual(
+            (manifest['sourceRepository'], manifest['sourcePr'], manifest['sourceCommit']),
+            ('onesyue/yuelink', 131, '0b5096da3ceeca50b2f0c5185147a62df078e7d0'),
+        )
+        event = self.event()
+        event['pull_request']['head']['sha'] = 'b' * 40
+        self.assertEqual(
+            binding.source_input('pull_request', event, 'refs/pull/55/merge', manifest),
+            (131, '0b5096da3ceeca50b2f0c5185147a62df078e7d0'),
+        )
+
     def test_dispatch_admits_exact_branch_source_only(self) -> None:
         self.assertEqual(binding.source_input('workflow_dispatch', self.event(), 'refs/heads/review', None), (113, SHA))
         for ref in ('refs/tags/v1.3.175', 'master', '', 'refs/heads/'):
