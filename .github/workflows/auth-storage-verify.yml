@@ -1,0 +1,65 @@
+name: Auth and storage Linux verification
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+concurrency:
+  group: auth-storage-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  linux_auth_storage:
+    if: github.event.pull_request.head.repo.full_name == 'onesyue/yuelink-ci'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TZ: UTC
+    steps:
+      - name: Checkout exact reviewed verifier
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: verifier
+          persist-credentials: false
+      - name: Validate reviewed source binding
+        id: binding
+        run: python3 verifier/scripts/dialgate-binding.py inputs --manifest verifier/policy/auth-storage-source.json
+      - name: Require positive standalone verification
+        env:
+          MODE: ${{ steps.binding.outputs.ios_compile_mode }}
+        run: test "$MODE" = positive
+      - name: Checkout private PR without executing source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: onesyue/yuelink
+          ref: refs/pull/${{ steps.binding.outputs.source_pr }}/head
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          path: candidate
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Confirm exact source and removed credentials
+        env:
+          EXPECTED_SOURCE: ${{ steps.binding.outputs.candidate_commit }}
+        run: python3 verifier/scripts/dialgate-binding.py confirm --checkout candidate --expected "$EXPECTED_SOURCE"
+      - name: Install pinned Flutter
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49
+        with:
+          flutter-version: '3.47.8'
+          cache: true
+      - name: Run complete affected modules with private machine output
+        env:
+          EXPECTED_SOURCE: ${{ steps.binding.outputs.candidate_commit }}
+          EXPECTED_BUILDER: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          python3 verifier/scripts/auth-storage-verify.py
+          --checkout candidate --expected-source "$EXPECTED_SOURCE"
+          --expected-builder "$EXPECTED_BUILDER"
+          --receipt "$RUNNER_TEMP/auth-storage-receipt/receipt.json"
+      - name: Retain only sanitized verification receipt
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: auth-storage-linux-receipt
+          path: ${{ runner.temp }}/auth-storage-receipt/receipt.json
+          if-no-files-found: warn
+          retention-days: 14
