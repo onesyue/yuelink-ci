@@ -1,4 +1,4 @@
-name: Promote reviewed network-IP update plan
+name: Promote signed root update
 
 on:
   workflow_dispatch:
@@ -11,55 +11,41 @@ on:
         description: Exact signed baseline version (X.Y.Z)
         required: true
         type: string
-      percent:
-        description: Network-IP percentage (integer 0 through 100; not installations)
+      force:
+        description: soft prompts every platform; hard forces every platform except iOS
         required: true
-        type: string
-      expected_plan_etag:
-        description: Exact unquoted current plan ETag, or absent for initial creation
-        required: true
-        type: string
-      network_ip_acknowledgement:
-        description: 'Enter exactly: network IPs are not installations'
-        required: true
+        type: choice
+        options:
+          - soft
+          - hard
+      force_reason:
+        description: security or incompatible when force is hard; empty when soft
+        required: false
         type: string
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
-  group: yuelink-network-ip-rollout-plan
+  group: yuelink-root-update-promotion
   cancel-in-progress: false
 
 jobs:
-  promote_plan:
+  admit:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    # Must be configured/reviewed separately; its name is not approval evidence.
-    environment: yuelink-rollout
+    timeout-minutes: 10
     steps:
       - name: Checkout exact reviewed promotion workflow
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Admit immutable archives and conditionally update only the separate plan
+      - name: Admit force policy without writing the root
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
-          ROLLOUT_VERSION: ${{ inputs.version }}
-          ROLLOUT_BASELINE_VERSION: ${{ inputs.baseline_version }}
-          ROLLOUT_PERCENT: ${{ inputs.percent }}
-          EXPECTED_PLAN_ETAG: ${{ inputs.expected_plan_etag }}
-          NETWORK_IP_ACKNOWLEDGEMENT: ${{ inputs.network_ip_acknowledgement }}
-          ROLLOUT_CONFIGURED: ${{ vars.ROLLOUT_CONFIGURED }}
-          ROLLOUT_PLAN_BUCKET: ${{ vars.ROLLOUT_PLAN_BUCKET }}
-          ROLLOUT_ARCHIVE_ENDPOINT: ${{ vars.ROLLOUT_ARCHIVE_ENDPOINT }}
-          ROLLOUT_PLAN_ENDPOINT: ${{ vars.ROLLOUT_PLAN_ENDPOINT }}
-          ROLLOUT_ARCHIVE_ACCESS_KEY_ID: ${{ secrets.ROLLOUT_ARCHIVE_ACCESS_KEY_ID }}
-          ROLLOUT_ARCHIVE_SECRET_ACCESS_KEY: ${{ secrets.ROLLOUT_ARCHIVE_SECRET_ACCESS_KEY }}
-          ROLLOUT_PLAN_ACCESS_KEY_ID: ${{ secrets.ROLLOUT_PLAN_ACCESS_KEY_ID }}
-          ROLLOUT_PLAN_SECRET_ACCESS_KEY: ${{ secrets.ROLLOUT_PLAN_SECRET_ACCESS_KEY }}
+          PROMOTE_VERSION: ${{ inputs.version }}
+          PROMOTE_BASELINE_VERSION: ${{ inputs.baseline_version }}
+          PROMOTE_FORCE: ${{ inputs.force }}
+          PROMOTE_FORCE_REASON: ${{ inputs.force_reason }}
         run: bash scripts/promote-update-rollout.sh

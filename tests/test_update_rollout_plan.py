@@ -34,15 +34,29 @@ class RolloutAdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'expired'):
             ADMISSION.verified_pair(self.baseline_raw, self.candidate_raw, datetime(2027, 1, 1, tzinfo=timezone.utc))
 
-    def test_soft_only_and_single_server_cohort_are_required(self):
-        for percent in (0, 10, 99):
-            candidate = dict(self.candidate, rollout={'salt': 'synthetic', 'percent': percent})
-            with self.assertRaisesRegex(ValueError, 'double cohort'):
-                ADMISSION.policy(candidate, NOW)
+    def test_percentage_fields_and_ios_force_are_rejected(self):
+        for extra in (
+            {'rollout': {'salt': 'synthetic', 'percent': 10}},
+            {'percent': 10},
+        ):
+            with self.assertRaisesRegex(ValueError, 'rollout percentage'):
+                ADMISSION.policy(dict(self.candidate, **extra), NOW)
         ADMISSION.policy(self.candidate, NOW)
-        ADMISSION.policy(dict(self.candidate, rollout={'salt': 'synthetic', 'percent': 100}), NOW)
-        with self.assertRaisesRegex(ValueError, 'soft-only'):
-            ADMISSION.policy(dict(self.candidate, force='hard', forcePlatforms=['android']), NOW)
+        with self.assertRaisesRegex(ValueError, 'iOS is never forced'):
+            ADMISSION.policy(dict(
+                self.candidate, force='hard', forceReason='security',
+                forcePlatforms=['ios', 'windows-amd64-setup'],
+            ), NOW)
+        with self.assertRaisesRegex(ValueError, 'soft promotion rejects a hard manifest'):
+            ADMISSION.policy(dict(self.candidate, force='hard', forceReason='security'), NOW)
+        with self.assertRaisesRegex(ValueError, 'hard promotion requires force'):
+            ADMISSION.policy(self.candidate, NOW, force='hard', force_reason='security')
+        platforms = self.candidate['platforms']
+        names = sorted(name for name in platforms if not str(name).startswith('ios'))
+        hard = dict(
+            self.candidate, force='hard', forceReason='incompatible', forcePlatforms=names,
+        )
+        ADMISSION.policy(hard, NOW, force='hard', force_reason='incompatible')
 
     def synthetic_binding(self):
         # These synthetic checksum bytes do NOT claim a production signature.
@@ -69,26 +83,30 @@ class RolloutAdmissionTests(unittest.TestCase):
                     build_run={'id': 123, 'head_sha': 'a' * 40, 'repository': {'full_name': 'onesyue/yuelink-ci'},
                                'path': '.github/workflows/build.yml', 'event': 'push', 'head_branch': 'v1.3.173',
                                'status': 'completed', 'conclusion': 'success'},
-                    version='1.3.173', baseline_version='1.3.172', percent='10',
-                    acknowledgement=ADMISSION.ACKNOWLEDGEMENT, previous=None, initial_root=self.baseline_raw,
+                    version='1.3.173', baseline_version='1.3.172', force='soft',
+                    force_reason=None, previous=None, initial_root=self.baseline_raw,
                     promotion_builder='b' * 40, promotion_run='789', now=NOW)
 
     def prepare(self, arguments):
-        with mock.patch.object(ADMISSION, 'verified_pair', return_value=(self.baseline, self.candidate)):
+        with mock.patch.object(ADMISSION.VERIFIER, 'verify_historical_archive', return_value=self.baseline), \
+             mock.patch.object(ADMISSION.VERIFIER, 'verify', return_value=self.candidate):
             return ADMISSION.prepare(**arguments)
 
-    def test_original_archive_identity_survives_percentage_change_and_withdrawal(self):
+    def test_archive_identity_stays_stable_for_repeat_soft_admission(self):
         args = self.arguments(); first = self.prepare(args)
+        self.assertEqual(first['mode'], 'root-manifest')
+        self.assertEqual(first['force'], 'soft')
+        self.assertEqual(first['iosForce'], 'soft')
+        self.assertEqual(first['legacyClientForce'], 'soft')
+        self.assertNotIn('percent', first)
+        self.assertNotIn('salt', first)
+        self.assertNotIn('rollout', first)
         self.assertEqual(first['archiveIdentity']['buildRunId'], '123')
-        self.assertEqual(first['archiveIdentity']['builderCommit'], 'a' * 40)
         self.assertEqual(first['promotion']['runId'], '789')
-        self.assertEqual(first['promotion']['builderCommit'], 'b' * 40)
-        for percent in ('0', '10', '100'):
-            result = self.prepare({**args, 'previous': first, 'initial_root': None, 'percent': percent, 'promotion_run': '790'})
-            self.assertEqual(result['salt'], first['salt'])
-            self.assertEqual(result['archiveIdentity'], first['archiveIdentity'])
-            self.assertEqual(result['archiveBindingSha256'], first['archiveBindingSha256'])
-            self.assertEqual(result['percent'], int(percent))
+        result = self.prepare({**args, 'previous': first, 'initial_root': None, 'promotion_run': '790'})
+        self.assertEqual(result['archiveIdentity'], first['archiveIdentity'])
+        self.assertEqual(result['archiveBindingSha256'], first['archiveBindingSha256'])
+        self.assertEqual(result['force'], 'soft')
 
     def test_archive_identity_drift_and_failed_build_are_rejected(self):
         args = self.arguments()
@@ -105,19 +123,33 @@ class RolloutAdmissionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.prepare({**args, 'binding_raw': json.dumps(binding).encode()})
 
-    def test_explicit_network_mode_initial_root_and_campaign_binding_are_required(self):
+    def test_initial_root_identity_and_force_binding_are_required(self):
         args = self.arguments(); first = self.prepare(args)
-        for changes in ({'acknowledgement': ''}, {'percent': '10.0'}, {'percent': '101'}, {'percent': '-1'},
+        for changes in ({'force': 'wide'}, {'force_reason': 'security'},
                         {'initial_root': b'other'}, {'version': '1.3.175'}, {'promotion_run': 'not-a-run'}):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 self.prepare({**args, **changes})
-        for field, value in (('salt', ''), ('archiveBindingSha256', '0' * 64), ('baseline', {}), ('archiveIdentity', {}), ('percent', True)):
+        for field, value in (('archiveBindingSha256', '0' * 64), ('baseline', {}), ('archiveIdentity', {}),
+                             ('percent', True), ('mode', 'network-ip')):
             previous = copy.deepcopy(first); previous[field] = value
             with self.subTest(field=field), self.assertRaises(ValueError):
                 self.prepare({**args, 'previous': previous})
         previous = copy.deepcopy(first); previous['candidate']['version'] = '1.3.170'
-        with self.assertRaisesRegex(ValueError, 'finish or withdraw'):
+        with self.assertRaisesRegex(ValueError, 'does not match this archive'):
             self.prepare({**args, 'previous': previous})
+
+    def test_hard_admission_records_ios_prompt_and_legacy_global_force(self):
+        names = sorted(name for name in self.candidate['platforms'] if not str(name).startswith('ios'))
+        self.candidate['force'] = 'hard'
+        self.candidate['forceReason'] = 'security'
+        self.candidate['forcePlatforms'] = names
+        args = self.arguments()
+        result = self.prepare({**args, 'force': 'hard', 'force_reason': 'security'})
+        self.assertEqual(result['iosForce'], 'soft')
+        self.assertEqual(result['legacyClientForce'], 'hard')
+        self.assertEqual(result['forceReason'], 'security')
+        self.assertNotIn('ios', result['forcePlatforms'])
+        self.assertEqual(set(result['forcePlatforms']), set(names))
 
     def test_duplicate_binding_keys_rejected(self):
         with self.assertRaises(ValueError):

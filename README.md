@@ -26,19 +26,18 @@ A stable tag builds packages and signs an immutable version archive. The final
 Build step invokes `promote_in_pipeline.sh archive-only VERSION`, with mode first;
 an old source rejects that argument before side effects. The private source must
 implement the new interface before this step can succeed. Build does not move the
-root `update.json`, and its success does not establish a rollout. Pull requests
+root `update.json`, and its success does not publish that root. Pull requests
 run offline Policy CI checks; they do not trigger the release builder, its implicit
 dial candidate, or the live manifest read. The live read is limited to master pushes
 and explicit manual runs on master.
 
-The [independent promotion/edge selector](docs/staged-update-rollout.md) changes
-only a CAS-protected plan in a separate bucket after verifying the original
-signed archive and build proof. It requires explicit network-IP acknowledgement,
-soft-only manifests and no second client-side cohort filter. The released
-1.3.174 client provides no stable installation identity: network-IP buckets do
-not establish 10% installation coverage. Deployment, independent credentials,
-all-host routing and operational acceptance remain pending; this PR activates
-none of them.
+The manual workflow `.github/workflows/promote-update-rollout.yml` admits a
+`force` / `forceReason` policy for a later root promotion. `soft` prompts every
+platform. `hard` requires `security` or `incompatible` and applies only to
+non-iOS platforms. iOS stays a prompt for clients that understand
+`forcePlatforms`. 1.3.174 reads only `force`, so a hard value is global on that
+client; use soft when those installs must not be blocked. The workflow does not
+sign or write `update.json`. Percentage rollout is not accepted.
 
 ## Release contract
 

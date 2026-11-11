@@ -22,7 +22,7 @@ COMMENT_UPDATES = (
         '    # wait for approval. Inert until the owner moves the secrets (see\n'
         '    # docs/archive/2026-09-23-ci-credential-migration.md in the workspace root).\n',
         '    # Signing credentials remain in yuelink-release. This job archives the\n'
-        '    # signed candidate only; root/rollout promotion is a separate action.\n'
+        '    # signed candidate only; root promotion is a separate action.\n'
         '    # Do not infer reviewer protection from the environment name.\n',
     ),
     (

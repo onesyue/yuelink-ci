@@ -2191,9 +2191,8 @@ jobs:
       - name: Generate updater manifest candidate
         env:
           ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
-          YUELINK_UPDATE_ROLLOUT_SALT: ${{ vars.YUELINK_UPDATE_ROLLOUT_SALT }}
-          YUELINK_UPDATE_ROLLOUT_PERCENT: ${{ vars.YUELINK_UPDATE_ROLLOUT_PERCENT }}
-          YUELINK_UPDATE_FORCE_PLATFORMS: ${{ vars.YUELINK_UPDATE_FORCE_PLATFORMS }}
+          YUELINK_UPDATE_FORCE: ${{ vars.YUELINK_UPDATE_FORCE }}
+          YUELINK_UPDATE_FORCE_REASON: ${{ vars.YUELINK_UPDATE_FORCE_REASON }}
         run: |
           set -euo pipefail
           VERSION="$APP_VERSION"
@@ -2311,11 +2310,11 @@ jobs:
             --argjson platforms "$PLATFORMS" \
             '{schemaVersion: $schemaVersion, keyId: $keyId, version: $version, channel: $channel, publishedAt: $publishedAt, expiresAt: $expiresAt, releaseUrl: $releaseUrl, notes: $notes, notesEn: $notesEn, sourceCommit: $sourceCommit, sha256SumsSha256: $sha256SumsSha256, platforms: $platforms}' \
             > "$MANIFEST_NAME"
-          # Optional cohort. Unset release-environment variables leave the
-          # keys absent (percent 100, global hard). The policy builder checks
-          # percent 0-100 and that forcePlatforms names exist in platforms.
-          # Lowering percent to 0 or removing hard takes effect on the next
-          # client check and does not downgrade an already-updated install.
+          # Optional force policy. Unset variables leave force absent (a prompt).
+          # hard requires forceReason and lists every platform except iOS.
+          # Percentage rollout is rejected. Removing hard on a later signed
+          # manifest takes effect on the next client check and does not
+          # downgrade an already-updated install.
           python3 .release-builder/scripts/apply-update-rollout.py \
             --manifest "$MANIFEST_NAME"
           echo "MANIFEST_NAME=$MANIFEST_NAME" >> "$GITHUB_ENV"
