@@ -2192,7 +2192,9 @@ jobs:
         env:
           ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
           YUELINK_UPDATE_FORCE: ${{ vars.YUELINK_UPDATE_FORCE }}
+          YUELINK_UPDATE_PLATFORM_FORCE: ${{ vars.YUELINK_UPDATE_PLATFORM_FORCE }}
           YUELINK_UPDATE_FORCE_REASON: ${{ vars.YUELINK_UPDATE_FORCE_REASON }}
+          YUELINK_UPDATE_FORCE_PLATFORMS: ${{ vars.YUELINK_UPDATE_FORCE_PLATFORMS }}
         run: |
           set -euo pipefail
           VERSION="$APP_VERSION"
@@ -2310,12 +2312,10 @@ jobs:
             --argjson platforms "$PLATFORMS" \
             '{schemaVersion: $schemaVersion, keyId: $keyId, version: $version, channel: $channel, publishedAt: $publishedAt, expiresAt: $expiresAt, releaseUrl: $releaseUrl, notes: $notes, notesEn: $notesEn, sourceCommit: $sourceCommit, sha256SumsSha256: $sha256SumsSha256, platforms: $platforms}' \
             > "$MANIFEST_NAME"
-          # Optional force policy. Unset variables leave force absent (a prompt).
-          # hard requires forceReason and lists every platform except iOS.
-          # Percentage rollout is rejected. Removing hard on a later signed
-          # manifest takes effect on the next client check and does not
-          # downgrade an already-updated install.
-          python3 .release-builder/scripts/apply-update-rollout.py \
+          # Apply the reviewed force policy before signing. Global force stays
+          # soft for legacy readers; only explicit platformForce enables hard
+          # enforcement on the named non-iOS platforms. Never modify signed bytes.
+          python3 .release-builder/scripts/apply-update-force.py \
             --manifest "$MANIFEST_NAME"
           echo "MANIFEST_NAME=$MANIFEST_NAME" >> "$GITHUB_ENV"
           jq . "$MANIFEST_NAME"

@@ -237,6 +237,10 @@ patch --batch --fuzz=0 --forward "$GENERATED" < "$SCRIPT_DIR/scripts/public-dial
 # Exact caller/step anchors admit old and migrated private templates only.
 python3 "$SCRIPT_DIR/scripts/apply-archive-only-overlay.py" "$GENERATED"
 
+# Rewrite only the known updater-candidate force block. A full template
+# refresh must still fail closed on an unknown or partial force anchor.
+python3 "$SCRIPT_DIR/scripts/apply-update-force-overlay.py" "$GENERATED"
+
 if [ "$CHECK_ONLY" -eq 1 ]; then
   if ! cmp -s "$GENERATED" "$DST"; then
     echo "::error::公开 CI build.yml 与私有仓发布工作流不同步。"

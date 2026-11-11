@@ -43,8 +43,8 @@ import sys
 from pathlib import Path
 
 script_dir, version, baseline, force, reason = sys.argv[1:6]
-path = Path(script_dir) / "apply-update-rollout.py"
-spec = importlib.util.spec_from_file_location("apply_update_rollout", path)
+path = Path(script_dir) / "apply-update-force.py"
+spec = importlib.util.spec_from_file_location("apply_update_force", path)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 platforms = {
@@ -59,7 +59,14 @@ platforms = {
     "linux-amd64-appimage": {},
 }
 manifest = {"schemaVersion": 1, "platforms": platforms}
-module.apply_force(manifest, force=force, reason=reason or None)
+asset_keys = sorted(name for name in platforms if name != "ios")
+module.apply_policy(
+    manifest,
+    force="soft",
+    platform_force="hard" if force == "hard" else None,
+    reason=reason or None,
+    platforms=",".join(asset_keys) if force == "hard" else None,
+)
 if module.legacy_client_tier(manifest) != "soft":
     raise SystemExit("global hard would force 1.3.174 including iOS")
 if module.current_client_tier(manifest, "ios") != "soft":

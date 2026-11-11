@@ -35,10 +35,15 @@ The manual workflow `.github/workflows/promote-update-rollout.yml` admits a
 force policy for a later root promotion. `soft` prompts every platform. A hard
 request keeps the signed global `force` soft and sets `platformForce` to hard
 for every platform except iOS, with `forceReason` of `security` or
-`incompatible`. 1.3.174 reads only `force`, so that global soft value stays a
+`incompatible`. The admission script passes that explicit non-iOS list to
+`scripts/apply-update-force.py`. It does not treat operator `force=hard` as a
+wire value. 1.3.174 reads only `force`, so that global soft value stays a
 prompt, including on iOS. The workflow does not sign or write `update.json`.
-Percentage rollout is not generated. Historical signed manifests that still
-contain it remain verifiable.
+The release build calls the same helper before signing, with
+`YUELINK_UPDATE_FORCE`, `YUELINK_UPDATE_PLATFORM_FORCE`,
+`YUELINK_UPDATE_FORCE_REASON` and `YUELINK_UPDATE_FORCE_PLATFORMS`. Only the
+named platforms are selected. Percentage rollout is not generated. Historical
+signed manifests that still contain it remain verifiable.
 
 ## Release contract
 

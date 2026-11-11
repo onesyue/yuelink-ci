@@ -23,8 +23,12 @@ no permission to write the root.
 `soft` is the post-dial website manifest: a prompt on every platform, with
 no `forcePlatforms` list and no `platformForce`. A hard request is operator
 intent. The signed global `force` stays `soft`. The manifest sets
-`platformForce` to `hard` for every platform except iOS, with `forceReason`
-of `security` or `incompatible`. There is no `forceDeadline`.
+`platformForce` to `hard` for the explicit non-iOS asset list, with
+`forceReason` of `security` or `incompatible`. There is no `forceDeadline`.
+The archive helper is `scripts/apply-update-force.py`. `--force hard` is
+rejected instead of being rewritten into `platformForce`. A hard archive
+policy requires `platform-force=hard`, a reason, and the selected asset keys.
+Omitted non-iOS platforms stay prompts.
 
 ## Three readers
 
