@@ -82,7 +82,8 @@ env:
   # a floating 1.27 selector can silently rebuild the same tag against a
   # different standard library.
   # 2026-10-21: Go 1.27.3 addresses GO-2026-6809; retain the shipped-toolchain ABI guard.
-  GO_VERSION: '1.27.3'
+  # 2026-11-11: Go 1.27.4 addresses GO-2026-6859 (net/http MaxBytesReader race).
+  GO_VERSION: '1.27.4'
   # Production builds consume the reviewed module graph exactly. `core/go.mod`
   # and go.sum are tidy against the pinned mihomo submodule; dependency drift
   # must fail the build instead of being resolved implicitly on a runner.
