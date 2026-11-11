@@ -8,20 +8,19 @@ name: Build YueLink
 # Release builds. One matrix job covers every platform; release downloads
 # all artifacts in one shot. Modeled after FlClash's build.yaml — same
 # 3-job shape (build → release candidate → private signer), one matrix row per
-# target. This public builder never receives the updater-manifest private key.
+# target. The archive-only signing step cannot promote the updater root.
 #
 # Triggers:
 #   • vX.Y.Z signed tag → stable release
 #   • every non-stable tag is rejected before source/R2 access
 #   • workflow_dispatch
-#   • pull_request runs only the dial gate; release jobs stay on signed tags
+#   • pull_request changes run Policy CI, never this release builder
 #
 # Analyze + integration tests live in ci.yml (master/PR/manual). The release
 # preflight below independently re-runs every hard gate, so a tag cannot race
 # or bypass a sibling workflow.
 
 on:
-  pull_request:
   push:
     # GitHub's tag filter is only the coarse trigger. source_binding below
     # enforces exact stable vX.Y.Z syntax before querying source evidence.
@@ -1852,12 +1851,9 @@ jobs:
       needs.dial_gate_summary.result == 'success'
     needs: [source_binding, build, preflight, dial_gate, dial_gate_summary]
     runs-on: ubuntu-24.04
-    # 2026-09-23 (L9): the updater signing seed and the R2 credentials that can
-    # move the bucket-root update.json live only in `yuelink-release`: `v*`
-    # tags only, one required reviewer. This is the single human click per
-    # release — builds and per-platform R2 uploads stay unattended; assembling the candidate and moving the root
-    # wait for approval. Inert until the owner moves the secrets (see
-    # docs/archive/2026-09-23-ci-credential-migration.md in the workspace root).
+    # Signing credentials remain in yuelink-release. This job archives the
+    # signed candidate only; root/rollout promotion is a separate action.
+    # Do not infer reviewer protection from the environment name.
     environment: yuelink-release
     permissions:
       # Native LGPL source attachments are published on this exact signed tag.
@@ -2394,9 +2390,9 @@ jobs:
       # ── Publish immutable candidate to Cloudflare R2 ─────────────────────
       # 2026-05-31 硬切:分发全部走 R2,不再用 GitHub Releases / updater tag。
       # 用 R2 的 S3 兼容端点 + aws-cli(runner 自带)。二进制传到 <tag>/ 前缀,
-      # Public CI never receives the updater private key and never writes the
-      # bucket-root update.json. The private sign-release-manifest workflow
-      # promotes this candidate only after signing and archive verification.
+      # Version-prefix uploads never change the bucket-root update.json.
+      # The final archive-only step signs and verifies the candidate;
+      # Build never promotes the root.
       - name: Publish to R2 (yuetong.app CDN origin)
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
@@ -2458,9 +2454,9 @@ jobs:
               exit 1
             fi
             {
-              echo "## Candidate published; in-pipeline promotion follows"
+              echo "## Candidate published; immutable signing archive follows"
               echo
-              echo "Public CI produced \`$TAG/$MANIFEST_NAME\`; the signed root moves in the last step of this job."
+              echo "Public CI produced \`$TAG/$MANIFEST_NAME\`; the final step signs its immutable archive without moving the root."
               echo "- ATTESTED_SOURCE_COMMIT: \`$ATTESTED_SOURCE_COMMIT\`"
               echo "- BUILT_SOURCE_COMMIT: \`$BUILT_SOURCE_COMMIT\`"
               echo "- Candidate SHA-256: \`$candidate_sha256\`"
@@ -2529,17 +2525,9 @@ jobs:
           done
           echo "::error::candidate verification failed after CDN propagation window"
           exit 1
-      # In-pipeline promotion (2026-09-03). Build green ⇒ the signed root
-      # update.json moves to this version, here, with no operator and no
-      # second machine. The previous "protected plane" promoters (private
-      # sign-release-manifest workflow / bastion sealed signer / workstation
-      # wrapper) stay as fallback but are no longer on the release path: they
-      # were billing-frozen, never had a successful live run, or ran 40x slower
-      # to R2 and burned two version numbers (v1.3.34, v1.3.36) with
-      # half-finished immutable bindings. Owner accepted the trade-off of the
-      # signing seed living in this public repo's secrets; every check the
-      # protected promoter performed is reused inside the script.
-      - name: Sign root manifest and promote (in-pipeline)
+      # Build/sign and client exposure are separate. Mode comes FIRST so an
+      # older private script rejects it as an invalid version before any write.
+      - name: Sign immutable release archive
         if: env.SKIP_MANIFEST != '1' && needs.preflight.outputs.tag_kind == 'stable'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
@@ -2560,7 +2548,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64:-}" ]; then
-            echo "::error::UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64 secret is not configured; root manifest was NOT promoted (fallback: scripts/ci/release-promote-local.sh on bastion)"
+            echo "::error::updater signing key is not configured; signed archive was NOT created and root was not changed"
             exit 1
           fi
           python3 - "$NATIVE_MEDIA_SOURCE_RECEIPT" "$TAG" "$ATTESTED_SOURCE_COMMIT" <<'PYRECEIPT'
@@ -2572,7 +2560,7 @@ jobs:
                   and receipt['downloaded_archive_and_sidecar_verified'] is True):
               raise SystemExit('Native corresponding sources have not been published and verified')
           PYRECEIPT
-          bash scripts/ci/promote_in_pipeline.sh "$APP_VERSION"
+          bash scripts/ci/promote_in_pipeline.sh archive-only "$APP_VERSION"
 
   # ───────────────────────────────────────────────────────────────────────────
   # 2026-08-21: Cloudflare bucket lock permanently protects every object below

@@ -20,6 +20,20 @@ The [policy workflow](.github/workflows/policy-ci.yml) also owns pinned actionli
 and ShellCheck commands. Tests are `unittest.TestCase` methods; discovery rejects
 unreachable cases. For a small change, select the affected test module.
 
+## Signing archives and client exposure
+
+A stable tag builds packages and signs an immutable version archive. The final
+Build step invokes `promote_in_pipeline.sh archive-only VERSION`, with mode first;
+an old source rejects that argument before side effects. The private source must
+implement the new interface before this step can succeed. Build does not move the
+root `update.json`, and its success does not establish a rollout. Pull requests
+run Policy CI; they do not trigger the release builder or its implicit dial candidate.
+
+The independent promotion/edge selector is a follow-up part of R2-1, not enabled
+by this archive-only change. The released 1.3.174 client provides no stable install
+identity: a future network-IP bucket cannot prove 10% of installations. No routes
+or production objects are changed by this PR.
+
 ## Release contract
 
 Finalize, review and sign the public builder and private source before requesting

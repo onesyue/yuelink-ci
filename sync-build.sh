@@ -46,6 +46,22 @@ def must_replace(old, new, label):
         sys.exit(f"::error:: 锚点不唯一({label}, {s.count(old)} 处)—— 手动同步。")
     s = s.replace(old, new, 1)
 
+# Public master PR50 pins Go 1.27.4 for GO-2026-6859. Frozen private
+# candidates may retain 1.27.3; never let a mirror refresh downgrade the builder.
+go_versions = re.findall(r"^  GO_VERSION: '([^']+)'$", s, re.M)
+if len(re.findall(r"^\s*GO_VERSION:", s, re.M)) != 1 or go_versions not in (["1.27.3"], ["1.27.4"]):
+    sys.exit("::error:: unreviewed or ambiguous Go toolchain in private template")
+if go_versions == ["1.27.3"]:
+    must_replace("  GO_VERSION: '1.27.3'", "  # 2026-11-11: Go 1.27.4 addresses GO-2026-6859 (net/http MaxBytesReader race).\n  GO_VERSION: '1.27.4'", "public-Go-security-overlay")
+
+# Public Build never runs implicit private candidates on a pull request.
+# PR code validation stays in Policy CI; archive/sign only follows tag admission.
+must_replace("on:\n  pull_request:\n", "on:\n", "public-release-triggers")
+must_replace(
+    "#   • pull_request runs only the dial gate; release jobs stay on signed tags",
+    "#   • pull_request changes run Policy CI, never this release builder",
+    "public-pr-workflow-comment")
+
 # 1) 顶部 banner
 must_replace(
 """name: Build YueLink
@@ -216,6 +232,10 @@ patch --batch --fuzz=0 --forward "$GENERATED" < "$SCRIPT_DIR/scripts/public-rele
 
 # Public release admission requires complete five-platform protocol evidence.
 patch --batch --fuzz=0 --forward "$GENERATED" < "$SCRIPT_DIR/scripts/public-dial-summary.patch"
+
+# Never let a template refresh restore automatic root promotion.
+# Exact caller/step anchors admit old and migrated private templates only.
+python3 "$SCRIPT_DIR/scripts/apply-archive-only-overlay.py" "$GENERATED"
 
 if [ "$CHECK_ONLY" -eq 1 ]; then
   if ! cmp -s "$GENERATED" "$DST"; then

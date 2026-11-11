@@ -81,11 +81,16 @@ an old binary. Successful current-tag platforms publish their own checksums,
 provenance and source identity, but only the complete five-platform/nine-artifact
 set can create an unsigned updater candidate.
 
-The protected final `release` step runs `scripts/ci/promote_in_pipeline.sh`:
-authenticate the current signed root, sign the complete candidate, enforce a
-monotonic version transition, publish the immutable archive/root and verify live
-artifacts. The updater seed stays in protected Secrets, never source or artifacts.
-Private/local promotion is recovery-only. The manual credential-recovery workflow
+The final `release` step calls `scripts/ci/promote_in_pipeline.sh archive-only VERSION`:
+authenticate the current signed root, sign the complete candidate, enforce the
+existing guards, and verify its immutable archive. It does not change the root.
+The mode is the first argument so historical private scripts fail their version
+check before any signing or writes. A source with the new archive-only interface
+is required for a successful release. The updater seed stays in Secrets, never
+source or artifacts; the environment name alone does not prove reviewer protection.
+Build success is not promotion approval. Separate explicit promotion is required;
+do not use a historical local promoter to bypass that boundary.
+The manual credential-recovery workflow
 verifies both public signing identities and emits only two-recipient age
 ciphertext to its recovery bucket and one-day encrypted artifact; no PR trigger
 or plaintext upload is permitted.

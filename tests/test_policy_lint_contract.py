@@ -60,14 +60,14 @@ class PolicyLintContractTests(unittest.TestCase):
     @unittest.skipIf(SHELLCHECK is None, "shellcheck not installed locally; policy-ci requires it")
     def test_embedded_quote_regression_is_visible_to_the_lint(self) -> None:
         release = (ROOT / "release.sh").read_text(encoding="utf-8")
-        marker = "「Root manifest promoted in-pipeline」"
+        marker = "「Sign immutable release archive」"
         self.assertIn(marker, release)
-        mutated = release.replace(marker, '"Root manifest promoted in-pipeline"', 1)
+        mutated = release.replace(marker, '"Sign immutable release archive', 1)
         proc = subprocess.run(
             [SHELLCHECK, "--severity=warning", "--format=gcc", "-"],
             input=mutated, cwd=ROOT, capture_output=True, text=True, timeout=300,
         )
-        self.assertIn("SC1078", proc.stdout)
+        self.assertIn("SC1072", proc.stdout)
 
 
 if __name__ == "__main__":

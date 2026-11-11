@@ -392,12 +392,8 @@ fi
 echo "✓ 已确认远端 exact verified signed tag ${TAG}；对应构建已触发或可幂等续跑"
 echo "  看进度: gh run watch -R onesyue/yuelink-ci"
 if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-  echo "  构建绿 = 已上线：release job 最后一步「Sign root manifest and promote (in-pipeline)」
-  会签名并 CAS 切根（2026-09-03 起），看 run 摘要里的「Root manifest promoted in-pipeline」。
-  兜底（该步失败且需人工时，只在 bastion 起一次、绝不中途杀）:
-  bash scripts/ci/release-promote-local.sh <X.Y.Z> <source40hex> <candidate64hex>
-  上线验收后:把精确签名根更新到 tests/fixtures/update-manifest-v1.json
-  并把旧根保留为 replay regression fixture；不得从 CDN 动态学习地板。
-  最后收敛 yueto 签名发布账本：见 docs/reconcile-yuelink-pin.md，
-  用 scripts/reconcile-yuelink-pin.py 生成验签后的 write-yuelink 参数；release-state 的 yuelink 行须为 OK。"
+  echo "  构建成功仅表示安装包及签名清单已归档：最后一步「Sign immutable release archive」
+  使用 archive-only，不推进根 update.json，不代表已向用户推广。
+  必须在独立推广流程显式选择版本与比例；不要用旧本地推广脚本绕过这一边界。
+  推广和实际读回验收后才更新签名根地板、保留旧根 replay fixture，并收敛发布账本。"
 fi

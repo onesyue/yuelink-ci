@@ -52,7 +52,7 @@ sleep() { echo "$1" >> "$STATE/sleeps"; }
         workflow = (ROOT / '.github/workflows/build.yml').read_text()
         start = workflow.index('          set -euo pipefail', workflow.index(
             '- name: Verify immutable candidate and all release artifacts'))
-        end = workflow.index('      # In-pipeline promotion', start)
+        end = workflow.index('      # Build/sign and client exposure', start)
         stub = '''
 dart() {
   next_payload
