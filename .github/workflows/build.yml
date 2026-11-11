@@ -1242,6 +1242,21 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────
       # WINDOWS — Inno Setup installer + portable zip
       # ─────────────────────────────────────────────────────────────────────
+      # Go 1.27.2 added poll.FD.KeepFileCompletionModes. tfo-go copies that
+      # struct by hand and casts it to a standard-library socket. The layout
+      # check fails on field drift. The dial test is the runtime half: two
+      # TFO echo round-trips (the second carries the payload in the SYN) and
+      # a SetReadDeadline that must fire on time. Private Actions stay off;
+      # this public Windows job is the one that executes it.
+      - name: Windows TFO layout and dial regression
+        if: matrix.platform == 'windows'
+        shell: bash
+        working-directory: core
+        run: |
+          set -euo pipefail
+          go run ./tools/tfo-layout-check
+          CGO_ENABLED=0 go test -mod=readonly -count=1 -timeout 3m -v \
+            -run TestWindowsTFOEchoAndReadDeadline ./tfowin
       - name: Bundle Wintun (Windows)
         if: matrix.platform == 'windows'
         shell: pwsh
