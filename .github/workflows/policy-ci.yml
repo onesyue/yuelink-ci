@@ -53,6 +53,7 @@ jobs:
           shellcheck --severity=warning ./*.sh scripts/*.sh
 
       - name: Verify current live signed manifest
+        if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         run: |
           set -euo pipefail
           tmp="$(mktemp)"

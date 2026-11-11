@@ -101,6 +101,19 @@ jobs:
         env:
           EXPECTED_CANDIDATE: ${{ needs.dial_source_binding.outputs.candidate_commit }}
         run: python3 ../.client-verifier/scripts/dialgate-binding.py confirm --checkout . --expected "$EXPECTED_CANDIDATE"
+      - name: Set up canonical Go regression toolchain
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Run exact-candidate dialgate Go regressions
+        working-directory: candidate/core
+        shell: bash
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          set -euo pipefail
+          go test -p 2 ./dialgate/... 2>&1 | tee "$RUNNER_TEMP/linux-dialgate-go-tests.log"
       - name: Set up reviewed Flutter SDK
         uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
         with:
@@ -129,7 +142,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-client-tests
-          path: ${{ runner.temp }}/linux-client-tests.log
+          path: |
+            ${{ runner.temp }}/linux-client-tests.log
+            ${{ runner.temp }}/linux-dialgate-go-tests.log
           if-no-files-found: warn
           retention-days: 14
 
