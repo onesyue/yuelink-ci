@@ -199,6 +199,10 @@ class IOSCompileTests(unittest.TestCase):
                 'error: file "Fixture.xcframework" cannot be opened because it does not exist',
                 "artifact_file_missing",
             ),
+            (
+                "error: The signature of Fixture.xcframework cannot be validated and may have been compromised.",
+                "signature_verification_failed",
+            ),
         ):
             result = ios.compile_evidence(text, failed=True)
             self.assertIn(category, result["diagnostic_codes"])
@@ -209,6 +213,7 @@ class IOSCompileTests(unittest.TestCase):
             "signature verified successfully",
             "SignatureFixture cannot be verified",
             "file cannot be opened: permission denied",
+            "cannot be validated and may have been compromised",
         ):
             result = ios.compile_evidence(text, failed=True)
             self.assertNotIn(
@@ -523,6 +528,12 @@ class IOSCompileTests(unittest.TestCase):
                 command = ios.compile_command(root, root, recovery)
                 for flag in ios.PACKAGE_PLUGIN_ARGUMENTS:
                     self.assertEqual(command.count(flag), 1)
+                for flag in ios.UNSIGNED_XCFRAMEWORK_SETTINGS:
+                    self.assertEqual(command.count(flag), 1)
+                self.assertEqual(
+                    command[-2], "DISABLE_XCFRAMEWORK_SIGNATURE_VALIDATION=YES"
+                )
+                self.assertEqual(command[-1], "build")
                 self.assertNotIn("codesign", command)
                 self.assertNotIn("ldid", command)
 
@@ -893,6 +904,11 @@ class IOSCompileTests(unittest.TestCase):
                 self.assertNotIn(forbidden, args)
             for flag in ios.PACKAGE_PLUGIN_ARGUMENTS:
                 self.assertEqual(args.count(flag), 1)
+            for flag in ios.UNSIGNED_XCFRAMEWORK_SETTINGS:
+                self.assertEqual(args.count(flag), 1)
+            self.assertEqual(
+                args[-2], "DISABLE_XCFRAMEWORK_SIGNATURE_VALIDATION=YES"
+            )
             self.assertNotIn("codesign", args)
             self.assertNotIn("ldid", args)
             self.assertIn("private simulated diagnostic", (root / "raw").read_text())
@@ -1215,6 +1231,10 @@ class IOSCompileTests(unittest.TestCase):
         )
         self.assertIn('(deny process-exec (regex #".*/(codesign|ldid)$"))', source)
         self.assertRegex(source, r"protected_command\(\s*compile_command\(")
+        self.assertEqual(
+            source.count("DISABLE_XCFRAMEWORK_SIGNATURE_VALIDATION=YES"), 1
+        )
+        self.assertEqual(source.count("*UNSIGNED_XCFRAMEWORK_SETTINGS"), 1)
         self.assertRegex(source, r'protected_command\(\["flutter", "--version"\]')
         text = (
             "private "
