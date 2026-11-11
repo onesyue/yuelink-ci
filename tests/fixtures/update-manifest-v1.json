@@ -1,52 +1,52 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.173",
+  "version": "1.3.174",
   "channel": "stable",
-  "publishedAt": "2026-11-10T19:11:33Z",
-  "expiresAt": "2026-12-15T19:11:33Z",
+  "publishedAt": "2026-11-11T00:28:23Z",
+  "expiresAt": "2026-12-16T00:28:23Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "扩展脚本更稳，进程规则支持空格和路径，TUN 修复和登录更可靠\n\n- 扩展脚本：修好对象展开写法 `{...x}`，以及箭头函数后面接正则的写法。\n- 扩展脚本有了运行上限：死循环、递归过深、过大的数组或字符串都会被停下，并保留上一份配置。全局脚本和订阅脚本一共最多运行约 3 秒，超时的脚本下次启动会直接跳过，修改后才会重新运行。\n- 自定义规则里的进程名可以带空格，比如 `Google Chrome Helper`。新增 PROCESS-PATH 规则，用来写完整的程序路径。以前写在 PROCESS-NAME 里的完整路径，会自动改为 PROCESS-PATH。\n- 电脑上切换 TUN 失败时，会留下可复制的提示。如果需要，连接修复页会给出「重新安装服务」按钮。Mac 上的提示不再提到 Wintun。\n- 天气、地图、Apple Music、App Store 用到的 Apple 内容域名改走国内 DNS 并直连，更新订阅后也不会丢失。\n- 未登录时，登录、注册、找回密码直接连接服务器，不再经过残留的代理。登录出错时显示固定的错误码，不再显示意义不明的代码。\n",
-  "notesEn": "Safer extend scripts, process rules with spaces and paths, better TUN repair and login\n\n- Extend scripts: object spread (`{...x}`) and a regex after an arrow function now work.\n- Extend scripts now have limits. An endless loop, recursion that goes too deep, or a very large array or string is stopped, and the previous config is kept. The global and profile scripts share about 3 seconds in total. A script that times out is skipped on the next start until you edit it.\n- Process names in custom rules can contain spaces, for example `Google Chrome Helper`. A new PROCESS-PATH rule matches a full program path. Full paths saved under PROCESS-NAME are moved to PROCESS-PATH automatically.\n- When switching to TUN fails on desktop, a copyable notice stays on screen. When reinstalling helps, Connection Repair shows a \"Reinstall service\" button. The macOS text no longer mentions Wintun.\n- Apple content domains used by Weather, Maps, Apple Music and the App Store resolve through domestic DNS and connect directly, and they stay in place after a subscription update.\n- While signed out, sign-in, registration and password reset connect to the server directly instead of going through a leftover proxy. Sign-in errors show a stable code instead of a meaningless one.\n",
-  "sourceCommit": "fe053c464bbbeae6d7dacafada1d7b07267f9ecb",
-  "sha256SumsSha256": "71a2a876403ef75491a08c2aa767a2d176ae10c05fe2f988e8ee0b129f6b6cb1",
+  "notes": "自定义规则支持中文域名，网络抖动不再断长连接，个别坏节点不再拖垮启动\n\n- 自定义规则：中文等国际域名可以直接填写，会自动转换；关键词可以写中文；把 IPv6 地址段写成 IP-CIDR 也能保存，会自动改为 IP-CIDR6。\n- 同一个网卡重复上报、只有临时 IPv6 地址变化时，不再断开全部连接，看视频、下载等长连接不会每隔一分钟被掐断。电脑上全部断开重连一分钟最多一次。\n- 订阅里个别节点参数不合法，或者分组里写了不存在的节点时，不再整个连接失败：会跳过这些节点继续启动，并提示跳过了哪几个。如果仍然无法启动，提示会说明是哪类参数有问题，请更新订阅。\n",
+  "notesEn": "International domains in custom rules, no more dropped connections on network jitter, and one bad node no longer blocks startup\n\n- Custom rules: international domain names can be entered directly and are converted automatically, keywords can use any script, and an IPv6 range written as IP-CIDR is saved as IP-CIDR6.\n- When the same network interface reports again and only a temporary IPv6 address changed, connections are no longer all closed, so streams and downloads are not cut every minute. On desktop a full reconnect happens at most once a minute.\n- If a few nodes in a subscription have invalid settings, or a group names a node that does not exist, YueLink skips those nodes and keeps starting, and tells you which ones were skipped. If it still cannot start, the message names the kind of setting that is wrong and asks you to update the subscription.\n",
+  "sourceCommit": "576460aedc31690b85ccb529f519a43024e19930",
+  "sha256SumsSha256": "8bc5e499506d4007f6455d85eb14f6e5536ce1e56264d67a58c7b70a415a4423",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-android-arm64-v8a.apk",
-      "sha256": "faf32735befa82d4c09e1ab59c9f880e16148eca07712dc6c16354e682a93163"
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-android-arm64-v8a.apk",
+      "sha256": "e1d7a765b292506d3dfc1305ab5be9a7b0b0ed4c461e04b6b2c255c3ce3b2649"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-android-armeabi-v7a.apk",
-      "sha256": "1dbc2aa11ee8e14854d7b6698cda4c3ba07810707f8181777f2dd22a180a4052"
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-android-armeabi-v7a.apk",
+      "sha256": "39170b49a7100bd0b35fee44dd7e7bb353d9ebef2b3499cab7320f047447f867"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-android-x86_64.apk",
-      "sha256": "663b793a570eb69d2600c25ee070ce92cdb24dce8f8d043389969b73b17c14e2"
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-android-x86_64.apk",
+      "sha256": "8ecf3b0b4a36f69a5d914ea86bc60b0a2c8a909c815d5c1d373c07cd84892749"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-android-universal.apk",
-      "sha256": "6f996be540c6e68a068a7ec674cdab3bfed048cf992791c1b956e3086051f38e"
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-android-universal.apk",
+      "sha256": "fd372de467efbeeca7ab63fae7562316963887e8af0dde02e7166b9230b15ae8"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-ios.ipa",
-      "sha256": "cf20774b3320be5595713d5dd0b30a1b480bc5bc1a63a582d7b8b877c011e382"
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-ios.ipa",
+      "sha256": "43a794cfc6d64f1675e9bf6234918d58b48c3016408934e86a983a6f1b1fe208"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-macos-universal.dmg",
-      "sha256": "d0fe00239d82b281bf2fcde7f396ef61c946dc2a01a543acfe32b6d385c5f590",
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-macos-universal.dmg",
+      "sha256": "09941e3c11e851494b54176d565c8ee2a48b0506a46093ab3350fad529395a36",
       "minimumSystemVersion": "13.0"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-windows-amd64-setup.exe",
-      "sha256": "9e26877bb85dbf6ba6fd2ed86a8fa29dc969643450dfd7bb3e2f2d1f9327dfb6"
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-windows-amd64-setup.exe",
+      "sha256": "7187a8f7d352d00f4af5cf7254fee71f61845e06dacd960bc276f763e68e200f"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-windows-amd64-portable.zip",
-      "sha256": "32c8663c0afd5cfb2e29283e5c29c824d24d2e634ec599fd1a148c059038c8d7"
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-windows-amd64-portable.zip",
+      "sha256": "ecaa9267a1dc62b2f002b6d1c646d4abb8404de2d1a8a1c3ff3dcad639b449e2"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.173/YueLink-1.3.173-linux-amd64.AppImage",
-      "sha256": "10d2fbfd49d4f8e4d7ea28288a0fe53807edf74490709f67c48039794ffff0b3"
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-linux-amd64.AppImage",
+      "sha256": "9da7657f446aa54b4401e1de1a5fb36634229a49cf68b4f0b35a1a207d1b67eb"
     }
   },
   "compatibility": {
@@ -84,10 +84,10 @@
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "8daf44df126c39029305ca93a35009de3ff97dca178a60099e15cf0be17c5066",
-    "sha256SumsSha256": "71a2a876403ef75491a08c2aa767a2d176ae10c05fe2f988e8ee0b129f6b6cb1",
-    "payloadBundleSha256": "04fe8274d5ec92b5b28293ef6aab91b3e7e05574d0dba5dfa7cdf09ec37140c1",
+    "candidateSha256": "64f250efe9581e3cadb9f6d3401bb9f632fd7b8da3565ca3744bd3a51ac80224",
+    "sha256SumsSha256": "8bc5e499506d4007f6455d85eb14f6e5536ce1e56264d67a58c7b70a415a4423",
+    "payloadBundleSha256": "46321e72087be830b9b77c61da9a6ab647584c11569e69cb1e010808f258fc82",
     "payloadCount": 19
   },
-  "sig": "ed25519:vM8H97eF52H4/jfhcw6VftShiZp+mzemwHDdPzdAD9BgTmkuvP6kEDlw6OfrFytFsosF1nCW+OUc+adDQxDbDg=="
+  "sig": "ed25519:4FS1FXRPZrCW+rfwIvUC5ssou+sP7UGE/Lm/8d3RHgyp44Oqa8Av1QKE8WIUQZGIw8DWvffEinVyKvp0X+dvAQ=="
 }
