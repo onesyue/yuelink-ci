@@ -472,7 +472,86 @@ def signing_disabled(settings: str, target: str) -> dict:
     return values
 
 
-def compile_evidence(text: str) -> dict:
+COMPILE_DIAGNOSTIC_PATTERNS = {
+    "plugin_execution_failed": r"(?:build tool )?plug-?in[^\n]*(?:failed|error|not permitted)|failed to (?:invoke|run|load)[^\n]*plug-?in",
+    "plugin_sandbox_denied": r"plug-?in[^\n]*sandbox[^\n]*(?:deny|denied|not permitted)|sandbox[^\n]*plug-?in[^\n]*(?:deny|denied|not permitted)",
+    "macro_execution_failed": r"external macro implementation type|macro expansion[^\n]*(?:failed|error)|macro[^\n]*(?:could not be found|not found)|failed to (?:load|execute)[^\n]*macro",
+    "missing_module": r"no such module|missing required module|could not build[^\n]*module|unable to find module|module[^\n]*not found",
+    "missing_package_product": r"missing package product|product[^\n]*(?:not found in package|could not be found)|package product[^\n]*(?:not found|missing)",
+    "missing_build_input": r"build input file[^\n]*cannot be found|no such file or directory|unable to open[^\n]*file|file[^\n]*(?:not found|does not exist)",
+    "missing_framework_or_library": r"framework[^\n]*not found|library[^\n]*not found|cannot find[^\n]*\.(?:a|framework|xcframework)|xcframework[^\n]*(?:missing|does not exist)",
+    "swift_syntax_error": r"error: expected (?:expression|declaration|type|pattern|identifier|'}'|'\)')|unterminated string literal|consecutive statements on a line",
+    "swift_typecheck_error": r"cannot (?:find[^\n]*in scope|convert value|infer contextual base|assign value)|has no member|does not conform to protocol|ambiguous use of|extra argument[^\n]*in call|missing argument for parameter|incorrect argument label|cannot be used on instance of type",
+    "swift_compilation_failed": r"SwiftCompile[^\n]*failed|SwiftEmitModule[^\n]*failed|CompileSwift[^\n]*failed|emit-module command failed|Swift Compiler Error",
+    "clang_compilation_failed": r"clang: error:|CompileC[^\n]*failed|fatal error:",
+    "linker_failed": r"linker command failed|undefined symbols for architecture|duplicate symbol|^ld: |ld: (?:error|symbol)|Linker command failed",
+    "platform_binary_mismatch": r"building for[^\n]*but linking|incompatible architecture|built for[^\n]*which is not the architecture|unsupported file format",
+    "script_phase_failed": r"PhaseScriptExecution[^\n]*(?:failed|nonzero exit)|Command[^\n]*script[^\n]*failed",
+    "asset_catalog_failed": r"CompileAssetCatalog[^\n]*failed|actool[^\n]*(?:error|failed)",
+    "invalid_project_configuration": r"unable to read project|project[^\n]*cannot be opened|scheme[^\n]*(?:not found|does not contain)|Info\.plist[^\n]*(?:invalid|missing)|build setting[^\n]*(?:invalid|required)",
+    "signing_configuration_error": r"requires a provisioning profile|requires a development team|code signing[^\n]*(?:required|error|failed)|signing certificate[^\n]*(?:missing|not found)|no profiles for",
+    "tool_process_failed": r"Command[^\n]*failed with a nonzero exit code|process[^\n]*(?:crashed|terminated by signal)",
+}
+KNOWN_BUILD_TARGETS = (
+    "Runner",
+    "PacketTunnel",
+    "Flutter",
+    "FlutterGeneratedPluginSwiftPackage",
+)
+KNOWN_BUILD_STAGES = (
+    "ResolvePackageGraph",
+    "SwiftCompile",
+    "CompileSwift",
+    "SwiftEmitModule",
+    "CompileC",
+    "Ld",
+    "PhaseScriptExecution",
+    "CompileAssetCatalog",
+    "ProcessInfoPlistFile",
+    "ValidateEmbeddedBinary",
+    "CodeSign",
+)
+KNOWN_BUILD_MODULES = (
+    "Flutter",
+    "UIKit",
+    "Foundation",
+    "NetworkExtension",
+    "libclash",
+    "Darwin",
+    "Swift",
+)
+
+
+def compiler_diagnostics(text: str) -> dict:
+    patterns = {**DIAGNOSTIC_PATTERNS, **COMPILE_DIAGNOSTIC_PATTERNS}
+    codes = [
+        name
+        for name, pattern in patterns.items()
+        if re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+    ]
+    return {
+        "diagnostic_codes": codes or ["unclassified_compiler_failure"],
+        "observed_targets": [
+            name
+            for name in KNOWN_BUILD_TARGETS
+            if re.search(r"in target ['\"]" + re.escape(name) + r"['\"]", text)
+        ],
+        "observed_stages": [
+            name
+            for name in KNOWN_BUILD_STAGES
+            if re.search(r"^\s*" + re.escape(name) + r"\b", text, re.MULTILINE)
+        ],
+        "referenced_modules": [
+            name
+            for name in KNOWN_BUILD_MODULES
+            if re.search(
+                r"(?:module|framework|library) ['\"]" + re.escape(name) + r"['\"]", text
+            )
+        ],
+    }
+
+
+def compile_evidence(text: str, failed: bool = False) -> dict:
     targets = [
         target
         for target in ("Runner", "PacketTunnel")
@@ -498,6 +577,7 @@ def compile_evidence(text: str) -> dict:
         "signing_operation": signing,
         "expected_negative_diagnostic": missing is not None,
         "diagnostic": missing.group(0) if missing else None,
+        **(compiler_diagnostics(text) if failed else {}),
     }
 
 
@@ -690,7 +770,9 @@ def verify(args: argparse.Namespace) -> int:
             private / "compile",
             timeout=1800,
         )
-        evidence = compile_evidence((private / "compile").read_text(errors="replace"))
+        evidence = compile_evidence(
+            (private / "compile").read_text(errors="replace"), failed=code != 0
+        )
         receipt["evidence"] = evidence
         receipt["compiler_exit"] = code
         receipt["stage"] = "validate-compile-signing"
