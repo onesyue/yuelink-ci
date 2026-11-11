@@ -101,6 +101,11 @@ jobs:
         env:
           EXPECTED_CANDIDATE: ${{ needs.dial_source_binding.outputs.candidate_commit }}
         run: python3 ../.client-verifier/scripts/dialgate-binding.py confirm --checkout . --expected "$EXPECTED_CANDIDATE"
+      - name: Test device wrappers with offline mocks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/test_dialgate_device_wrappers.py 2>&1 | tee "$RUNNER_TEMP/linux-device-wrapper-tests.log"
       - name: Set up canonical Go regression toolchain
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -156,6 +161,7 @@ jobs:
           path: |
             ${{ runner.temp }}/linux-client-tests.log
             ${{ runner.temp }}/linux-dialgate-go-tests.log
+            ${{ runner.temp }}/linux-device-wrapper-tests.log
           if-no-files-found: warn
           retention-days: 14
 
@@ -325,6 +331,17 @@ jobs:
           fetch-depth: 1
           submodules: recursive
           persist-credentials: false
+
+      - name: Parse device wrapper syntax without execution
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = (Resolve-Path -LiteralPath 'candidate/core/dialgate/device/windows.ps1').Path
+          $tokens = $null
+          $parseErrors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors.Count -ne 0) { throw 'Device wrapper PowerShell syntax is invalid' }
 
       - name: Checkout dial-gate baseline v1.3.174
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
