@@ -37,9 +37,10 @@ of `security` or `incompatible`. There is no `forceDeadline`.
 Shipped 1.3.174 does not read `platformForce` or `forcePlatforms`. The first
 migration of those installs can only prompt, on desktop and on iOS. A new
 root is refused when global `force` is hard or a deadline is present,
-because that client would force iOS as well. The draft client change in
-yuelink#122 reads `force` and `forcePlatforms`. It does not parse
-`platformForce`.
+because that client would force iOS as well. Draft yuelink#122
+(`ad68ef80`) parses `platformForce` and keeps iOS a prompt, including for a
+historical global hard. It is not merged. Shipped 1.3.174 does not parse
+`platformForce`. The producer tests do not execute that Dart suite.
 
 Historical signed manifests may still contain `rollout` or a global hard
 `force`. The shared verifier still checks those objects. The new producer

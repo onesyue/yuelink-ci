@@ -70,11 +70,13 @@ def legacy_client_tier(manifest: dict) -> str:
 
 
 def current_client_tier(manifest: dict, platform: str) -> str:
-    """Agreed new-client reader. Only `platformForce: hard` forces, and never iOS.
+    """Producer-side reader for the bytes this publisher emits.
 
-    Historical `force: soft` plus `forcePlatforms` stays soft. This is the
-    contract the producer emits. It is not a claim that a shipped client build
-    already parses `platformForce`.
+    Only `platformForce: hard` forces, and never iOS. Historical `force: soft`
+    plus `forcePlatforms` stays soft. Shipped 1.3.174 does not read
+    `platformForce`. Draft yuelink#122 (`ad68ef80`) does, and it also keeps
+    iOS soft when a historical manifest is global hard. This helper does not
+    reimplement that draft and does not replace its tests.
     """
     if platform == IOS or platform.startswith("ios"):
         return "soft"

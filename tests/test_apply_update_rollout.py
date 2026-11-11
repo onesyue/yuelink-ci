@@ -57,10 +57,11 @@ class ApplyUpdateRolloutTest(unittest.TestCase):
     def test_three_readers_cover_legacy_current_and_ios(self) -> None:
         """Execute the three readers the release gate has to keep apart.
 
-        1.3.174 reads only force and forceDeadline. The agreed new reader
-        forces only when platformForce is hard, and never on iOS. yuelink#122
-        does not parse platformForce. The publisher refuses to emit global
-        hard, a deadline, or a rollout field.
+        1.3.174 reads only force and forceDeadline. This producer reader
+        forces only when platformForce is hard, and never on iOS. Shipped
+        1.3.174 does not parse platformForce. Draft yuelink#122 (ad68ef80)
+        does; these tests do not execute that Dart suite. The publisher
+        refuses to emit global hard, a deadline, or a rollout field.
         """
         soft = self.manifest()
         self.assertTrue(APPLY.apply_force(soft, force="soft", reason=None))
@@ -105,6 +106,8 @@ class ApplyUpdateRolloutTest(unittest.TestCase):
         hole["forceReason"] = "security"
         hole["forcePlatforms"] = self.non_ios(hole)
         self.assertEqual(APPLY.legacy_client_tier(hole), "hard")
+        # This helper scores only platformForce. Draft yuelink#122 would
+        # treat this historical global hard as non-iOS hard and iOS soft.
         self.assertEqual(APPLY.current_client_tier(hole, "ios"), "soft")
         self.assertEqual(APPLY.current_client_tier(hole, "windows-amd64-setup"), "soft")
         verifier._validate_rollout_extension(hole)
