@@ -34,7 +34,13 @@ jobs:
     name: Audit permanent versioned releases
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    # Successful PR builds must skip before the trusted-source validator.
+    # Tag builds use the push event, just like branch pushes.
+    if: >-
+      ${{ github.event_name != 'workflow_run' ||
+          (github.event.workflow_run.conclusion == 'success' &&
+           (github.event.workflow_run.event == 'push' ||
+            github.event.workflow_run.event == 'workflow_dispatch')) }}
     steps:
       - name: Validate trusted Build workflow_run identity
         if: ${{ github.event_name == 'workflow_run' }}
