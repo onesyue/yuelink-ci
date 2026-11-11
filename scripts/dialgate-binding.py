@@ -25,19 +25,35 @@ def compile_mode(value: object) -> str:
     return value
 
 
+def verification_scope(event_name: str, event: dict, manifest: dict | None) -> str:
+    if event_name == 'pull_request':
+        if not isinstance(manifest, dict):
+            raise ValueError('reviewed source manifest is missing')
+        value = manifest.get('verificationScope', 'full')
+    elif event_name == 'workflow_dispatch':
+        value = event.get('inputs', {}).get('verification_scope', 'full')
+    else:
+        raise ValueError('unsupported verification event')
+    if not isinstance(value, str) or value not in ('full', 'ios-only'):
+        raise ValueError('verification scope must be full or ios-only')
+    return value
+
+
 def source_input(event_name: str, event: dict, ref: str, manifest: dict | None) -> tuple[int, str, str]:
     if event.get('repository', {}).get('full_name') != BUILDER_REPOSITORY:
         raise ValueError('unexpected builder repository')
     if event_name == 'pull_request':
         if event.get('pull_request', {}).get('head', {}).get('repo', {}).get('full_name') != BUILDER_REPOSITORY:
             raise ValueError('fork pull requests cannot access the private source')
-        if not isinstance(manifest, dict) or set(manifest) != {'sourceRepository', 'sourcePr', 'sourceCommit', 'iosCompileMode'}:
+        required = {'sourceRepository', 'sourcePr', 'sourceCommit', 'iosCompileMode'}
+        if not isinstance(manifest, dict) or set(manifest) not in (required, required | {'verificationScope'}):
             raise ValueError('reviewed source manifest is missing or malformed')
         if manifest['sourceRepository'] != SOURCE_REPOSITORY:
             raise ValueError('unexpected private source repository')
         number = manifest['sourcePr']
         if type(number) is not int or number <= 0:
             raise ValueError('source PR must be a positive integer')
+        verification_scope(event_name, event, manifest)
         return number, exact_sha(manifest['sourceCommit']), compile_mode(manifest['iosCompileMode'])
     if event_name == 'workflow_dispatch':
         if not ref.startswith('refs/heads/') or ref == 'refs/heads/':
@@ -46,6 +62,7 @@ def source_input(event_name: str, event: dict, ref: str, manifest: dict | None) 
         number = inputs.get('source_pr')
         if not isinstance(number, str) or re.fullmatch(r'[1-9][0-9]*', number) is None:
             raise ValueError('source PR must be a positive integer')
+        verification_scope(event_name, event, manifest)
         return int(number), exact_sha(inputs.get('source_sha')), compile_mode(inputs.get('ios_compile_mode', 'positive'))
     raise ValueError('unsupported verification event')
 
@@ -81,8 +98,9 @@ def main() -> None:
     event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
     manifest = json.loads(args.manifest.read_text()) if event_name == 'pull_request' else None
     number, revision, ios_mode = source_input(event_name, event, os.environ.get('GITHUB_REF', ''), manifest)
+    scope = verification_scope(event_name, event, manifest)
     with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
-        output.write(f'source_pr={number}\ncandidate_commit={revision}\nios_compile_mode={ios_mode}\n')
+        output.write(f'source_pr={number}\ncandidate_commit={revision}\nios_compile_mode={ios_mode}\nverification_scope={scope}\n')
 
 
 if __name__ == '__main__':

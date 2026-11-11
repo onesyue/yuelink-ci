@@ -2,5 +2,6 @@
   "sourceRepository": "onesyue/yuelink",
   "sourcePr": 133,
   "sourceCommit": "1b28d5fb1e8122a03d46279e03f27fcf8ee191a7",
-  "iosCompileMode": "negative"
+  "iosCompileMode": "negative",
+  "verificationScope": "ios-only"
 }

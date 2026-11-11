@@ -22,9 +22,11 @@ def validate(graph: object) -> None:
         identity = (name + ' ' + kind).lower()
         # Library compile JAR tasks are needed for the Kotlin classpath. Only
         # application package/bundle tasks are forbidden, not those library JARs.
+        resource_merge = (path == ':app:packageDebugResources'
+                          and kind == 'com.android.build.gradle.tasks.MergeResources_Decorated')
         forbidden = (
             any(token in name for token in ('release', 'publish', 'sign', 'install'))
-            or (path.startswith(':app:') and name.startswith(('package', 'bundle', 'assemble')))
+            or (path.startswith(':app:') and name.startswith(('package', 'bundle', 'assemble')) and not resource_merge)
             or any(token in identity for token in ('externalnative', 'cmake', 'ndkbuild', 'cxxbuild', 'buildcxx'))
             or any(token in kind.lower() for token in ('packageapplication', 'packageandroidartifact', 'bundleapplication', 'signing'))
         )

@@ -48,6 +48,38 @@ def admitted(workflow: str, name: str, values: dict[str, str]) -> bool:
 
 
 class DialgateVerifyOnlyTests(unittest.TestCase):
+    def test_sdk_package_and_go_preload_execute_with_fail_closed_order(self) -> None:
+        workflow = (ROOT / '.github/workflows/dialgate-verify.yml').read_text()
+        go_block = workflow.split('      - name: Run exact-candidate dialgate Go regressions\n', 1)[1].split('      - name:', 1)[0]
+        go_script = textwrap.dedent(go_block.split('        run: |\n', 1)[1])
+        android = builder.job(workflow, 'android_kotlin_compile')
+        sdk_script = android.split('        run: sdkmanager ', 1)[1].splitlines()[0]
+        sdk_script = 'sdkmanager ' + sdk_script
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for tool in ('go', 'sdkmanager'):
+                path = root / tool
+                path.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS"\nif [ "$1" = mod ] && [ "$PRELOAD_FAIL" = yes ]; then exit 23; fi\n')
+                path.chmod(0o755)
+            calls = root / 'calls'
+            env = {**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH'],
+                   'RUNNER_TEMP': directory, 'CALLS': str(calls), 'PRELOAD_FAIL': 'no'}
+            result = subprocess.run(['bash', '-c', sdk_script], env=env, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(calls.read_text().splitlines(), ['platforms;android-37.0 platforms;android-36 ndk;28.2.13676358'])
+            calls.unlink()
+            result = subprocess.run(['bash', '-c', go_script], env=env, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(calls.read_text().splitlines(), [
+                'mod download github.com/metacubex/gvisor',
+                'test -p 2 ./dialgate/...', 'test -race -p 2 ./recovery .',
+                'test -tags with_gvisor -p 2 ./dialgate/...',
+                'test -tags with_gvisor -race -p 2 ./recovery .'])
+            calls.unlink()
+            result = subprocess.run(['bash', '-c', go_script], env={**env, 'PRELOAD_FAIL': 'yes'}, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 23)
+            self.assertEqual(calls.read_text().splitlines(), ['mod download github.com/metacubex/gvisor'])
+
     def test_generated_workflow_matches_canonical_dial_jobs(self) -> None:
         source = (ROOT / '.github/workflows/build.yml').read_text()
         workflow = (ROOT / '.github/workflows/dialgate-verify.yml').read_text()
@@ -87,6 +119,7 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
             'needs.source_binding.result': 'success', 'needs.preflight.result': 'success',
             'needs.dial_gate_summary.result': 'success',
             'needs.dial_source_binding.outputs.ios_compile_mode': 'positive',
+            'needs.dial_source_binding.outputs.verification_scope': 'full',
         }
         for event, ref, expected_verify, expected_release in (
             ('pull_request', 'refs/pull/46/merge', True, False),
@@ -242,23 +275,28 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
             env = {**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH'],
                    'RUNNER_TEMP': str(root), 'CALLS': str(root / 'calls'), 'GOTOOLCHAIN': 'local'}
             expected = [
+                ['mod', 'download', 'github.com/metacubex/gvisor'],
                 ['test', '-p', '2', './dialgate/...'],
                 ['test', '-race', '-p', '2', './recovery', '.'],
                 ['test', '-tags', 'with_gvisor', '-p', '2', './dialgate/...'],
                 ['test', '-tags', 'with_gvisor', '-race', '-p', '2', './recovery', '.'],
             ]
-            for fail_at in range(5):
+            for fail_at in range(6):
                 (root / 'calls').unlink(missing_ok=True)
+                (root / 'linux-dialgate-go-tests.log').unlink(missing_ok=True)
                 result = subprocess.run(['bash', '-c', script], cwd=core,
                                         env={**env, 'FAKE_FAIL_AT': str(fail_at)}, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 17 if fail_at else 0, result.stderr)
                 calls = [json.loads(line) for line in (root / 'calls').read_text().splitlines()]
-                self.assertEqual([call['args'] for call in calls], expected[:fail_at or 4])
+                self.assertEqual([call['args'] for call in calls], expected[:fail_at or 5])
                 for call in calls:
                     self.assertEqual(call['toolchain'], 'local')
                     self.assertEqual(Path(call['cwd']), core.resolve())
-                self.assertEqual((root / 'linux-dialgate-go-tests.log').read_text(),
-                                 'synthetic Go test report\n' * (fail_at or 4))
+                if fail_at == 1:
+                    self.assertFalse((root / 'linux-dialgate-go-tests.log').exists())
+                else:
+                    self.assertEqual((root / 'linux-dialgate-go-tests.log').read_text(),
+                                     'synthetic Go test report\n' * ((fail_at or 5) - 1))
 
     def test_go_regressions_use_exact_source_toolchain_scope_and_propagate_failure(self) -> None:
         self.assert_go_regression_contract((ROOT / '.github/workflows/dialgate-verify.yml').read_text())
@@ -273,7 +311,7 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
             ('GOTOOLCHAIN: local', 'GOTOOLCHAIN: auto'),
             ('-tags with_gvisor', '-tags other_tag'),
             ('-race -p 2 ./recovery .', '-p 2 ./recovery .'),
-            ('set -euo pipefail\n          go test', 'set -eu\n          go test'),
+            ('set -euo pipefail\n          # The default', 'set -eu\n          # The default'),
             ('ref: ${{ needs.dial_source_binding.outputs.candidate_commit }}', 'ref: master'),
         ):
             with self.subTest(mutation=after):
@@ -296,3 +334,60 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
         self.assertNotIn('run-id:', summary)
         self.assertNotIn('repository:', summary)
         self.assertIn('needs.dial_source_binding.outputs.candidate_commit', summary)
+
+
+    def test_scope_job_matrix_and_native_summary_execute_fail_closed(self) -> None:
+        workflow = (ROOT / '.github/workflows/dialgate-verify.yml').read_text()
+        summary = builder.job(workflow, 'native_compile_summary')
+        self.assertIn("'iOS-only unsigned compilation summary' || 'Required native compilation summary'", summary)
+        script = textwrap.dedent(summary.split('        run: |\n', 1)[1])
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)/'summary'
+            for scope in ('full', 'ios-only', '', 'unknown'):
+                for mode in ('positive', 'negative', 'unknown'):
+                    for binding in ('success', 'failure', 'skipped', 'cancelled'):
+                        values = {'needs.dial_source_binding.result': binding,
+                                  'needs.dial_source_binding.outputs.ios_compile_mode': mode,
+                                  'needs.dial_source_binding.outputs.verification_scope': scope,
+                                  'needs.dial_gate.result': 'success'}
+                        expected = binding == 'success' and scope == 'full' and mode == 'positive'
+                        for job in ('linux_client_tests', 'android_kotlin_compile', 'dial_gate', 'dial_gate_summary'):
+                            self.assertEqual(admitted(workflow, job, values), expected)
+                        # A failed binding never starts actual compilation. Scope
+                        # validation itself occurs in that mandatory binding job.
+                        self.assertEqual(admitted(workflow, 'ios_swift_compile', values), binding == 'success')
+                        for ios in ('success', 'failure', 'skipped', 'cancelled'):
+                            for android in ('success', 'failure', 'skipped', 'cancelled'):
+                                output.unlink(missing_ok=True)
+                                env = {**os.environ, 'BINDING': binding, 'SCOPE': scope, 'MODE': mode,
+                                       'IOS': ios, 'ANDROID': android, 'SOURCE': 'a'*40,
+                                       'BUILDER': 'b'*40, 'GITHUB_STEP_SUMMARY': str(output)}
+                                result = subprocess.run(['bash', '-c', script], env=env, capture_output=True)
+                                expected_pass = (binding == 'success' and mode == 'positive' and ios == 'success'
+                                                 and ((scope == 'full' and android == 'success')
+                                                      or (scope == 'ios-only' and android == 'skipped')))
+                                self.assertEqual(result.returncode == 0, expected_pass, (scope, mode, binding, ios, android))
+                                text = output.read_text() if output.exists() else ''
+                                if expected_pass and scope == 'ios-only':
+                                    self.assertIn('iOS-only unsigned compilation passed', text)
+                                    self.assertIn('Android/Linux/dial were not run', text)
+                                    self.assertIn('p95 results remain separate', text)
+                                    self.assertNotIn('Bound Android and unsigned iOS compilation passed', text)
+                                if expected_pass and scope == 'full':
+                                    self.assertIn('Bound Android and unsigned iOS compilation passed', text)
+                                if expected_pass:
+                                    self.assertIn('source: '+'a'*40, text)
+                                    self.assertIn('builder: '+'b'*40, text)
+                                    self.assertIn('Verification scope: '+scope, text)
+
+    def test_scope_policy_and_output_are_explicit_and_full_is_default(self) -> None:
+        workflow = (ROOT / '.github/workflows/dialgate-verify.yml').read_text()
+        self.assertIn('verification_scope: ${{ steps.inputs.outputs.verification_scope }}', workflow)
+        inputs = workflow.split('      verification_scope:\n', 1)[1].split('      source_sha:', 1)[0]
+        self.assertIn('default: full', inputs)
+        self.assertIn('options: [full, ios-only]', inputs)
+        manifest = json.loads((ROOT/'policy/dialgate-source.json').read_text())
+        self.assertEqual(manifest['verificationScope'], 'ios-only')
+        self.assertEqual(manifest['sourcePr'], 133)
+        self.assertEqual(manifest['sourceCommit'], '1b28d5fb1e8122a03d46279e03f27fcf8ee191a7')
+        self.assertEqual(manifest['iosCompileMode'], 'negative')
