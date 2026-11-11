@@ -473,8 +473,10 @@ def signing_disabled(settings: str, target: str) -> dict:
 
 
 COMPILE_DIAGNOSTIC_PATTERNS = {
-    "plugin_execution_failed": r"(?:build tool )?plug-?in[^\n]*(?:failed|error|not permitted)|failed to (?:invoke|run|load)[^\n]*plug-?in",
-    "plugin_sandbox_denied": r"plug-?in[^\n]*sandbox[^\n]*(?:deny|denied|not permitted)|sandbox[^\n]*plug-?in[^\n]*(?:deny|denied|not permitted)",
+    "plugin_validation_failed": r"\bplug-?ins?\b[^\n]*(?:failed validation|validation failed)|validation[^\n]*(?:failed|failure)[^\n]*\bplug-?ins?\b",
+    "plugin_approval_required": r"\bplug-?ins?\b[^\n]*(?:must be enabled|must be approved|requires approval|not trusted|is disabled)",
+    "plugin_execution_failed": r"\b(?:build tool )?plug-?ins?\b[^\n]*(?:failed|error|not permitted)|failed to (?:invoke|run|load)[^\n]*\bplug-?ins?\b",
+    "plugin_sandbox_denied": r"\bplug-?ins?\b[^\n]*sandbox[^\n]*(?:deny|denied|not permitted)|sandbox[^\n]*\bplug-?ins?\b[^\n]*(?:deny|denied|not permitted)",
     "macro_execution_failed": r"external macro implementation type|macro expansion[^\n]*(?:failed|error)|macro[^\n]*(?:could not be found|not found)|failed to (?:load|execute)[^\n]*macro",
     "missing_module": r"no such module|missing required module|could not build[^\n]*module|unable to find module|module[^\n]*not found",
     "missing_package_product": r"missing package product|product[^\n]*(?:not found in package|could not be found)|package product[^\n]*(?:not found|missing)",
@@ -522,6 +524,145 @@ KNOWN_BUILD_MODULES = (
 )
 
 
+# Closed vocabulary: emitted keys are literals from this list, never log captures.
+FAILURE_TOKENS = (
+    "PhaseScriptExecution",
+    "rsync",
+    "SwiftCompile",
+    "CompileSwift",
+    "SwiftEmitModule",
+    "CompileC",
+    "Ld",
+    "CodeSign",
+    "CompileAssetCatalog",
+    "ProcessInfoPlistFile",
+    "module",
+    "framework",
+    "xcframework",
+    "sandbox",
+    "sandbox_apply",
+    "sandbox_apply_container",
+    "deny",
+    "denied",
+    "read",
+    "write",
+    "signing",
+    "codesign",
+    "validation",
+    "missing",
+    "permission",
+    "package",
+    "product",
+    "dependency",
+    "dependencies",
+    "deployment",
+    "platform",
+    "architecture",
+    "duplicate",
+    "cycle",
+    "input",
+    "output",
+    "command",
+    "script",
+    "plugin",
+    "plugins",
+    "macro",
+    "disabled",
+    "enabled",
+    "approval",
+    "minimum",
+    "version",
+    "required",
+    "unsupported",
+    "binary",
+    "resource",
+    "asset",
+    "header",
+    "symbol",
+    "symbols",
+    "linker",
+    "cannot",
+    "conflict",
+    "directory",
+    "file",
+    "found",
+    "valid",
+    "invalid",
+    "expected",
+    "compatible",
+    "incompatible",
+    "failed",
+    "error",
+    "not",
+    "permitted",
+    "operation",
+    "access",
+    "restricted",
+    "build",
+    "target",
+    "multiple",
+    "produce",
+    "outputs",
+    "destination",
+    "sdk",
+    "xcodebuild",
+    "resolve",
+)
+
+
+def failure_vocabulary(text: str) -> dict:
+    selected = []
+    failed_commands = False
+    for line in text.splitlines():
+        if "The following build commands failed:" in line:
+            failed_commands = True
+            continue
+        command_line = failed_commands and any(
+            re.match(r"^\s*" + re.escape(stage) + r"\b", line)
+            for stage in KNOWN_BUILD_STAGES
+        )
+        if (
+            re.search(
+                r"\berror:|\bfatal:|\bCommand\b[^\n]*\bfailed\b", line, re.IGNORECASE
+            )
+            or command_line
+        ):
+            selected.append(line)
+    # Even allowlisted words inside URLs, paths, quoted identifiers or credentials
+    # must not be counted as diagnostic context.
+    selected_text = "\n".join(selected)
+    selected_text = re.sub(r"https?://\S+|file://\S+", " ", selected_text)
+    selected_text = re.sub(
+        r"\b[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\b", " ", selected_text
+    )
+    selected_text = re.sub(
+        # Discard the complete line tail: quoted values and authentication
+        # schemes may contain whitespace, so a single-token removal is unsafe.
+        r"(?im)\b(?:token|password|secret|authorization|key)\s*[:=][^\n]*",
+        " ",
+        selected_text,
+    )
+    selected_text = re.sub(
+        r""""(?:\\.|[^"\\\n])*(?:"|$)|'(?:\\.|[^'\\\n])*(?:'|$)""",
+        " ",
+        selected_text,
+        flags=re.MULTILINE,
+    )
+    selected_text = re.sub(r"\S*[\\/]\S*", " ", selected_text)
+    counts = {
+        name: len(
+            re.findall(r"\b" + re.escape(name) + r"\b", selected_text, re.IGNORECASE)
+        )
+        for name in FAILURE_TOKENS
+    }
+    return {
+        "failure_line_count": len(selected),
+        "failure_token_counts": {
+            name: count for name, count in counts.items() if count
+        },
+    }
+
+
 def compiler_diagnostics(text: str) -> dict:
     patterns = {**DIAGNOSTIC_PATTERNS, **COMPILE_DIAGNOSTIC_PATTERNS}
     codes = [
@@ -531,6 +672,7 @@ def compiler_diagnostics(text: str) -> dict:
     ]
     return {
         "diagnostic_codes": codes or ["unclassified_compiler_failure"],
+        **failure_vocabulary(text),
         "observed_targets": [
             name
             for name in KNOWN_BUILD_TARGETS
