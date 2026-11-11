@@ -152,7 +152,21 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
         self.assertNotIn('environment:', job)
 
     def test_linux_client_command_scope_and_failure_propagation(self) -> None:
+        self.assert_linux_client_command((ROOT / '.github/workflows/dialgate-verify.yml').read_text())
+
+    def test_added_client_targets_cannot_be_dropped(self) -> None:
         workflow = (ROOT / '.github/workflows/dialgate-verify.yml').read_text()
+        targets = ('test/automation/workflow_guard_test.dart', 'test/core/api/recovery_probe_api_test.dart',
+                   'test/modules/smart_select_cached_delay_test.dart', 'test/modules/smart_select_and_quota_test.dart',
+                   'test/modules/smart_select_cross_protocol_test.dart', 'test/modules/dashboard',
+                   'test/providers/proxy_groups_test.dart', 'test/modules/nodes/manual_selection_test.dart')
+        for target in targets:
+            with self.subTest(target=target):
+                mutated = workflow.replace('            ' + target + ' ' + chr(92) + '\n', '', 1)
+                with self.assertRaises(AssertionError):
+                    self.assert_linux_client_command(mutated)
+
+    def assert_linux_client_command(self, workflow: str) -> None:
         job = builder.job(workflow, 'linux_client_tests')
         step = job.split('- name: Run scoped Linux client tests\n', 1)[1].split('      - name:', 1)[0]
         script = textwrap.dedent(step.split('run: |\n', 1)[1])
@@ -162,7 +176,15 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
                    'test/shared/crash_frame_privacy_20261111_test.dart',
                    'test/shared/error_logger_test.dart', 'test/shared/error_logger_context_20261006_test.dart',
                    'test/infrastructure', 'test/core/kernel/config/config_parse_soft_fail_test.dart',
-                   'test/services/config_template_test.dart']
+                   'test/services/config_template_test.dart',
+                   'test/automation/workflow_guard_test.dart',
+                   'test/core/api/recovery_probe_api_test.dart',
+                   'test/modules/smart_select_cached_delay_test.dart',
+                   'test/modules/smart_select_and_quota_test.dart',
+                   'test/modules/smart_select_cross_protocol_test.dart',
+                   'test/modules/dashboard',
+                   'test/providers/proxy_groups_test.dart',
+                   'test/modules/nodes/manual_selection_test.dart']
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); candidate = root / 'candidate'; candidate.mkdir()
             fake = root / 'flutter'
@@ -203,20 +225,30 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
             root = Path(directory); core = root / 'candidate/core'; core.mkdir(parents=True)
             fake = root / 'go'
             fake.write_text("#!/usr/bin/env python3\nimport json, os, pathlib, sys\n"
-                            "pathlib.Path(os.environ['CALLS']).write_text(json.dumps({'args':sys.argv[1:], 'toolchain':os.environ.get('GOTOOLCHAIN'), 'cwd':os.getcwd()}))\n"
-                            "print('synthetic Go test report')\nraise SystemExit(int(os.environ['FAKE_EXIT']))\n")
+                            "p=pathlib.Path(os.environ['CALLS']); calls=p.read_text().splitlines() if p.exists() else []\n"
+                            "with p.open('a') as f: f.write(json.dumps({'args':sys.argv[1:], 'toolchain':os.environ.get('GOTOOLCHAIN'), 'cwd':os.getcwd()})+'\\n')\n"
+                            "print('synthetic Go test report')\nraise SystemExit(17 if len(calls)+1==int(os.environ['FAKE_FAIL_AT']) else 0)\n")
             fake.chmod(0o755)
             env = {**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH'],
                    'RUNNER_TEMP': str(root), 'CALLS': str(root / 'calls'), 'GOTOOLCHAIN': 'local'}
-            for code in (0, 17):
+            expected = [
+                ['test', '-p', '2', './dialgate/...'],
+                ['test', '-race', '-p', '2', './recovery', '.'],
+                ['test', '-tags', 'with_gvisor', '-p', '2', './dialgate/...'],
+                ['test', '-tags', 'with_gvisor', '-race', '-p', '2', './recovery', '.'],
+            ]
+            for fail_at in range(5):
+                (root / 'calls').unlink(missing_ok=True)
                 result = subprocess.run(['bash', '-c', script], cwd=core,
-                                        env={**env, 'FAKE_EXIT': str(code)}, capture_output=True, text=True)
-                self.assertEqual(result.returncode, code, result.stderr)
-                call = json.loads((root / 'calls').read_text())
-                self.assertEqual(call['args'], ['test', '-p', '2', './dialgate/...'])
-                self.assertEqual(call['toolchain'], 'local')
-                self.assertEqual(Path(call['cwd']), core.resolve())
-                self.assertEqual((root / 'linux-dialgate-go-tests.log').read_text(), 'synthetic Go test report\n')
+                                        env={**env, 'FAKE_FAIL_AT': str(fail_at)}, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 17 if fail_at else 0, result.stderr)
+                calls = [json.loads(line) for line in (root / 'calls').read_text().splitlines()]
+                self.assertEqual([call['args'] for call in calls], expected[:fail_at or 4])
+                for call in calls:
+                    self.assertEqual(call['toolchain'], 'local')
+                    self.assertEqual(Path(call['cwd']), core.resolve())
+                self.assertEqual((root / 'linux-dialgate-go-tests.log').read_text(),
+                                 'synthetic Go test report\n' * (fail_at or 4))
 
     def test_go_regressions_use_exact_source_toolchain_scope_and_propagate_failure(self) -> None:
         self.assert_go_regression_contract((ROOT / '.github/workflows/dialgate-verify.yml').read_text())
@@ -229,6 +261,8 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
             ('working-directory: candidate/core', 'working-directory: candidate'),
             ('go test -p 2 ./dialgate/...', 'go test -p 2 ./...'),
             ('GOTOOLCHAIN: local', 'GOTOOLCHAIN: auto'),
+            ('-tags with_gvisor', '-tags other_tag'),
+            ('-race -p 2 ./recovery .', '-p 2 ./recovery .'),
             ('set -euo pipefail\n          go test', 'set -eu\n          go test'),
             ('ref: ${{ needs.dial_source_binding.outputs.candidate_commit }}', 'ref: master'),
         ):
