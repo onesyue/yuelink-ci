@@ -32,8 +32,9 @@ must name it and the pinned baseline. Fork PRs and tag dispatches cannot enter.
 
 This workflow has no package publication or signing jobs and has a distinct name
 from `Build YueLink`, so release-completion listeners do not consume its runs.
-The same bound candidate also runs the scoped updater, Dart crash-receiver and
-last-good configuration recovery regressions on Linux with the canonical pinned Flutter SDK, UTC and concurrency 2.
+The same bound candidate also runs ten scoped Linux test targets covering the
+updater (including its startup-wiring contract), Dart crash receiver and last-good
+configuration recovery with the canonical pinned Flutter SDK, UTC and concurrency 2.
 These tests do not establish Android native crash-handler behavior.
 Its artifacts are verification evidence, not release authorization. Change the
 reviewed source manifest explicitly when testing a different integration head.

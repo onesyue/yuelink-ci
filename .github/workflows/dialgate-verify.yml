@@ -115,6 +115,7 @@ jobs:
           flutter test --no-pub --concurrency=2 \
             test/modules/updater \
             test/modules/force_upgrade_dialog_test.dart \
+            test/modules/force_upgrade_launch_contract_20260926_test.dart \
             test/services/update_manifest_compatibility_test.dart \
             test/shared/crash_frame_privacy_20261111_test.dart \
             test/shared/error_logger_test.dart \

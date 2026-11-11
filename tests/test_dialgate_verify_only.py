@@ -156,6 +156,7 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
         step = job.split('- name: Run scoped Linux client tests\n', 1)[1].split('      - name:', 1)[0]
         script = textwrap.dedent(step.split('run: |\n', 1)[1])
         targets = ['test/modules/updater', 'test/modules/force_upgrade_dialog_test.dart',
+                   'test/modules/force_upgrade_launch_contract_20260926_test.dart',
                    'test/services/update_manifest_compatibility_test.dart',
                    'test/shared/crash_frame_privacy_20261111_test.dart',
                    'test/shared/error_logger_test.dart', 'test/shared/error_logger_context_20261006_test.dart',
