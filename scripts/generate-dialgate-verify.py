@@ -26,6 +26,12 @@ on:
         description: 'Private YueLink PR number (for example 113)'
         required: true
         type: string
+      ios_compile_mode:
+        description: 'positive source or separately signed missing-argument fixture (keeps compile check red)'
+        required: false
+        type: choice
+        default: positive
+        options: [positive, negative]
       source_sha:
         description: 'Exact reviewed private PR head (40 lowercase hex)'
         required: true
@@ -55,6 +61,7 @@ jobs:
       candidate_commit: ${{ steps.inputs.outputs.candidate_commit }}
       baseline_commit: __BASELINE__
       source_pr: ${{ steps.inputs.outputs.source_pr }}
+      ios_compile_mode: ${{ steps.inputs.outputs.ios_compile_mode }}
     steps:
       - name: Checkout exact public verifier and reviewed source manifest
         uses: actions/checkout@__CHECKOUT__ # v6.1.0
@@ -84,7 +91,7 @@ jobs:
 LINUX_CLIENT_TESTS = '''  linux_client_tests:
     name: Linux scoped client regression tests
     needs: [dial_source_binding]
-    if: needs.dial_source_binding.result == 'success'
+    if: needs.dial_source_binding.result == 'success' && needs.dial_source_binding.outputs.ios_compile_mode == 'positive'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -142,12 +149,24 @@ LINUX_CLIENT_TESTS = '''  linux_client_tests:
           cache: true
       - name: Resolve locked client test dependencies
         run: flutter pub get --enforce-lockfile
+      - name: Run archive and authenticated policy workflow contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/policy-venv"
+          "$RUNNER_TEMP/policy-venv/bin/pip" install 'PyYAML==6.0.3'
+          python3 scripts/ci/test_pipeline_archive_modes.py 2>&1 | tee "$RUNNER_TEMP/linux-archive-tests.log"
+          "$RUNNER_TEMP/policy-venv/bin/python" scripts/ci/test_candidate_policy_workflow.py \
+            --builder "$GITHUB_WORKSPACE/.client-verifier" 2>&1 | tee "$RUNNER_TEMP/linux-policy-workflow-tests.log"
       - name: Run scoped Linux client tests
         shell: bash
         run: |
           set -euo pipefail
           flutter test --no-pub --concurrency=2 \\
             test/modules/updater \\
+            test/services/update_checker_test.dart \\
+            test/automation/macos_manifest_floor_test.dart \\
+            test/automation/prepare_manifest_rollback_test.dart \\
             test/modules/force_upgrade_dialog_test.dart \\
             test/modules/force_upgrade_launch_contract_20260926_test.dart \\
             test/services/update_manifest_compatibility_test.dart \\
@@ -175,6 +194,8 @@ LINUX_CLIENT_TESTS = '''  linux_client_tests:
             ${{ runner.temp }}/linux-client-tests.log
             ${{ runner.temp }}/linux-dialgate-go-tests.log
             ${{ runner.temp }}/linux-device-wrapper-tests.log
+            ${{ runner.temp }}/linux-archive-tests.log
+            ${{ runner.temp }}/linux-policy-workflow-tests.log
           if-no-files-found: warn
           retention-days: 14
 
@@ -185,7 +206,7 @@ LINUX_CLIENT_TESTS = '''  linux_client_tests:
 ANDROID_KOTLIN_COMPILE = '''  android_kotlin_compile:
     name: Exact candidate unsigned Android Kotlin compilation
     needs: [dial_source_binding]
-    if: needs.dial_source_binding.result == 'success'
+    if: needs.dial_source_binding.result == 'success' && needs.dial_source_binding.outputs.ios_compile_mode == 'positive'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     permissions:
@@ -270,6 +291,99 @@ ANDROID_KOTLIN_COMPILE = '''  android_kotlin_compile:
 '''
 
 
+IOS_SWIFT_COMPILE = '''  ios_swift_compile:
+    name: Exact source unsigned iOS compilation
+    needs: [dial_source_binding]
+    if: needs.dial_source_binding.result == 'success'
+    runs-on: macos-26
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: candidate
+    steps:
+      - name: Checkout exact public iOS verifier
+        uses: actions/checkout@__CHECKOUT__
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: .ios-verifier
+          persist-credentials: false
+      - name: Checkout exact private iOS source
+        uses: actions/checkout@__CHECKOUT__
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ needs.dial_source_binding.outputs.candidate_commit }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          path: candidate
+          submodules: recursive
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Confirm source identity before preparation
+        env:
+          EXPECTED_CANDIDATE: ${{ needs.dial_source_binding.outputs.candidate_commit }}
+        run: python3 ../.ios-verifier/scripts/dialgate-binding.py confirm --checkout . --expected "$EXPECTED_CANDIDATE"
+      - name: Set up exact Go toolchain
+        uses: actions/setup-go@__GO_INSTALLER__
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Set up pinned Flutter source SDK
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@__FLUTTER_INSTALLER__
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Compile real Runner and PacketTunnel without signing
+        shell: bash
+        env:
+          EXPECTED_CANDIDATE: ${{ needs.dial_source_binding.outputs.candidate_commit }}
+          EXPECTED_BUILDER: ${{ github.event.pull_request.head.sha || github.sha }}
+          IOS_MODE: ${{ needs.dial_source_binding.outputs.ios_compile_mode }}
+        run: |
+          set -euo pipefail
+          sdk="$(dirname "$(dirname "$(command -v flutter)")")"
+          python3 ../.ios-verifier/scripts/dialgate-ios-compile.py \\
+            --checkout . --expected-source "$EXPECTED_CANDIDATE" \\
+            --expected-builder "$EXPECTED_BUILDER" --flutter-sdk "$sdk" \\
+            --mode "$IOS_MODE" --receipt-dir "$RUNNER_TEMP/ios-compile-receipt"
+      - name: Retain allowlisted iOS compilation evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ios-compile-receipt
+          path: ${{ runner.temp }}/ios-compile-receipt/receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  native_compile_summary:
+    name: Required native compilation summary
+    needs: [dial_source_binding, android_kotlin_compile, ios_swift_compile]
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Require actual native compile jobs
+        shell: bash
+        env:
+          BINDING: ${{ needs.dial_source_binding.result }}
+          MODE: ${{ needs.dial_source_binding.outputs.ios_compile_mode }}
+          ANDROID: ${{ needs.android_kotlin_compile.result }}
+          IOS: ${{ needs.ios_swift_compile.result }}
+        run: |
+          set -euo pipefail
+          test "$BINDING" = success
+          case "$MODE" in
+            positive) test "$ANDROID" = success ;;
+            negative) test "$ANDROID" = skipped ;;
+            *) exit 1 ;;
+          esac
+          test "$IOS" = success
+          echo 'Bound Android and unsigned iOS compilation passed' >> "$GITHUB_STEP_SUMMARY"
+
+'''
+
+
 WINDOWS_DEVICE_SYNTAX = '''      - name: Parse device wrapper syntax without execution
         if: matrix.platform == 'windows'
         shell: pwsh
@@ -314,9 +428,9 @@ def generate(workflow: str) -> str:
     dial = dial.replace('needs: [source_binding]', 'needs: [dial_source_binding]')
     summary = summary.replace('needs: [source_binding, dial_gate]', 'needs: [dial_source_binding, dial_gate]')
     for name, block in (('dial', dial), ('summary', summary)):
-        expression = "needs.dial_source_binding.result == 'success'"
+        expression = "needs.dial_source_binding.result == 'success' && needs.dial_source_binding.outputs.ios_compile_mode == 'positive'"
         if name == 'summary':
-            expression = "always() && needs.dial_source_binding.result == 'success' && needs.dial_gate.result != 'cancelled'"
+            expression = "always() && needs.dial_source_binding.result == 'success' && needs.dial_gate.result != 'cancelled' && needs.dial_source_binding.outputs.ios_compile_mode == 'positive'"
         block, count = re.subn(r'    if: >-\n(?:      .*\n)+', f'    if: {expression}\n', block, count=1)
         if count != 1:
             raise ValueError(f'canonical {name} admission changed')
@@ -340,7 +454,8 @@ def generate(workflow: str) -> str:
     header = HEADER.replace('__GO_VERSION__', go[1]).replace('__FLUTTER_VERSION__', flutter[1]).replace('__BASELINE__', baseline[1]).replace('__CHECKOUT__', CHECKOUT)
     client = LINUX_CLIENT_TESTS.replace('__CHECKOUT__', CHECKOUT).replace('__FLUTTER_INSTALLER__', next(iter(installers))).replace('__GO_INSTALLER__', next(iter(go_installers)))
     android = ANDROID_KOTLIN_COMPILE.replace('__CHECKOUT__', CHECKOUT).replace('__FLUTTER_INSTALLER__', next(iter(installers)))
-    return header + client + android + dial + '\n' + summary
+    ios = IOS_SWIFT_COMPILE.replace('__CHECKOUT__', CHECKOUT).replace('__FLUTTER_INSTALLER__', next(iter(installers))).replace('__GO_INSTALLER__', next(iter(go_installers)))
+    return header + client + android + ios + dial + '\n' + summary
 
 
 def main() -> None:

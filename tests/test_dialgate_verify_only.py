@@ -53,7 +53,7 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
         workflow = (ROOT / '.github/workflows/dialgate-verify.yml').read_text()
         self.assertEqual(workflow, builder.generate(source))
         self.assertEqual(re.findall(r'^  (\w+):$', workflow.split('\njobs:\n', 1)[1], re.M),
-                         ['dial_source_binding', 'linux_client_tests', 'android_kotlin_compile', 'dial_gate', 'dial_gate_summary'])
+                         ['dial_source_binding', 'linux_client_tests', 'android_kotlin_compile', 'ios_swift_compile', 'native_compile_summary', 'dial_gate', 'dial_gate_summary'])
         source_matrix = builder.job(source, 'dial_gate').split('    strategy:\n', 1)[1].split('    steps:\n', 1)[0]
         verify_matrix = builder.job(workflow, 'dial_gate').split('    strategy:\n', 1)[1].split('    steps:\n', 1)[0]
         self.assertEqual(source_matrix, verify_matrix)
@@ -86,6 +86,7 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
             'needs.dial_source_binding.result': 'success', 'needs.dial_gate.result': 'success',
             'needs.source_binding.result': 'success', 'needs.preflight.result': 'success',
             'needs.dial_gate_summary.result': 'success',
+            'needs.dial_source_binding.outputs.ios_compile_mode': 'positive',
         }
         for event, ref, expected_verify, expected_release in (
             ('pull_request', 'refs/pull/46/merge', True, False),
@@ -108,6 +109,12 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
             self.assertEqual(admitted(verify, 'linux_client_tests', context), result == 'success')
             self.assertEqual(admitted(verify, 'android_kotlin_compile', context), result == 'success')
             self.assertEqual(admitted(verify, 'dial_gate_summary', context), result == 'success')
+        negative = {**values, 'needs.dial_source_binding.result': 'success',
+                    'needs.dial_source_binding.outputs.ios_compile_mode': 'negative'}
+        for name in ('dial_gate', 'dial_gate_summary', 'linux_client_tests', 'android_kotlin_compile'):
+            self.assertFalse(admitted(verify, name, negative))
+        self.assertTrue(admitted(verify, 'ios_swift_compile', negative))
+        self.assertTrue(admitted(verify, 'native_compile_summary', negative))
         for dependency in ('source_binding', 'preflight', 'dial_gate', 'dial_gate_summary'):
             context = {**values, 'github.event_name': 'push', 'github.ref': 'refs/tags/v1.3.175',
                        f'needs.{dependency}.result': 'failure'}
@@ -170,7 +177,10 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
         job = builder.job(workflow, 'linux_client_tests')
         step = job.split('- name: Run scoped Linux client tests\n', 1)[1].split('      - name:', 1)[0]
         script = textwrap.dedent(step.split('run: |\n', 1)[1])
-        targets = ['test/modules/updater', 'test/modules/force_upgrade_dialog_test.dart',
+        targets = ['test/modules/updater', 'test/services/update_checker_test.dart',
+                   'test/automation/macos_manifest_floor_test.dart',
+                   'test/automation/prepare_manifest_rollback_test.dart',
+                   'test/modules/force_upgrade_dialog_test.dart',
                    'test/modules/force_upgrade_launch_contract_20260926_test.dart',
                    'test/services/update_manifest_compatibility_test.dart',
                    'test/shared/crash_frame_privacy_20261111_test.dart',

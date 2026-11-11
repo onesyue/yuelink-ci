@@ -19,20 +19,26 @@ def exact_sha(value: object) -> str:
     return value
 
 
-def source_input(event_name: str, event: dict, ref: str, manifest: dict | None) -> tuple[int, str]:
+def compile_mode(value: object) -> str:
+    if not isinstance(value, str) or value not in ('positive', 'negative'):
+        raise ValueError('iOS compile mode must be positive or negative')
+    return value
+
+
+def source_input(event_name: str, event: dict, ref: str, manifest: dict | None) -> tuple[int, str, str]:
     if event.get('repository', {}).get('full_name') != BUILDER_REPOSITORY:
         raise ValueError('unexpected builder repository')
     if event_name == 'pull_request':
         if event.get('pull_request', {}).get('head', {}).get('repo', {}).get('full_name') != BUILDER_REPOSITORY:
             raise ValueError('fork pull requests cannot access the private source')
-        if not isinstance(manifest, dict) or set(manifest) != {'sourceRepository', 'sourcePr', 'sourceCommit'}:
+        if not isinstance(manifest, dict) or set(manifest) != {'sourceRepository', 'sourcePr', 'sourceCommit', 'iosCompileMode'}:
             raise ValueError('reviewed source manifest is missing or malformed')
         if manifest['sourceRepository'] != SOURCE_REPOSITORY:
             raise ValueError('unexpected private source repository')
         number = manifest['sourcePr']
         if type(number) is not int or number <= 0:
             raise ValueError('source PR must be a positive integer')
-        return number, exact_sha(manifest['sourceCommit'])
+        return number, exact_sha(manifest['sourceCommit']), compile_mode(manifest['iosCompileMode'])
     if event_name == 'workflow_dispatch':
         if not ref.startswith('refs/heads/') or ref == 'refs/heads/':
             raise ValueError('verification dispatch must use a branch, never a tag')
@@ -40,7 +46,7 @@ def source_input(event_name: str, event: dict, ref: str, manifest: dict | None) 
         number = inputs.get('source_pr')
         if not isinstance(number, str) or re.fullmatch(r'[1-9][0-9]*', number) is None:
             raise ValueError('source PR must be a positive integer')
-        return int(number), exact_sha(inputs.get('source_sha'))
+        return int(number), exact_sha(inputs.get('source_sha')), compile_mode(inputs.get('ios_compile_mode', 'positive'))
     raise ValueError('unsupported verification event')
 
 
@@ -74,9 +80,9 @@ def main() -> None:
     event_name = os.environ.get('GITHUB_EVENT_NAME', '')
     event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
     manifest = json.loads(args.manifest.read_text()) if event_name == 'pull_request' else None
-    number, revision = source_input(event_name, event, os.environ.get('GITHUB_REF', ''), manifest)
+    number, revision, ios_mode = source_input(event_name, event, os.environ.get('GITHUB_REF', ''), manifest)
     with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
-        output.write(f'source_pr={number}\ncandidate_commit={revision}\n')
+        output.write(f'source_pr={number}\ncandidate_commit={revision}\nios_compile_mode={ios_mode}\n')
 
 
 if __name__ == '__main__':

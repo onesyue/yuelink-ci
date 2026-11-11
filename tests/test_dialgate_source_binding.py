@@ -26,13 +26,31 @@ class DialgateSourceBindingTests(unittest.TestCase):
                 'inputs': {'source_pr': '113', 'source_sha': SHA}}
 
     def manifest(self) -> dict:
-        return {'sourceRepository': 'onesyue/yuelink', 'sourcePr': 113, 'sourceCommit': SHA}
+        return {'sourceRepository': 'onesyue/yuelink', 'sourcePr': 113, 'sourceCommit': SHA, 'iosCompileMode': 'positive'}
 
     def test_pr_uses_reviewed_private_commit_not_builder_head(self) -> None:
-        self.assertEqual(binding.source_input('pull_request', self.event(), 'refs/pull/46/merge', self.manifest()), (113, SHA))
+        self.assertEqual(binding.source_input('pull_request', self.event(), 'refs/pull/46/merge', self.manifest()), (113, SHA, 'positive'))
+
+    def test_modes_are_explicit_fail_closed_and_event_specific(self) -> None:
+        event = self.event()
+        event['inputs']['ios_compile_mode'] = 'negative'
+        for mode in ('positive', 'negative'):
+            manifest = {**self.manifest(), 'iosCompileMode': mode}
+            self.assertEqual(binding.source_input('pull_request', event, '', manifest), (113, SHA, mode))
+        self.assertEqual(binding.source_input('workflow_dispatch', event, 'refs/heads/review', None), (113, SHA, 'negative'))
+        for invalid in (None, True, 1, '', 'Negative', 'negative\nsource_pr=1', [], {}):
+            with self.subTest(value=invalid), self.assertRaises(ValueError):
+                binding.source_input('pull_request', event, '', {**self.manifest(), 'iosCompileMode': invalid})
+            event['inputs']['ios_compile_mode'] = invalid
+            with self.assertRaises(ValueError):
+                binding.source_input('workflow_dispatch', event, 'refs/heads/review', None)
+        manifest = self.manifest()
+        del manifest['iosCompileMode']
+        with self.assertRaises(ValueError):
+            binding.source_input('pull_request', self.event(), '', manifest)
 
     def test_dispatch_admits_exact_branch_source_only(self) -> None:
-        self.assertEqual(binding.source_input('workflow_dispatch', self.event(), 'refs/heads/review', None), (113, SHA))
+        self.assertEqual(binding.source_input('workflow_dispatch', self.event(), 'refs/heads/review', None), (113, SHA, 'positive'))
         for ref in ('refs/tags/v1.3.175', 'master', '', 'refs/heads/'):
             with self.subTest(ref=ref), self.assertRaises(ValueError):
                 binding.source_input('workflow_dispatch', self.event(), ref, None)
@@ -61,7 +79,7 @@ class DialgateSourceBindingTests(unittest.TestCase):
                    'GITHUB_OUTPUT': str(output)}
             result = subprocess.run([sys.executable, str(SCRIPT), 'inputs'], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(output.read_text(), f'source_pr=113\ncandidate_commit={SHA}\n')
+            self.assertEqual(output.read_text(), f'source_pr=113\ncandidate_commit={SHA}\nios_compile_mode=positive\n')
             output.unlink(); env['GITHUB_REF'] = 'refs/tags/v1.3.175'
             result = subprocess.run([sys.executable, str(SCRIPT), 'inputs'], env=env, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
