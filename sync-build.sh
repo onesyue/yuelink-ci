@@ -119,6 +119,54 @@ must_replace(
 """,
 "release-checkout")
 
+# 5) dial-gate candidate checkout. Unique because of path: candidate.
+must_replace(
+"""      - name: Checkout dial-gate candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.inputs.dialgate_candidate_ref || (github.event_name == 'pull_request' && 'feat/real-dial-gate-20261111') || needs.source_binding.outputs.source_commit }}
+          path: candidate
+          fetch-depth: 1
+          submodules: recursive
+          persist-credentials: false
+""",
+"""      - name: Checkout dial-gate candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ github.event.inputs.dialgate_candidate_ref || (github.event_name == 'pull_request' && 'feat/real-dial-gate-20261111') || needs.source_binding.outputs.source_commit }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          path: candidate
+          fetch-depth: 1
+          submodules: recursive
+          persist-credentials: false
+""",
+"dial-gate-candidate-checkout")
+
+# 6) dial-gate baseline checkout.
+must_replace(
+"""      - name: Checkout dial-gate baseline v1.3.174
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: v1.3.174
+          path: baseline
+          fetch-depth: 1
+          submodules: recursive
+          persist-credentials: false
+""",
+"""      - name: Checkout dial-gate baseline v1.3.174
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: v1.3.174
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          path: baseline
+          fetch-depth: 1
+          submodules: recursive
+          persist-credentials: false
+""",
+"dial-gate-baseline-checkout")
+
 # Public coverage timeout evidence is restricted to these explicit patterns.
 must_replace(
     "      - name: Verify live immutable version-prefix bucket lock\n",
@@ -159,12 +207,15 @@ if count != 14:
     sys.exit(f"::error:: expected 14 cache keys/prefixes, found {count}")
 
 open(p, "w", encoding="utf-8").write(s)
-print("✓ build.yml 镜像内容已生成(4 处锁点全命中)")
+print("✓ build.yml 镜像内容已生成(6 处锁点全命中)")
 PY
 
 # Public builder retry policy is maintained in this repository (I32-E R11/R12).
 # Apply with exact context; a source-template change must be reconciled explicitly.
 patch --batch --fuzz=0 --forward "$GENERATED" < "$SCRIPT_DIR/scripts/public-release-retry.patch"
+
+# Public release admission requires complete five-platform protocol evidence.
+patch --batch --fuzz=0 --forward "$GENERATED" < "$SCRIPT_DIR/scripts/public-dial-summary.patch"
 
 if [ "$CHECK_ONLY" -eq 1 ]; then
   if ! cmp -s "$GENERATED" "$DST"; then

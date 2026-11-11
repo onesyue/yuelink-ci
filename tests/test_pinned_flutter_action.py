@@ -325,7 +325,8 @@ class LinkPlatformCacheTests(unittest.TestCase):
             match.start()
             for match in re.finditer(r"- uses: actions/setup-go@", workflow)
         ]
-        assert len(starts) == 2
+        # preflight, the release build, and the dial gate
+        assert len(starts) == 3
         for start in starts:
             end = workflow.find("\n      - ", start)
             block = workflow[start:end]

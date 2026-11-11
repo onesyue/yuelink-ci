@@ -14,12 +14,14 @@ name: Build YueLink
 #   • vX.Y.Z signed tag → stable release
 #   • every non-stable tag is rejected before source/R2 access
 #   • workflow_dispatch
+#   • pull_request runs only the dial gate; release jobs stay on signed tags
 #
 # Analyze + integration tests live in ci.yml (master/PR/manual). The release
 # preflight below independently re-runs every hard gate, so a tag cannot race
 # or bypass a sibling workflow.
 
 on:
+  pull_request:
   push:
     # GitHub's tag filter is only the coarse trigger. source_binding below
     # enforces exact stable vX.Y.Z syntax before querying source evidence.
@@ -39,9 +41,15 @@ on:
         type: choice
         default: all
         options: [all, android, ios, macos, windows, linux]
+      dialgate_candidate_ref:
+        description: 'Optional yuelink ref for the dial-gate candidate'
+        required: false
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}
+  # Tags and manual runs share one queue. A pull request uses its own
+  # group so the dial gate does not block a release.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || 'release' }}
   # A second tag queues behind the first. Cancelling a production build can
   # leave only some immutable R2 artifacts/candidate inputs; the separate
   # private signer has its own monotonic root-promotion guard.
@@ -92,6 +100,7 @@ env:
 jobs:
   source_binding:
     name: Bind exact attested source
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -1837,8 +1846,10 @@ jobs:
       always() &&
       startsWith(github.ref, 'refs/tags/') &&
       needs.preflight.result == 'success' &&
-      needs.source_binding.result == 'success'
-    needs: [source_binding, build, preflight]
+      needs.source_binding.result == 'success' &&
+      needs.dial_gate.result == 'success' &&
+      needs.dial_gate_summary.result == 'success'
+    needs: [source_binding, build, preflight, dial_gate, dial_gate_summary]
     runs-on: ubuntu-24.04
     # 2026-09-23 (L9): the updater signing seed and the R2 credentials that can
     # move the bucket-root update.json live only in `yuelink-release`: `v*`
@@ -2558,3 +2569,259 @@ jobs:
   # signed-archive audit. No release prefix is deleted or overwritten; storage
   # growth is an intentional supply-chain retention decision.
   # ───────────────────────────────────────────────────────────────────────────
+
+  # Real dial gate. Loopback sing-box only. The release job will not promote
+  # unless every platform passes. iOS runs the kernel with simctl spawn and
+  # does not start NetworkExtension. Task 33's layout check and Windows TFO
+  # echo test run at the start of this job; there is no second gate.
+  dial_gate:
+    name: Dial gate (${{ matrix.name }})
+    needs: [source_binding]
+    if: >-
+      always() &&
+      (github.event_name == 'pull_request' || needs.source_binding.result == 'success')
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout_minutes }}
+    permissions:
+      contents: read
+      actions: write
+    env:
+      CANDIDATE_DIR: ${{ github.workspace }}/candidate
+      BASELINE_DIR: ${{ github.workspace }}/baseline
+      DIALGATE_OUT: ${{ github.workspace }}/dial-out
+      DIALGATE_PLATFORM: ${{ matrix.platform }}
+      DIALGATE_GOOS: ${{ matrix.goos }}
+      DIALGATE_GOARCH: ${{ matrix.goarch }}
+      SINGBOX_ASSET: ${{ matrix.singbox }}
+      DIALGATE_TIMEOUT: ${{ matrix.sample_timeout }}
+      GOTOOLCHAIN: local
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+            kind: host
+            platform: windows
+            goos: windows
+            goarch: amd64
+            singbox: sing-box-1.14.4-windows-amd64.zip
+            timeout_minutes: 45
+            sample_timeout: 8s
+          - name: macos
+            os: macos-26
+            kind: host
+            platform: macos
+            goos: darwin
+            goarch: arm64
+            singbox: sing-box-1.14.4-darwin-arm64.tar.gz
+            timeout_minutes: 45
+            sample_timeout: 8s
+          - name: linux
+            os: ubuntu-24.04
+            kind: host
+            platform: linux
+            goos: linux
+            goarch: amd64
+            singbox: sing-box-1.14.4-linux-amd64.tar.gz
+            timeout_minutes: 45
+            sample_timeout: 8s
+          - name: android
+            os: ubuntu-24.04
+            kind: android
+            platform: android
+            goos: android
+            goarch: amd64
+            singbox: sing-box-1.14.4-android-amd64.tar.gz
+            timeout_minutes: 90
+            sample_timeout: 12s
+          - name: ios
+            os: macos-26
+            kind: ios
+            platform: ios
+            goos: ios
+            goarch: arm64
+            singbox: sing-box-1.14.4-darwin-arm64.tar.gz
+            timeout_minutes: 60
+            sample_timeout: 12s
+    steps:
+      - name: Checkout dial-gate candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ github.event.inputs.dialgate_candidate_ref || (github.event_name == 'pull_request' && 'feat/real-dial-gate-20261111') || needs.source_binding.outputs.source_commit }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          path: candidate
+          fetch-depth: 1
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Checkout dial-gate baseline v1.3.174
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: v1.3.174
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          path: baseline
+          fetch-depth: 1
+          submodules: recursive
+          persist-credentials: false
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Enable KVM
+        if: matrix.kind == 'android'
+        run: |
+          set -euo pipefail
+          if [ ! -e /dev/kvm ]; then
+            echo '::error:: /dev/kvm is missing; the Android dial gate needs a KVM runner'
+            exit 1
+          fi
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo chmod 666 /dev/kvm
+
+      - name: Dial on the runner
+        if: matrix.kind == 'host'
+        shell: bash
+        run: bash candidate/core/dialgate/ci/run.sh host
+
+      - name: Prepare Android dial binaries
+        if: matrix.kind == 'android'
+        shell: bash
+        run: bash candidate/core/dialgate/ci/run.sh prepare
+
+      - name: Boot Android emulator
+        if: matrix.kind == 'android'
+        shell: bash
+        run: bash candidate/core/dialgate/ci/run.sh boot-android
+
+      - name: Android emulator dial
+        if: matrix.kind == 'android'
+        shell: bash
+        run: bash candidate/core/dialgate/ci/run.sh device
+
+      - name: Stop Android emulator
+        if: always() && matrix.kind == 'android'
+        shell: bash
+        run: bash candidate/core/dialgate/ci/run.sh stop-android
+
+      - name: Compare Android reports
+        if: matrix.kind == 'android'
+        shell: bash
+        run: bash candidate/core/dialgate/ci/run.sh compare
+
+      - name: Dial inside the iOS simulator
+        if: matrix.kind == 'ios'
+        shell: bash
+        run: bash candidate/core/dialgate/ci/run.sh ios
+
+      - name: Upload dial reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dial-gate-${{ matrix.name }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            dial-out/baseline.json
+            dial-out/candidate.json
+            dial-out/gate.json
+            dial-out/support.log
+            dial-out/sing-box.log
+            dial-out/android-support.log
+            dial-out/android-sing-box.log
+
+  dial_gate_summary:
+    name: Dial gate table
+    needs: [source_binding, dial_gate]
+    if: >-
+      always() &&
+      needs.dial_gate.result != 'cancelled' &&
+      (github.event_name == 'pull_request' || needs.source_binding.result == 'success')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: dial-gate-*
+          path: dial-reports
+      - name: Write the platform table
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          want = ["windows", "macos", "linux", "android", "ios"]
+          protocols = {"vless-reality-tfo", "vless-reality", "vless-ws-tls", "hysteria2"}
+          found = {}
+          for path in Path("dial-reports").glob("*/gate.json"):
+              data = json.loads(path.read_text())
+              platform = data.get("platform")
+              if platform not in want or path.parent.name != f"dial-gate-{platform}" or platform in found:
+                  sys.exit("invalid or duplicate dial-gate platform evidence")
+              rows = data.get("rows")
+              if not isinstance(rows, list) or len(rows) != len(protocols):
+                  sys.exit(f"incomplete protocol evidence for {platform}")
+              if any(not isinstance(row, dict) for row in rows):
+                  sys.exit(f"invalid protocol evidence for {platform}")
+              if {row.get("protocol") for row in rows} != protocols:
+                  sys.exit(f"missing, unknown or duplicate protocols for {platform}")
+              if type(data.get("pass")) is not bool:
+                  sys.exit(f"invalid platform verdict for {platform}")
+              for row in rows:
+                  if type(row.get("pass")) is not bool:
+                      sys.exit(f"invalid protocol verdict for {platform}")
+                  for field in ("baseline_samples", "candidate_samples"):
+                      if type(row.get(field)) is not int or row[field] < 20:
+                          sys.exit(f"insufficient dial samples for {platform}")
+              found[platform] = data
+          lines = ["| platform | protocol | baseline | candidate | baseline p95 ms | candidate p95 ms | pass |",
+                   "|---|---|---:|---:|---:|---:|:---:|"]
+          ok = True
+          for platform in want:
+              data = found.get(platform)
+              if data is None:
+                  ok = False
+                  lines.append(f"| {platform} | missing | | | | | FAIL |")
+                  continue
+              if not data.get("pass"):
+                  ok = False
+              for row in data.get("rows", []):
+                  def rate(value, n_ok, n):
+                      if not n:
+                          return "n/a"
+                      return f"{value:.2f} ({n_ok}/{n})"
+                  def ms(value):
+                      return "n/a" if value is None else f"{value:.1f}"
+                  mark = "pass" if row.get("pass") else "FAIL"
+                  if not row.get("pass"):
+                      ok = False
+                  lines.append(
+                      "| {platform} | {protocol} | {b} | {c} | {bp} | {cp} | {mark} |".format(
+                          platform=platform,
+                          protocol=row.get("protocol", ""),
+                          b=rate(row.get("baseline_success_rate") or 0, row.get("baseline_ok") or 0, row.get("baseline_samples") or 0),
+                          c=rate(row.get("candidate_success_rate") or 0, row.get("candidate_ok") or 0, row.get("candidate_samples") or 0),
+                          bp=ms(row.get("baseline_p95_ms")),
+                          cp=ms(row.get("candidate_p95_ms")),
+                          mark=mark,
+                      )
+                  )
+          table = "\n".join(lines) + "\n"
+          print(table)
+          path = os.environ.get("GITHUB_STEP_SUMMARY")
+          if path:
+              with open(path, "a", encoding="utf-8") as fh:
+                  fh.write("### Real dial gate\n\n")
+                  fh.write("iOS is the kernel inside the simulator. NetworkExtension is not started.\n\n")
+                  fh.write(table)
+          if not ok:
+              sys.exit(1)
+          PY

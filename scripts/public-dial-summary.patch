@@ -1,0 +1,35 @@
+diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
+index 7c5468e..801931f 100644
+--- a/.github/workflows/build.yml
++++ b/.github/workflows/build.yml
+@@ -2759,10 +2759,29 @@ jobs:
+           import json, os, sys
+           from pathlib import Path
+           want = ["windows", "macos", "linux", "android", "ios"]
++          protocols = {"vless-reality-tfo", "vless-reality", "vless-ws-tls", "hysteria2"}
+           found = {}
+           for path in Path("dial-reports").glob("*/gate.json"):
+               data = json.loads(path.read_text())
+-              found[data["platform"]] = data
++              platform = data.get("platform")
++              if platform not in want or path.parent.name != f"dial-gate-{platform}" or platform in found:
++                  sys.exit("invalid or duplicate dial-gate platform evidence")
++              rows = data.get("rows")
++              if not isinstance(rows, list) or len(rows) != len(protocols):
++                  sys.exit(f"incomplete protocol evidence for {platform}")
++              if any(not isinstance(row, dict) for row in rows):
++                  sys.exit(f"invalid protocol evidence for {platform}")
++              if {row.get("protocol") for row in rows} != protocols:
++                  sys.exit(f"missing, unknown or duplicate protocols for {platform}")
++              if type(data.get("pass")) is not bool:
++                  sys.exit(f"invalid platform verdict for {platform}")
++              for row in rows:
++                  if type(row.get("pass")) is not bool:
++                      sys.exit(f"invalid protocol verdict for {platform}")
++                  for field in ("baseline_samples", "candidate_samples"):
++                      if type(row.get(field)) is not int or row[field] < 20:
++                          sys.exit(f"insufficient dial samples for {platform}")
++              found[platform] = data
+           lines = ["| platform | protocol | baseline | candidate | baseline p95 ms | candidate p95 ms | pass |",
+                    "|---|---|---:|---:|---:|---:|:---:|"]
+           ok = True
