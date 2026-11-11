@@ -2694,19 +2694,20 @@ jobs:
         shell: bash
         run: bash candidate/core/dialgate/ci/run.sh prepare
 
+      - name: Boot Android emulator
+        if: matrix.kind == 'android'
+        shell: bash
+        run: bash candidate/core/dialgate/ci/run.sh boot-android
+
       - name: Android emulator dial
         if: matrix.kind == 'android'
-        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
-        with:
-          api-level: 34
-          arch: x86_64
-          target: google_apis
-          ram-size: 2048
-          emulator-boot-timeout: 600
-          disable-animations: true
-          force-avd-creation: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: bash candidate/core/dialgate/ci/run.sh device
+        shell: bash
+        run: bash candidate/core/dialgate/ci/run.sh device
+
+      - name: Stop Android emulator
+        if: always() && matrix.kind == 'android'
+        shell: bash
+        run: bash candidate/core/dialgate/ci/run.sh stop-android
 
       - name: Compare Android reports
         if: matrix.kind == 'android'
