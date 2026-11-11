@@ -12,12 +12,15 @@ import argparse
 import hashlib
 import json
 import os
+import plistlib
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 from pathlib import Path
+from xml.parsers.expat import ExpatError
 
 FLUTTER_COMMIT = "737ba8f885dc774b53b442759999a312c9461e4e"
 POSITIVE_SOURCE = "0b5096da3ceeca50b2f0c5185147a62df078e7d0"
@@ -483,6 +486,8 @@ def signing_disabled(settings: str, target: str) -> dict:
 
 
 COMPILE_DIAGNOSTIC_PATTERNS = {
+    "signature_verification_failed": r"\bsignature\b[^\n]*(?:cannot be verified|could not be verified|verification failed)\b|\b(?:failed|unable) to verify (?:the )?signature\b",
+    "artifact_file_missing": r"\bfile\b[^\n]*\bcannot be opened\b[^\n]*\bdoes not exist\b",
     "plugin_validation_failed": r"\bplug-?ins?\b[^\n]*(?:failed validation|validation failed)|validation[^\n]*(?:failed|failure)[^\n]*\bplug-?ins?\b",
     "plugin_approval_required": r"\bplug-?ins?\b[^\n]*(?:must be enabled|must be approved|requires approval|not trusted|is disabled)",
     "plugin_execution_failed": r"\b(?:build tool )?plug-?ins?\b[^\n]*(?:failed|error|not permitted)|failed to (?:invoke|run|load)[^\n]*\bplug-?ins?\b",
@@ -557,6 +562,10 @@ FAILURE_TOKENS = (
     "read",
     "write",
     "signing",
+    "signature",
+    "verified",
+    "opened",
+    "exists",
     "codesign",
     "validation",
     "missing",
@@ -786,6 +795,224 @@ def compile_evidence(
     }
 
 
+INVENTORY_NAMES = ("Flutter", "App", "FlutterNativeAssets")
+INVENTORY_LIMIT = 128 * 1024
+GENERATED_MANIFEST = (
+    "ios/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift"
+)
+
+
+def inventory_read(path: Path, roots: tuple[Path, ...]) -> bytes:
+    resolved = path.resolve()
+    if not any(resolved.is_relative_to(root) for root in roots):
+        raise ValueError("inventory boundary")
+    if not stat.S_ISREG(resolved.stat().st_mode):
+        raise ValueError("inventory file type")
+    with resolved.open("rb") as stream:
+        data = stream.read(INVENTORY_LIMIT + 1)
+    if len(data) > INVENTORY_LIMIT:
+        raise ValueError("inventory size")
+    return data
+
+
+def inventory_declarations(text: str) -> tuple[dict[str, str], bool, int]:
+    # No Swift execution or dependency traversal. Comments and strings remain
+    # distinct, so declarations mentioned inside either cannot become paths.
+    tokens = re.findall(
+        r'//[^\n]*|/\*.*?\*/|\s+|"(?:\\.|[^"\\])*"|[A-Za-z_][A-Za-z_0-9]*|.',
+        text,
+        re.DOTALL,
+    )
+    if any(t.startswith("/*") and "/*" in t[2:-2] for t in tokens):
+        return {}, False, 0
+    tokens = [t for t in tokens if not t.isspace() and not t.startswith(("//", "/*"))]
+    if any(t in ('"', "#") for t in tokens) or any(
+        tokens[i : i + 2] == ["/", "*"] for i in range(len(tokens) - 1)
+    ):
+        return {}, False, 0
+    paths: dict[str, str] = {}
+    complete = True
+    unknown = 0
+    declarations = 0
+    for index in range(len(tokens) - 1):
+        if tokens[index : index + 2] != [".", "binaryTarget"]:
+            continue
+        declarations += 1
+        if declarations > 32:
+            return {}, False, 32
+        rest = tokens[index + 2 : index + 12]
+        # Exact literal name/path form, with an optional trailing comma only.
+        if len(rest) >= 10 and rest[8] == ",":
+            rest = rest[:8] + rest[9:]
+        if (
+            len(rest) < 9
+            or rest[:3] != ["(", "name", ":"]
+            or rest[4:7] != [",", "path", ":"]
+            or rest[8] != ")"
+        ):
+            complete = False
+            unknown += 1
+            continue
+        name, relative = rest[3], rest[7]
+        if any(not re.fullmatch(r'"[^"\\\n]*"', t) for t in (name, relative)):
+            complete = False
+            unknown += 1
+            continue
+        name, relative = name[1:-1], relative[1:-1]
+        if name not in INVENTORY_NAMES:
+            unknown += 1
+        elif name in paths:
+            return {}, False, min(32, unknown + 1)
+        else:
+            paths[name] = relative
+    return paths, complete, unknown
+
+
+def inventory_artifact(
+    name: str,
+    origin: str,
+    declared: bool | str,
+    path: Path | None,
+    roots: tuple[Path, ...],
+) -> dict:
+    row = {
+        "name": name,
+        "origin": origin,
+        "declared": declared,
+        "exists": "not_declared" if declared is False else "unknown",
+        "plist_status": "not_applicable" if declared is False else "unknown",
+        "ios_device_arm64_count": None,
+        "ios_simulator_arm64_count": None,
+        "ios_simulator_x86_64_count": None,
+    }
+    if path is None:
+        return row
+    try:
+        resolved = path.resolve()
+        if not any(resolved.is_relative_to(root) for root in roots):
+            return row
+        try:
+            mode = resolved.stat().st_mode
+        except FileNotFoundError:
+            row.update(exists=False, plist_status="not_applicable")
+            return row
+        if not stat.S_ISDIR(mode):
+            return row
+        row["exists"] = True
+        try:
+            payload = plistlib.loads(inventory_read(resolved / "Info.plist", roots))
+        except FileNotFoundError:
+            row["plist_status"] = "missing"
+            return row
+        if not isinstance(payload, dict):
+            return row
+        libraries = payload.get("AvailableLibraries")
+        if not isinstance(libraries, list) or len(libraries) > 32:
+            return row
+        counts = {key: 0 for key in row if key.endswith("_count")}
+        for library in libraries:
+            if (
+                not isinstance(library, dict)
+                or library.get("SupportedPlatform") != "ios"
+            ):
+                return row
+            variant = library.get("SupportedPlatformVariant")
+            archs = library.get("SupportedArchitectures")
+            if (
+                variant not in (None, "simulator")
+                or not isinstance(archs, list)
+                or not archs
+                or any(a not in ("arm64", "x86_64") for a in archs)
+            ):
+                return row
+            for arch in ("arm64", "x86_64"):
+                key = f"ios_{'device' if variant is None else 'simulator'}_{arch}_count"
+                if arch in archs and key in counts:
+                    counts[key] += 1
+        row.update(plist_status="parsed", **counts)
+    except (
+        OSError,
+        ValueError,
+        RuntimeError,
+        TypeError,
+        OverflowError,
+        ExpatError,
+        plistlib.InvalidFileException,
+    ):
+        # Diagnostic-only observation: malformed/unreadable metadata must not
+        # replace the actual compiler's outcome. Never publish exception text.
+        return row
+    return row
+
+
+def _artifact_inventory(root: Path, sdk: Path) -> dict:
+    roots = (root.resolve(), sdk.resolve())
+    manifest = root / GENERATED_MANIFEST
+    paths: dict[str, str] = {}
+    complete = False
+    unknown = 0
+    manifest_status = "unknown"
+    try:
+        text = inventory_read(manifest, (roots[0],)).decode("utf-8")
+        manifest_status = "present"
+        paths, complete, unknown = inventory_declarations(text)
+    except FileNotFoundError:
+        manifest_status = "missing"
+    except (OSError, ValueError, RuntimeError):
+        pass
+    rows = [
+        inventory_artifact(
+            "Flutter",
+            "sdk_cache",
+            "not_applicable",
+            sdk / "bin/cache/artifacts/engine/ios-release/Flutter.xcframework",
+            roots,
+        )
+    ]
+    for name in INVENTORY_NAMES:
+        declared = name in paths
+        relative = paths.get(name)
+        path = None
+        if (
+            relative
+            and not Path(relative).is_absolute()
+            and "\x00" not in relative
+            and Path(relative).name == name + ".xcframework"
+        ):
+            path = manifest.parent / relative
+        rows.append(
+            inventory_artifact(
+                name,
+                "generated_manifest",
+                True if declared else (False if complete else "unknown"),
+                path,
+                roots,
+            )
+        )
+    return {
+        "manifest_status": manifest_status,
+        "declaration_status": "parsed" if complete else "unknown",
+        "unknown_declaration_count": unknown,
+        "artifacts": rows,
+    }
+
+
+def artifact_inventory(root: Path, sdk: Path) -> dict:
+    try:
+        return _artifact_inventory(root, sdk)
+    except (OSError, ValueError, RuntimeError, TypeError, OverflowError):
+        return {
+            "manifest_status": "unknown",
+            "declaration_status": "unknown",
+            "unknown_declaration_count": 0,
+            "artifacts": [
+                inventory_artifact(name, origin, "unknown", None, ())
+                for name, origin in [("Flutter", "sdk_cache")]
+                + [(name, "generated_manifest") for name in INVENTORY_NAMES]
+            ],
+        }
+
+
 def verify(args: argparse.Namespace) -> int:
     root = args.checkout.resolve()
     builder = Path(__file__).resolve().parents[1]
@@ -925,6 +1152,9 @@ def verify(args: argparse.Namespace) -> int:
                 require_run(guarded, root, env, private / label, receipt)
             if label == "go-version":
                 validate_go_version((private / label).read_text(), receipt)
+        receipt["artifact_inventory"] = {
+            "post_config": artifact_inventory(root, isolated)
+        }
         receipt["stage"] = "ffi-artifact-identity"
         receipt["ffi"] = {
             name: sha((root / name).read_bytes())
@@ -975,6 +1205,10 @@ def verify(args: argparse.Namespace) -> int:
             private / "compile",
             timeout=1800,
         )
+        if code != 0:
+            receipt["artifact_inventory"]["post_failed_build"] = artifact_inventory(
+                root, isolated
+            )
         compile_text = (private / "compile").read_text(errors="replace")
         bundle_errors = read_xcresult_errors(private / "compile.xcresult")
         evidence = compile_evidence(

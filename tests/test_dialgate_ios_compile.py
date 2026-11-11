@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import plistlib
 import subprocess
 import sys
 import tempfile
@@ -152,6 +153,8 @@ class IOSCompileTests(unittest.TestCase):
 
     def test_actual_compile_diagnostics_cover_fixed_categories_only(self):
         examples = {
+            "signature_verification_failed": 'The signature of "Fixture.xcframework" cannot be verified',
+            "artifact_file_missing": 'The file "Fixture.xcframework" cannot be opened because it does not exist',
             "plugin_validation_failed": "plugin failed validation",
             "plugin_approval_required": "plugin must be enabled",
             "plugin_execution_failed": "build tool plugin failed",
@@ -185,6 +188,249 @@ class IOSCompileTests(unittest.TestCase):
         )
         self.assertIn("nested_sandbox_denied", nested["diagnostic_codes"])
         self.assertFalse(nested["expected_negative_diagnostic"])
+
+    def test_inventory_and_signature_diagnostics_do_not_prove_negative(self):
+        for text, category in (
+            (
+                'error: signature of "Fixture.xcframework" cannot be verified',
+                "signature_verification_failed",
+            ),
+            (
+                'error: file "Fixture.xcframework" cannot be opened because it does not exist',
+                "artifact_file_missing",
+            ),
+        ):
+            result = ios.compile_evidence(text, failed=True)
+            self.assertIn(category, result["diagnostic_codes"])
+            self.assertFalse(result["signing_operation"])
+            self.assertFalse(result["expected_negative_diagnostic"])
+            self.assertEqual(result["compiled_targets"], [])
+        for text in (
+            "signature verified successfully",
+            "SignatureFixture cannot be verified",
+            "file cannot be opened: permission denied",
+        ):
+            result = ios.compile_evidence(text, failed=True)
+            self.assertNotIn(
+                "signature_verification_failed", result["diagnostic_codes"]
+            )
+            self.assertNotIn("artifact_file_missing", result["diagnostic_codes"])
+        self.assertEqual(
+            ios.failure_vocabulary('error: token="signature verified opened exists"')[
+                "failure_token_counts"
+            ],
+            {"error": 1},
+        )
+
+    def test_inventory_literal_declarations_are_bounded_and_do_not_execute(self):
+        good = '.binaryTarget( name: "App", /* comment */ path: "App.xcframework", )'
+        self.assertEqual(
+            ios.inventory_declarations(good), ({"App": "App.xcframework"}, True, 0)
+        )
+        self.assertEqual(ios.inventory_declarations("// " + good), ({}, True, 0))
+        self.assertEqual(ios.inventory_declarations('".binaryTarget"'), ({}, True, 0))
+        for text in (
+            '.binaryTarget(name: "App", path: computed())',
+            '.binaryTarget(name: "App", path: "\\(secret)")',
+            '.binaryTarget(name: "App", url: "https://fixture.invalid", checksum: "opaque")',
+            "/* unfinished",
+            "/* nested /* comment */ " + good + " */",
+            good + "\n" + good,
+            "\n".join('.binaryTarget(name: "Other", path: "other")' for _ in range(33)),
+        ):
+            self.assertFalse(ios.inventory_declarations(text)[1])
+
+    def test_inventory_known_paths_plist_counts_and_phase_independence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "checkout"
+            sdk = Path(directory) / "sdk"
+            root.mkdir()
+            sdk.mkdir()
+            manifest = root / ios.GENERATED_MANIFEST
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text('.binaryTarget(name: "App", path: "App.xcframework")')
+            flutter = sdk / "bin/cache/artifacts/engine/ios-release/Flutter.xcframework"
+            flutter.mkdir(parents=True)
+            libraries = [
+                {
+                    "SupportedPlatform": "ios",
+                    "SupportedArchitectures": ["arm64"],
+                    "LibraryIdentifier": "opaque-not-output",
+                },
+                {
+                    "SupportedPlatform": "ios",
+                    "SupportedPlatformVariant": "simulator",
+                    "SupportedArchitectures": ["arm64", "x86_64"],
+                },
+            ]
+            (flutter / "Info.plist").write_bytes(
+                plistlib.dumps({"AvailableLibraries": libraries})
+            )
+            first = ios.artifact_inventory(root, sdk)
+            row = first["artifacts"][0]
+            self.assertEqual(
+                (
+                    row["exists"],
+                    row["plist_status"],
+                    row["ios_device_arm64_count"],
+                    row["ios_simulator_arm64_count"],
+                    row["ios_simulator_x86_64_count"],
+                ),
+                (True, "parsed", 1, 1, 1),
+            )
+            self.assertFalse(first["artifacts"][2]["exists"])
+            self.assertEqual(first["artifacts"][3]["exists"], "not_declared")
+            (manifest.parent / "App.xcframework").mkdir()
+            second = ios.artifact_inventory(root, sdk)
+            self.assertTrue(second["artifacts"][2]["exists"])
+            self.assertEqual(second["artifacts"][2]["plist_status"], "missing")
+            self.assertFalse(first["artifacts"][2]["exists"])
+            self.assertNotIn("opaque-not-output", json.dumps(second))
+
+    def test_inventory_unknown_and_sensitive_inputs_never_escape(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "checkout"
+            sdk = Path(directory) / "sdk"
+            root.mkdir()
+            sdk.mkdir()
+            manifest = root / ios.GENERATED_MANIFEST
+            manifest.parent.mkdir(parents=True)
+            outside = (
+                Path(directory)
+                / "secret-signature-12345678-1234-1234-1234-123456789abc"
+            )
+            outside.mkdir()
+            (manifest.parent / "App.xcframework").symlink_to(
+                outside, target_is_directory=True
+            )
+            for value in (
+                str(outside),
+                "App.xcframework",
+                "../../../../../../secret-signature-12345678-1234-1234-1234-123456789abc/App.xcframework",
+            ):
+                manifest.write_text(f'.binaryTarget(name: "App", path: "{value}")')
+                result = ios.artifact_inventory(root, sdk)
+                self.assertEqual(result["artifacts"][2]["exists"], "unknown")
+                self.assertNotIn("secret-signature", json.dumps(result))
+                self.assertNotIn(str(root), json.dumps(result))
+            manifest.write_text("x" * (ios.INVENTORY_LIMIT + 1))
+            self.assertEqual(
+                ios.artifact_inventory(root, sdk)["declaration_status"], "unknown"
+            )
+            manifest.unlink()
+            manifest.symlink_to(outside / "absent.swift")
+            self.assertEqual(
+                ios.artifact_inventory(root, sdk)["manifest_status"], "unknown"
+            )
+
+    def test_inventory_malformed_plists_are_unknown_not_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            artifact = root / "App.xcframework"
+            artifact.mkdir()
+            info = artifact / "Info.plist"
+            samples = [
+                b"not a plist",
+                b'<?xml version="1.0"?><plist><dict>',
+                b"x" * (ios.INVENTORY_LIMIT + 1),
+            ]
+            for library in (
+                {
+                    "SupportedPlatform": "secret-platform",
+                    "SupportedArchitectures": ["arm64"],
+                },
+                {"SupportedPlatform": "ios", "SupportedArchitectures": ["secret-arch"]},
+            ):
+                samples.append(plistlib.dumps({"AvailableLibraries": [library]}))
+            samples.append(plistlib.dumps({"AvailableLibraries": [{}] * 33}))
+            for sample in samples:
+                info.write_bytes(sample)
+                row = ios.inventory_artifact(
+                    "App", "generated_manifest", True, artifact, (root.resolve(),)
+                )
+                self.assertTrue(row["exists"])
+                self.assertEqual(row["plist_status"], "unknown")
+                self.assertIsNone(row["ios_device_arm64_count"])
+                self.assertNotIn("secret", json.dumps(row))
+            info.unlink()
+            info.symlink_to("/not-an-approved-root/Info.plist")
+            self.assertEqual(
+                ios.inventory_artifact(
+                    "App", "generated_manifest", True, artifact, (root.resolve(),)
+                )["plist_status"],
+                "unknown",
+            )
+
+    def test_missing_inventory_does_not_short_circuit_compile_or_change_verdict(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            args = ios.argparse.Namespace(
+                checkout=root,
+                expected_builder="a" * 40,
+                expected_source="b" * 40,
+                mode="positive",
+                receipt_dir=root / "receipt",
+                flutter_sdk=root / "sdk",
+            )
+            ffi = root / "ios/Frameworks"
+            ffi.mkdir(parents=True)
+            for name in ("libclash.a", "libclash.h"):
+                (ffi / name).write_bytes(b"fixture")
+
+            def prepare(original, isolated):
+                cache = isolated / "bin/cache"
+                cache.mkdir(parents=True)
+                (cache / "flutter_tools.snapshot").write_bytes(b"fixture")
+                return {"adaptation": {}}
+
+            def preparation(command, cwd, env, log, receipt):
+                contents = {
+                    "xcode-version": "Xcode 26.6\n",
+                    "flutter-version": json.dumps(
+                        {
+                            "frameworkVersion": "3.47.8",
+                            "frameworkRevision": ios.FLUTTER_COMMIT,
+                        }
+                    ),
+                    "go-version": "go version go1.27.4 darwin/arm64",
+                    "settings-Runner": "{}",
+                    "settings-PacketTunnel": "{}",
+                }
+                log.write_text(contents.get(log.name, ""))
+
+            def compilation(command, cwd, env, log, timeout):
+                self.assertIn("xcodebuild", command)
+                self.assertIn("build", command)
+                log.write_text("error: unrelated fixture failure")
+                return 65
+
+            with (
+                patch.dict(os.environ, {"RUNNER_TEMP": directory}),
+                patch.object(
+                    ios,
+                    "git",
+                    side_effect=lambda root, *values: (
+                        "a" * 40 if values == ("rev-parse", "HEAD") else ""
+                    ),
+                ),
+                patch.object(ios, "source_identity", return_value={}),
+                patch.object(ios, "validate_project"),
+                patch.object(ios, "validate_mode"),
+                patch.object(ios, "prepare_sdk", side_effect=prepare),
+                patch.object(ios, "require_run", side_effect=preparation),
+                patch.object(ios, "config_with_recovery", return_value=False),
+                patch.object(ios, "signing_disabled", return_value={}),
+                patch.object(ios, "read_xcresult_errors", return_value=""),
+                patch.object(ios, "run", side_effect=compilation) as run,
+            ):
+                self.assertEqual(ios.verify(args), 65)
+                run.assert_called_once()
+            receipt = json.loads((root / "receipt/receipt.json").read_text())
+            self.assertEqual(receipt["status"], "compilation_failed_or_targets_missing")
+            for phase in ("post_config", "post_failed_build"):
+                inventory = receipt["artifact_inventory"][phase]
+                self.assertEqual(inventory["manifest_status"], "missing")
+                self.assertFalse(inventory["artifacts"][0]["exists"])
 
     def test_compile_diagnostics_never_capture_untrusted_context_or_prove_negative(
         self,
@@ -880,6 +1126,9 @@ class IOSCompileTests(unittest.TestCase):
                     ANDROID=android,
                     IOS=ios_result,
                     BINDING="success",
+                    SCOPE="full",
+                    SOURCE="b" * 40,
+                    BUILDER="a" * 40,
                     GITHUB_STEP_SUMMARY=str(Path(directory) / "summary"),
                 )
                 result = subprocess.run(
