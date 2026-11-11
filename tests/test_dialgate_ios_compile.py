@@ -75,6 +75,86 @@ class IOSCompileTests(unittest.TestCase):
             )
             self.assertNotIn("fixture stop", json.dumps(receipt))
 
+    def test_actual_compile_diagnostics_cover_fixed_categories_only(self):
+        examples = {
+            "plugin_execution_failed": "build tool plugin failed",
+            "plugin_sandbox_denied": "plugin sandbox execution denied",
+            "macro_execution_failed": "external macro implementation type cannot be found",
+            "missing_module": "no such module 'UIKit'",
+            "missing_package_product": "Missing package product 'fixture'",
+            "missing_build_input": "Build input file cannot be found",
+            "missing_framework_or_library": "framework 'Flutter' not found",
+            "swift_syntax_error": "error: expected expression",
+            "swift_typecheck_error": "cannot find 'fixture' in scope",
+            "swift_compilation_failed": "emit-module command failed",
+            "clang_compilation_failed": "clang: error: fixture",
+            "linker_failed": "Undefined symbols for architecture arm64",
+            "platform_binary_mismatch": "building for iOS but linking simulator binary",
+            "script_phase_failed": "Command PhaseScriptExecution failed with a nonzero exit code",
+            "asset_catalog_failed": "CompileAssetCatalog failed",
+            "invalid_project_configuration": "Info.plist invalid",
+            "signing_configuration_error": "requires a provisioning profile",
+            "tool_process_failed": "Command failed with a nonzero exit code",
+        }
+        self.assertEqual(set(examples), set(ios.COMPILE_DIAGNOSTIC_PATTERNS))
+        for code, text in examples.items():
+            with self.subTest(code=code):
+                self.assertIn(
+                    code, ios.compile_evidence(text, failed=True)["diagnostic_codes"]
+                )
+                self.assertNotIn("diagnostic_codes", ios.compile_evidence(text))
+        nested = ios.compile_evidence(
+            "sandbox_apply: Operation not permitted", failed=True
+        )
+        self.assertIn("nested_sandbox_denied", nested["diagnostic_codes"])
+        self.assertFalse(nested["expected_negative_diagnostic"])
+
+    def test_compile_diagnostics_never_capture_untrusted_context_or_prove_negative(
+        self,
+    ):
+        sensitive = "12345678-1234-1234-1234-123456789abc https://fixture.invalid/sub token=fixture-secret /private/fixture-path"
+        text = (
+            "SwiftCompile normal arm64 (in target 'Runner' from project 'Runner')\n"
+            "PhaseScriptExecution fixture\n"
+            "error: no such module 'UIKit'\n"
+            "error: no such module 'private_module_fixture'\n"
+            "(in target 'private_target_fixture' from project 'private_project_fixture')\n"
+            + sensitive
+        )
+        result = ios.compile_evidence(text, failed=True)
+        self.assertEqual(result["observed_targets"], ["Runner"])
+        self.assertEqual(
+            result["observed_stages"], ["SwiftCompile", "PhaseScriptExecution"]
+        )
+        self.assertEqual(result["referenced_modules"], ["UIKit"])
+        for forbidden in sensitive.split() + [
+            "private_module_fixture",
+            "private_target_fixture",
+            "private_project_fixture",
+        ]:
+            self.assertNotIn(forbidden, json.dumps(result))
+        self.assertEqual(
+            ios.compile_evidence(sensitive, failed=True)["diagnostic_codes"],
+            ["unclassified_compiler_failure"],
+        )
+        self.assertEqual(
+            ios.compilation_outcome(65, result, "negative", False)[0],
+            "negative_control_not_proven",
+        )
+        expected = ios.compile_evidence(
+            "AppDelegate.swift:12:3: error: missing argument for parameter 'extensionProfile' in call",
+            failed=True,
+        )
+        self.assertEqual(
+            ios.compilation_outcome(65, expected, "negative", False)[0],
+            "expected_swift_failure",
+        )
+        signing = ios.compile_evidence("CodeSign fixture", failed=True)
+        self.assertEqual(
+            ios.compilation_outcome(65, signing, "positive", False)[0],
+            "signing_operation_rejected",
+        )
+
     def test_manifest_wrapper_delegates_exact_argv_and_exit(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
