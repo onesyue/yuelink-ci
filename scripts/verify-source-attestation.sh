@@ -126,7 +126,9 @@ jq -e \
       .reuse.schemaVersion == 1 and
       ([.reuse.flutter, .reuse.service] | all(
         .schemaVersion == 1 and .sourceSha == $source and
-        .workflowSha == $builder and .runId == $run and .runAttempt == $attempt and
+        .workflowSha == $builder and .runId == $run and
+        (.runAttempt | test("^[1-9][0-9]*$")) and
+        ((.runAttempt | tonumber) <= ($attempt | tonumber)) and
         (.toolchain | type == "object" and length > 0))) and
       .reuse.flutter.kind == "flutter" and
       # B5 (2026-10-30): new proofs only attest flutter-analyze; proofs made

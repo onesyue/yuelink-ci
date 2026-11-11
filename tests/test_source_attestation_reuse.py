@@ -173,6 +173,45 @@ sys.exit(9)
                 self.assertFalse((self.root/'export.json').exists())
         verifier.write_text(original)
 
+    def test_same_run_earlier_receipt_attempt_is_exported(self):
+        proof=copy.deepcopy(self.proof)
+        proof['runAttempt']='2'
+        for kind in ('flutter', 'service'):
+            proof['reuse'][kind]['runAttempt']='1'
+        run=copy.deepcopy(self.run_metadata); run['run_attempt']=2
+        self.write_json('run.json', run)
+        self._write_signed(proof)
+        result=self.verify(); self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root/'export.json').read_bytes(), (self.root/'proof.json').read_bytes())
+
+    def test_later_or_foreign_receipt_attempt_never_exports(self):
+        cases=[]
+        higher=copy.deepcopy(self.proof); higher['runAttempt']='2'
+        for kind in ('flutter', 'service'):
+            higher['reuse'][kind]['runAttempt']='3'
+        cases.append((2, higher))
+        padded=copy.deepcopy(self.proof)
+        padded['reuse']['service']['runAttempt']='01'
+        cases.append((1, padded))
+        foreign=copy.deepcopy(self.proof)
+        foreign['reuse']['flutter']['runId']='999'
+        cases.append((1, foreign))
+        other_builder=copy.deepcopy(self.proof)
+        other_builder['reuse']['service']['workflowSha']='c'*40
+        cases.append((1, other_builder))
+        lowered=copy.deepcopy(self.proof)
+        lowered['runAttempt']='1'
+        cases.append((2, lowered))
+        for run_attempt, proof in cases:
+            with self.subTest(run_attempt=run_attempt, proof_attempt=proof['runAttempt'],
+                              service_attempt=proof['reuse']['service']['runAttempt']):
+                run=copy.deepcopy(self.run_metadata); run['run_attempt']=run_attempt
+                self.write_json('run.json', run)
+                self._write_signed(proof)
+                self.assertNotEqual(self.verify().returncode, 0)
+                self.assertFalse((self.root/'export.json').exists())
+        self.write_json('run.json', self.run_metadata)
+
 
 class ReuseWorkflowTests(unittest.TestCase):
     def test_receipts_follow_real_gates_and_are_required_before_signing(self):
@@ -182,11 +221,22 @@ class ReuseWorkflowTests(unittest.TestCase):
         self.assertLess(workflow.index('CGO_ENABLED=1 go test -mod=readonly -race ./...'),
                         workflow.index('attested_preflight.py capture --kind service'))
         attest=workflow[workflow.index('  attest:'):]
-        for name in ['source-reuse-flutter-', 'source-reuse-service-']:
-            self.assertIn(name,attest)
+        top=workflow.split('jobs:', 1)[0]
+        self.assertIn('permissions:\n  contents: read\n', top)
+        self.assertNotIn('actions: read', top)
+        self.assertIn('actions: read', attest)
+        self.assertIn('scripts/select-source-reuse-artifact.py', attest)
+        self.assertIn('persist-credentials: false', attest)
+        for name in ['source-reuse-flutter-${{ github.run_id }}-${{ github.run_attempt }}',
+                     'source-reuse-service-${{ github.run_id }}-${{ github.run_attempt }}']:
+            self.assertIn(name, workflow)
+            self.assertNotIn(name, attest)
+        self.assertLess(attest.index('Select executed gate receipts'),
+                        attest.index('Read executed Flutter gate receipt'))
         self.assertLess(attest.index('Read executed service race receipt'),
                         attest.index('Sign source proof provenance'))
         self.assertIn('reuse: {schemaVersion: 1, flutter: $flutter[0], service: $service[0]}',attest)
+
 
 
 if __name__ == '__main__': unittest.main()
