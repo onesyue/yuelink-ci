@@ -32,11 +32,15 @@ must name it and the pinned baseline. Fork PRs and tag dispatches cannot enter.
 
 This workflow has no package publication or signing jobs and has a distinct name
 from `Build YueLink`, so release-completion listeners do not consume its runs.
-The same bound candidate also runs ten scoped Linux test targets covering the
+The same bound candidate also runs eighteen scoped Linux test targets covering the
 updater (including its startup-wiring contract), Dart crash receiver and last-good
-configuration recovery with the canonical pinned Flutter SDK, UTC and concurrency 2.
-That Linux job first runs `go test -p 2 ./dialgate/...` from the same candidate's
-`core` directory with canonical Go 1.27.4 and `GOTOOLCHAIN=local`. Ordered raw
+configuration recovery, workflow admission, recovery API, smart selection, dashboard,
+proxy groups and manual selection with the canonical pinned Flutter SDK, UTC and
+concurrency 2.
+That Linux job first runs `go test -p 2 ./dialgate/...` and
+`go test -race -p 2 ./recovery .`, each with default tags and `-tags with_gvisor`,
+from the same candidate's `core` directory with canonical Go 1.27.4 and
+`GOTOOLCHAIN=local`. Ordered raw
 attempt telemetry and gate regressions retain a separate log in the same artifact;
 a failed Go test fails the job. The final integrated source must be explicitly bound
 before these new checks execute; directory review alone is not execution evidence.
