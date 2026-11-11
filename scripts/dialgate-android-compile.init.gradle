@@ -1,0 +1,23 @@
+import groovy.json.JsonOutput
+import org.gradle.api.GradleException
+
+// Gradle 9 TaskExecutionGraph API; this invocation disables configuration cache.
+// Included buildSrc/Flutter builds are not the application task graph.
+gradle.taskGraph.whenReady { graph ->
+    def expectedRoot = new File(System.getenv('DIAL_ANDROID_ROOT')).canonicalFile
+    if (gradle.rootProject.projectDir.canonicalFile != expectedRoot) {
+        return
+    }
+    if (gradle.startParameter.taskNames != [':app:compileDebugKotlin']) {
+        throw new GradleException('Only the exact app debug Kotlin target is admitted')
+    }
+    def receipt = new File(System.getenv('DIAL_ANDROID_GRAPH'))
+    receipt.text = JsonOutput.prettyPrint(JsonOutput.toJson(graph.allTasks.collect {
+        [path: it.path, type: it.class.name]
+    })) + '\n'
+    def process = new ProcessBuilder('python3', System.getenv('DIAL_ANDROID_GUARD'), receipt.absolutePath)
+        .inheritIO().start()
+    if (process.waitFor() != 0) {
+        throw new GradleException('Android task graph exceeds unsigned compilation scope')
+    }
+}

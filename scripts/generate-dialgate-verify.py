@@ -149,6 +149,95 @@ LINUX_CLIENT_TESTS = '''  linux_client_tests:
 '''
 
 
+
+ANDROID_KOTLIN_COMPILE = '''  android_kotlin_compile:
+    name: Exact candidate unsigned Android Kotlin compilation
+    needs: [dial_source_binding]
+    if: needs.dial_source_binding.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    env:
+      TZ: UTC
+    defaults:
+      run:
+        working-directory: candidate
+    steps:
+      - name: Checkout exact public compilation guard
+        uses: actions/checkout@__CHECKOUT__ # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: .android-verifier
+          persist-credentials: false
+      - name: Checkout bound Android candidate
+        uses: actions/checkout@__CHECKOUT__ # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ needs.dial_source_binding.outputs.candidate_commit }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          path: candidate
+          submodules: recursive
+          persist-credentials: false
+      - name: Confirm Android source identity
+        env:
+          EXPECTED_CANDIDATE: ${{ needs.dial_source_binding.outputs.candidate_commit }}
+        run: python3 ../.android-verifier/scripts/dialgate-binding.py confirm --checkout . --expected "$EXPECTED_CANDIDATE"
+      - name: Set up reviewed Flutter SDK
+        id: flutter
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@__FLUTTER_INSTALLER__ # pinned installer v1
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Set up canonical Java
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up canonical Android SDK tools
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: platform-tools
+      - name: Install candidate Android SDK dependencies
+        run: sdkmanager "platforms;android-37" "platforms;android-36" "ndk;28.2.13676358"
+      - name: Resolve locked Android dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Compile only the admitted debug Kotlin graph
+        shell: bash
+        env:
+          REVIEWED_FLUTTER_ROOT: ${{ steps.flutter.outputs.flutter-root }}
+          EXPECTED_CANDIDATE: ${{ needs.dial_source_binding.outputs.candidate_commit }}
+          BUILDER_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          printf 'source=%s\\nbuilder=%s\\n' "$EXPECTED_CANDIDATE" "$BUILDER_COMMIT" > "$RUNNER_TEMP/android-compile-identity.txt"
+          printf 'sdk.dir=%s\\nflutter.sdk=%s\\n' "$ANDROID_HOME" "$REVIEWED_FLUTTER_ROOT" > android/local.properties
+          export DIAL_ANDROID_ROOT="$PWD/android"
+          export DIAL_ANDROID_GRAPH="$RUNNER_TEMP/android-task-graph.json"
+          export DIAL_ANDROID_GUARD="$GITHUB_WORKSPACE/.android-verifier/scripts/dialgate-android-task-guard.py"
+          cd android
+          ./gradlew --no-daemon --no-configuration-cache --no-build-cache --max-workers=2 --console=plain \\
+            --init-script "$GITHUB_WORKSPACE/.android-verifier/scripts/dialgate-android-compile.init.gradle" \\
+            :app:compileDebugKotlin 2>&1 | tee "$RUNNER_TEMP/android-kotlin-compile.log"
+          test -s "$DIAL_ANDROID_GRAPH"
+          python3 "$DIAL_ANDROID_GUARD" "$DIAL_ANDROID_GRAPH"
+          # A skipped, cached or NO-SOURCE task is not a compilation receipt.
+          grep -Fx '> Task :app:compileDebugKotlin' "$RUNNER_TEMP/android-kotlin-compile.log"
+      - name: Retain Android compilation evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-kotlin-compile
+          path: |
+            ${{ runner.temp }}/android-task-graph.json
+            ${{ runner.temp }}/android-kotlin-compile.log
+            ${{ runner.temp }}/android-compile-identity.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+'''
+
+
 def job(workflow: str, name: str) -> str:
     start = re.search(rf'^  {re.escape(name)}:\s*$', workflow, re.M)
     if start is None:
@@ -196,7 +285,8 @@ def generate(workflow: str) -> str:
             summary = block
     header = HEADER.replace('__GO_VERSION__', go[1]).replace('__FLUTTER_VERSION__', flutter[1]).replace('__BASELINE__', baseline[1]).replace('__CHECKOUT__', CHECKOUT)
     client = LINUX_CLIENT_TESTS.replace('__CHECKOUT__', CHECKOUT).replace('__FLUTTER_INSTALLER__', next(iter(installers)))
-    return header + client + dial + '\n' + summary
+    android = ANDROID_KOTLIN_COMPILE.replace('__CHECKOUT__', CHECKOUT).replace('__FLUTTER_INSTALLER__', next(iter(installers)))
+    return header + client + android + dial + '\n' + summary
 
 
 def main() -> None:

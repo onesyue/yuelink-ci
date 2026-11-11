@@ -53,7 +53,7 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
         workflow = (ROOT / '.github/workflows/dialgate-verify.yml').read_text()
         self.assertEqual(workflow, builder.generate(source))
         self.assertEqual(re.findall(r'^  (\w+):$', workflow.split('\njobs:\n', 1)[1], re.M),
-                         ['dial_source_binding', 'linux_client_tests', 'dial_gate', 'dial_gate_summary'])
+                         ['dial_source_binding', 'linux_client_tests', 'android_kotlin_compile', 'dial_gate', 'dial_gate_summary'])
         source_matrix = builder.job(source, 'dial_gate').split('    strategy:\n', 1)[1].split('    steps:\n', 1)[0]
         verify_matrix = builder.job(workflow, 'dial_gate').split('    strategy:\n', 1)[1].split('    steps:\n', 1)[0]
         self.assertEqual(source_matrix, verify_matrix)
@@ -106,6 +106,7 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
             context = {**values, 'needs.dial_source_binding.result': result}
             self.assertEqual(admitted(verify, 'dial_gate', context), result == 'success')
             self.assertEqual(admitted(verify, 'linux_client_tests', context), result == 'success')
+            self.assertEqual(admitted(verify, 'android_kotlin_compile', context), result == 'success')
             self.assertEqual(admitted(verify, 'dial_gate_summary', context), result == 'success')
         for dependency in ('source_binding', 'preflight', 'dial_gate', 'dial_gate_summary'):
             context = {**values, 'github.event_name': 'push', 'github.ref': 'refs/tags/v1.3.175',
