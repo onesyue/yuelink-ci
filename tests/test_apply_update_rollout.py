@@ -145,8 +145,17 @@ class ForcePolicyTest(unittest.TestCase):
 
     def test_committed_policy_is_valid(self) -> None:
         policy = APPLY.load_force_policy(ROOT / "policy/update-force.json")
-        self.assertEqual(policy["force"], "hard")
-        self.assertIn(policy["forceReason"], {"security", "incompatible"})
+        self.assertEqual(policy["version"], "1.3.176")
+        self.assertEqual(policy["force"], "soft")
+        self.assertEqual(policy["forceReason"], "security")
+        manifest = self.manifest(policy["version"])
+        self.assertTrue(APPLY.apply_force_policy(manifest, policy))
+        self.assertEqual(manifest["force"], "soft")
+        self.assertEqual(manifest["forceReason"], "security")
+        self.assertNotIn("forcePlatforms", manifest)
+        APPLY.load_verifier(
+            ROOT / "scripts/verify-update-manifest.py"
+        )._validate_rollout_extension(manifest)
 
     def test_missing_policy_changes_nothing(self) -> None:
         manifest = self.manifest("1.3.176")
@@ -155,17 +164,40 @@ class ForcePolicyTest(unittest.TestCase):
         self.assertNotIn("force", manifest)
 
     def test_policy_applies_only_to_its_version(self) -> None:
-        policy = {"version": "1.3.176", "force": "hard", "forceReason": "security"}
+        policy = {"version": "1.3.176", "force": "soft", "forceReason": "security"}
         other = self.manifest("1.3.177")
         self.assertFalse(APPLY.apply_force_policy(other, policy))
         self.assertNotIn("force", other)
         same = self.manifest("1.3.176")
         self.assertTrue(APPLY.apply_force_policy(same, policy))
-        self.assertEqual((same["force"], same["forceReason"]), ("hard", "security"))
+        self.assertEqual((same["force"], same["forceReason"]), ("soft", "security"))
         self.assertNotIn("forcePlatforms", same)
         APPLY.load_verifier(
             ROOT / "scripts/verify-update-manifest.py"
         )._validate_rollout_extension(same)
+
+    def test_matching_global_hard_is_refused_before_mutation(self) -> None:
+        policy = {"version": "1.3.176", "force": "hard", "forceReason": "security"}
+        manifest = self.manifest("1.3.176")
+        snapshot = json.loads(json.dumps(manifest))
+        with self.assertRaisesRegex(
+            ValueError, "global hard would force 1.3.174 including iOS"
+        ):
+            APPLY.apply_force_policy(manifest, policy)
+        self.assertEqual(manifest, snapshot)
+        later = self.manifest("1.3.177")
+        later_snapshot = json.loads(json.dumps(later))
+        self.assertFalse(APPLY.apply_force_policy(later, policy))
+        self.assertEqual(later, later_snapshot)
+
+    def test_well_formed_hard_policy_still_loads(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            loaded = APPLY.load_force_policy(self.write_policy(directory, {
+                "version": "1.3.176",
+                "force": "hard",
+                "forceReason": "incompatible",
+            }))
+        self.assertEqual(loaded["force"], "hard")
 
     def test_invalid_policy_is_rejected(self) -> None:
         bad_values = (
@@ -185,11 +217,13 @@ class ForcePolicyTest(unittest.TestCase):
     def test_existing_force_keys_are_not_overwritten(self) -> None:
         manifest = self.manifest("1.3.176")
         manifest["force"] = "soft"
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "candidate already carries force keys"):
             APPLY.apply_force_policy(
                 manifest,
-                {"version": "1.3.176", "force": "hard", "forceReason": "security"},
+                {"version": "1.3.176", "force": "soft", "forceReason": "incompatible"},
             )
+        self.assertEqual(manifest["force"], "soft")
+        self.assertNotIn("forceReason", manifest)
 
     def run_cli(self, version: str, policy) -> tuple[subprocess.CompletedProcess, bytes, bytes]:
         env = {key: value for key, value in os.environ.items() if not key.startswith(
@@ -208,16 +242,63 @@ class ForcePolicyTest(unittest.TestCase):
             )
             return completed, before, path.read_bytes()
 
-    def test_cli_attaches_global_hard_for_matching_version(self) -> None:
-        policy = {"version": "1.3.176", "force": "hard", "forceReason": "security"}
-        completed, before, after = self.run_cli("1.3.176", policy)
+    def test_cli_rejects_global_hard_and_writes_soft(self) -> None:
+        hard = {"version": "1.3.176", "force": "hard", "forceReason": "security"}
+        completed, before, after = self.run_cli("1.3.176", hard)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("global hard would force 1.3.174 including iOS", completed.stderr)
+        self.assertEqual(before, after)
+        completed, before, after = self.run_cli("1.3.177", hard)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(before, after)
+        soft = {"version": "1.3.176", "force": "soft", "forceReason": "security"}
+        completed, before, after = self.run_cli("1.3.176", soft)
         self.assertEqual(completed.returncode, 0, completed.stderr)
         manifest = json.loads(after)
-        self.assertEqual(manifest["force"], "hard")
+        self.assertEqual(manifest["force"], "soft")
         self.assertEqual(manifest["forceReason"], "security")
         self.assertNotIn("forcePlatforms", manifest)
-        completed, before, after = self.run_cli("1.3.177", policy)
+
+    def test_cli_default_policy_writes_soft_for_its_version(self) -> None:
+        env = {key: value for key, value in os.environ.items() if not key.startswith(
+            "YUELINK_UPDATE_"
+        )}
+        before = json.dumps(self.manifest("1.3.176")).encode()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "candidate.json"
+            path.write_bytes(before)
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT), "--manifest", str(path)],
+                env=env, capture_output=True, text=True, check=False,
+            )
+            after = path.read_bytes()
         self.assertEqual(completed.returncode, 0, completed.stderr)
+        manifest = json.loads(after)
+        self.assertEqual(manifest["force"], "soft")
+        self.assertEqual(manifest["forceReason"], "security")
+        self.assertNotEqual(before, after)
+
+    def test_cli_global_hard_does_not_persist_rollout(self) -> None:
+        env = {key: value for key, value in os.environ.items() if not key.startswith(
+            "YUELINK_UPDATE_"
+        )}
+        env["YUELINK_UPDATE_ROLLOUT_SALT"] = "cohort"
+        env["YUELINK_UPDATE_ROLLOUT_PERCENT"] = "10"
+        before = json.dumps(self.manifest("1.3.176")).encode()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "candidate.json"
+            path.write_bytes(before)
+            policy_path = self.write_policy(directory, {
+                "version": "1.3.176", "force": "hard", "forceReason": "security",
+            })
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT), "--manifest", str(path),
+                 "--force-policy", str(policy_path)],
+                env=env, capture_output=True, text=True, check=False,
+            )
+            after = path.read_bytes()
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("global hard would force 1.3.174 including iOS", completed.stderr)
         self.assertEqual(before, after)
 
     def test_cli_invalid_policy_never_rewrites_candidate(self) -> None:

@@ -2,8 +2,7 @@
 """Attach optional rollout and per-platform force keys to an unsigned candidate.
 
 The release environment supplies the values. When they are unset this script
-leaves the file bytes unchanged: a missing `rollout` means percent 100, and a
-missing `forcePlatforms` keeps `force: hard` global.
+leaves the file bytes unchanged. A missing `rollout` means percent 100.
 
 Lowering percent to 0, or publishing the next manifest without hard, takes
 effect on the next client check. An already-upgraded client is not downgraded.
@@ -20,7 +19,8 @@ Reviewed force policy (policy/update-force.json, optional):
    "forceReason": "security"|"incompatible"}
 It applies only to a candidate whose version equals `version`, so it never
 carries over to a later release by accident. A missing file changes nothing.
-Without `forcePlatforms`, `force: hard` applies to every platform.
+`force: hard` is refused before any write: shipped 1.3.174 treats that
+global value as a force on every platform, including iOS. Only soft is written.
 """
 
 from __future__ import annotations
@@ -82,12 +82,20 @@ def load_force_policy(path: Path | None) -> dict | None:
 
 
 def apply_force_policy(manifest: dict, policy: dict | None) -> bool:
-    """Attach force/forceReason when the policy names this exact version."""
+    """Attach soft force keys when the policy names this exact version.
+
+    A matching hard policy is refused before any mutation. Shipped 1.3.174
+    treats a global hard, with no platform split, as a force on every
+    platform including iOS. A hard file for another version is ignored, so
+    a later build is not failed by a leftover policy.
+    """
     if policy is None or manifest.get("version") != policy["version"]:
         return False
+    if policy["force"] != "soft":
+        raise ValueError("global hard would force 1.3.174 including iOS")
     if "force" in manifest or "forceReason" in manifest:
         raise ValueError("candidate already carries force keys")
-    manifest["force"] = policy["force"]
+    manifest["force"] = "soft"
     manifest["forceReason"] = policy["forceReason"]
     return True
 
