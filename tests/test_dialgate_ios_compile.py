@@ -29,6 +29,142 @@ fixture = load("ios_fixture_test", "dialgate-ios-fixture.py")
 
 
 class IOSCompileTests(unittest.TestCase):
+    def test_verify_preflight_reaches_sdk_stage_with_fixed_xcode_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            args = ios.argparse.Namespace(
+                checkout=root,
+                expected_builder="a" * 40,
+                expected_source="b" * 40,
+                mode="positive",
+                receipt_dir=root / "receipt",
+                flutter_sdk=root / "sdk",
+            )
+
+            def recording_run(command, cwd, env, log):
+                log.write_text(
+                    "Xcode 26.6\nBuild version fixture\n"
+                    if log.name == "xcode-version"
+                    else ""
+                )
+                return 0
+
+            with (
+                patch.dict(os.environ, {"RUNNER_TEMP": directory}),
+                patch.object(
+                    ios,
+                    "git",
+                    side_effect=lambda root, *args: (
+                        "a" * 40 if args == ("rev-parse", "HEAD") else ""
+                    ),
+                ),
+                patch.object(ios, "source_identity", return_value={}),
+                patch.object(ios, "validate_project"),
+                patch.object(ios, "validate_mode"),
+                patch.object(ios, "run", side_effect=recording_run),
+                patch.object(
+                    ios, "prepare_sdk", side_effect=ValueError("fixture stop")
+                ),
+            ):
+                self.assertEqual(ios.verify(args), 1)
+            receipt = json.loads((root / "receipt/receipt.json").read_text())
+            self.assertEqual(receipt["stage"], "prepare-isolated-sdk")
+            self.assertEqual(
+                receipt["preparation_result"],
+                {"stage": "sandbox-check", "exit_code": 0, "outcome": "success"},
+            )
+            self.assertNotIn("fixture stop", json.dumps(receipt))
+
+    def test_preparation_failure_records_only_fixed_diagnostics(self):
+        sensitive = "secret=fixture-only /private/fixture-path https://fixture.invalid/sub 12345678-1234-1234-1234-123456789abc"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / "config"
+            receipt = {}
+            with self.assertRaises(ValueError):
+                ios.require_run(
+                    [
+                        sys.executable,
+                        "-c",
+                        "import sys; print('Error running pod install'); print(sys.argv[1]); sys.exit(23)",
+                        sensitive,
+                    ],
+                    root,
+                    dict(os.environ),
+                    log,
+                    receipt,
+                )
+            self.assertEqual(
+                receipt,
+                {
+                    "stage": "config",
+                    "preparation_result": {
+                        "stage": "config",
+                        "exit_code": 23,
+                        "outcome": "failure",
+                        "diagnostic_codes": ["pod_install_failed"],
+                    },
+                },
+            )
+            serialized = json.dumps(receipt)
+            for forbidden in sensitive.split():
+                self.assertNotIn(forbidden, serialized)
+            self.assertEqual(
+                ios.preparation_diagnostics(sensitive),
+                ["unclassified_preparation_failure"],
+            )
+            with self.assertRaises(ValueError):
+                ios.validate_go_version("go version go1.27.3 darwin/arm64", receipt)
+            self.assertEqual(receipt["stage"], "validate-go-version")
+            ios.validate_go_version("go version go1.27.4 darwin/arm64", receipt)
+
+    def test_diagnostic_enum_examples_and_timeout_remain_fail_closed(self):
+        examples = {
+            "signing_attempt_rejected": "Code signing is required",
+            "sandbox_denied": "sandbox: deny process-exec",
+            "unavailable_xcode_sdk": "SDK iphoneos cannot be located",
+            "xcode_license_required": "Agree to the Xcode license",
+            "missing_cocoapods": "CocoaPods not installed",
+            "pod_install_failed": "Error running pod install",
+            "swift_package_resolution_failed": "Could not resolve package dependencies",
+            "swift_package_manager_configuration": "Swift Package Manager is not supported",
+            "deployment_target_mismatch": "requires a higher minimum deployment target",
+            "dependency_resolution_failed": "version solving failed",
+            "missing_generated_configuration": "Generated.xcconfig must exist",
+        }
+        self.assertEqual(set(examples), set(ios.DIAGNOSTIC_PATTERNS))
+        for expected, text in examples.items():
+            self.assertIn(expected, ios.preparation_diagnostics(text))
+        for exc, outcome in (
+            (subprocess.TimeoutExpired(["secret-argv"], 1), "timeout"),
+            (KeyboardInterrupt(), "cancelled"),
+        ):
+            receipt = {}
+            with (
+                patch.object(ios, "run", side_effect=exc),
+                self.assertRaises(type(exc)),
+            ):
+                ios.require_run(["unused"], ROOT, {}, Path("config"), receipt)
+            self.assertEqual(
+                receipt["preparation_result"],
+                {"stage": "config", "exit_code": None, "outcome": outcome},
+            )
+            self.assertNotIn("secret-argv", json.dumps(receipt))
+        receipt = {"preparation_result": {"outcome": "success"}}
+        with (
+            patch.object(ios, "run", side_effect=OSError("secret-path")),
+            self.assertRaises(OSError),
+        ):
+            ios.require_run(["unused"], ROOT, {}, Path("config"), receipt)
+        self.assertEqual(
+            receipt["preparation_result"],
+            {"stage": "config", "exit_code": None, "outcome": "launch_failed"},
+        )
+        self.assertNotIn("secret-path", json.dumps(receipt))
+        with patch.object(ios, "run") as process, self.assertRaises(ValueError):
+            ios.require_run(["unused"], ROOT, {}, Path("untrusted-stage"), {})
+        process.assert_not_called()
+
     def test_pinned_sdk_patch_changes_only_four_signing_calls(self):
         with tempfile.TemporaryDirectory() as directory:
             sdk = Path(directory)

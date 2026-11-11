@@ -242,9 +242,93 @@ def run(command: list[str], cwd: Path, env: dict, log: Path, timeout: int = 900)
             raise
 
 
-def require_run(command: list[str], cwd: Path, env: dict, log: Path) -> None:
-    if run(command, cwd, env, log) != 0:
-        raise ValueError("preparation command failed: " + log.name)
+PREPARATION_STAGES = frozenset(
+    {
+        "xcode-version",
+        "sandbox-check",
+        "flutter-bootstrap",
+        "flutter-version",
+        "go-version",
+        "spm",
+        "pub",
+        "media",
+        "ffi-build",
+        "ffi-copy",
+        "config",
+        "settings-Runner",
+        "settings-PacketTunnel",
+    }
+)
+DIAGNOSTIC_PATTERNS = {
+    "signing_attempt_rejected": r"signing attempt rejected|code signing is required|requires a development team|no signing certificate|no profiles for",
+    "sandbox_denied": r"sandbox[^\n]*(?:deny|denied)|operation not permitted",
+    "unavailable_xcode_sdk": r"SDK[^\n]*(?:cannot be located|not found|not installed)|unable to find a destination|Xcode installation is incomplete",
+    "xcode_license_required": r"agree[^\n]*Xcode[^\n]*license|Xcode[^\n]*license[^\n]*(?:accept|agree)",
+    "missing_cocoapods": r"CocoaPods not installed|CocoaPods not in valid state|pod: command not found",
+    "pod_install_failed": r"Error running pod install|pod install[^\n]*(?:failed|non-zero)|CocoaPods could not find compatible versions",
+    "swift_package_resolution_failed": r"could not resolve package dependencies|failed to resolve[^\n]*package|failed to clone repository|package resolution failed",
+    "swift_package_manager_configuration": r"Swift Package Manager[^\n]*(?:error|failed|not supported|requires)|SwiftPM[^\n]*(?:error|failed|not supported)",
+    "deployment_target_mismatch": r"requires a higher minimum deployment target|deployment target[^\n]*(?:unsupported|outside|less than)|minimum[^\n]*deployment target",
+    "dependency_resolution_failed": r"version solving failed|failed to resolve dependencies|unable to resolve dependency|could not find[^\n]*dependency",
+    "missing_generated_configuration": r"Generated\.xcconfig[^\n]*(?:not found|must exist|missing)|unable to open base configuration reference file|could not find[^\n]*Generated",
+}
+
+
+def preparation_diagnostics(text: str) -> list[str]:
+    # Only fixed identifiers leave this function. Never return captured log text.
+    return [
+        name
+        for name, pattern in DIAGNOSTIC_PATTERNS.items()
+        if re.search(pattern, text, re.IGNORECASE)
+    ] or ["unclassified_preparation_failure"]
+
+
+def require_run(
+    command: list[str], cwd: Path, env: dict, log: Path, receipt: dict | None = None
+) -> None:
+    if receipt is not None:
+        if log.name not in PREPARATION_STAGES:
+            raise ValueError("unknown preparation stage")
+        receipt["stage"] = log.name
+        receipt.pop("preparation_result", None)
+    try:
+        code = run(command, cwd, env, log)
+    except OSError:
+        if receipt is not None:
+            receipt["preparation_result"] = {
+                "stage": log.name,
+                "exit_code": None,
+                "outcome": "launch_failed",
+            }
+        raise
+    except (subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
+        if receipt is not None:
+            receipt["preparation_result"] = {
+                "stage": log.name,
+                "exit_code": None,
+                "outcome": "timeout"
+                if isinstance(exc, subprocess.TimeoutExpired)
+                else "cancelled",
+            }
+        raise
+    if receipt is not None:
+        receipt["preparation_result"] = {
+            "stage": log.name,
+            "exit_code": code,
+            "outcome": "success" if code == 0 else "failure",
+        }
+        if code != 0:
+            receipt["preparation_result"]["diagnostic_codes"] = preparation_diagnostics(
+                log.read_text(errors="replace")
+            )
+    if code != 0:
+        raise ValueError("preparation command failed")
+
+
+def validate_go_version(text: str, receipt: dict) -> None:
+    receipt["stage"] = "validate-go-version"
+    if "go version go1.27.4 " not in text:
+        raise ValueError("Go runtime version mismatch")
 
 
 def protected_command(command: list[str], profile: Path) -> list[str]:
@@ -373,8 +457,11 @@ def verify(args: argparse.Namespace) -> int:
     }
     result = 1
     try:
+        receipt["stage"] = "initial-source-identity"
         before = source_identity(root, args.expected_source)
+        receipt["stage"] = "project-phase-identity"
         validate_project(root)
+        receipt["stage"] = "source-mode-identity"
         validate_mode(root, args.mode)
         receipt["identity"] = before
         env = dict(
@@ -386,7 +473,10 @@ def verify(args: argparse.Namespace) -> int:
             GOFLAGS="-mod=readonly",
             **dict(x.split("=", 1) for x in SIGNING_SETTINGS),
         )
-        require_run(["xcodebuild", "-version"], root, env, private / "xcode-version")
+        require_run(
+            ["xcodebuild", "-version"], root, env, private / "xcode-version", receipt
+        )
+        receipt["stage"] = "validate-xcode-version"
         if (private / "xcode-version").read_text().splitlines()[0] != "Xcode 26.6":
             raise ValueError("pinned Xcode unavailable")
         profile = private / "no-sign.sb"
@@ -398,12 +488,14 @@ def verify(args: argparse.Namespace) -> int:
             root,
             env,
             private / "sandbox-check",
+            receipt,
         )
         receipt["signing_sandbox"] = (
             "deny codesign/ldid execution; read-only media signature verification runs separately"
         )
         original = args.flutter_sdk.resolve()
         isolated = private / "flutter-3.47.8-no-sign"
+        receipt["stage"] = "prepare-isolated-sdk"
         receipt["sdk"] = prepare_sdk(original, isolated)
         violation = private / "signing-violation"
         install_signing_guard(private / "guard-bin", violation)
@@ -421,19 +513,23 @@ def verify(args: argparse.Namespace) -> int:
             root,
             env,
             private / "flutter-bootstrap",
+            receipt,
         )
         require_run(
             protected_command(["flutter", "--version", "--machine"], profile),
             root,
             env,
             private / "flutter-version",
+            receipt,
         )
+        receipt["stage"] = "validate-flutter-version"
         info = json.loads((private / "flutter-version").read_text())
         if (
             info.get("frameworkVersion") != "3.47.8"
             or info.get("frameworkRevision") != FLUTTER_COMMIT
         ):
             raise ValueError("Flutter runtime identity mismatch")
+        receipt["stage"] = "validate-adapted-snapshot"
         snapshot = isolated / "bin/cache/flutter_tools.snapshot"
         receipt["sdk"]["snapshot_sha256"] = sha(snapshot.read_bytes())
         receipt["sdk"]["snapshot_rebuilt_after_patch"] = True
@@ -465,9 +561,10 @@ def verify(args: argparse.Namespace) -> int:
             guarded = (
                 command if label == "media" else protected_command(command, profile)
             )
-            require_run(guarded, root, env, private / label)
-        if "go version go1.27.4 " not in (private / "go-version").read_text():
-            raise ValueError("Go runtime version mismatch")
+            require_run(guarded, root, env, private / label, receipt)
+            if label == "go-version":
+                validate_go_version((private / label).read_text(), receipt)
+        receipt["stage"] = "ffi-artifact-identity"
         receipt["ffi"] = {
             name: sha((root / name).read_bytes())
             for name in ("ios/Frameworks/libclash.a", "ios/Frameworks/libclash.h")
@@ -488,10 +585,12 @@ def verify(args: argparse.Namespace) -> int:
                 "-showBuildSettings",
                 "-json",
             ]
-            require_run(command, root, env, private / ("settings-" + target))
+            require_run(command, root, env, private / ("settings-" + target), receipt)
+            receipt["stage"] = "validate-settings-" + target
             receipt["settings"][target] = signing_disabled(
                 (private / ("settings-" + target)).read_text(), target
             )
+        receipt["stage"] = "source-identity-after-preparation"
         if source_identity(root, args.expected_source) != before:
             raise ValueError("source inputs changed during preparation")
         derived = private / "DerivedData"
@@ -508,8 +607,10 @@ def verify(args: argparse.Namespace) -> int:
         evidence = compile_evidence((private / "compile").read_text(errors="replace"))
         receipt["evidence"] = evidence
         receipt["compiler_exit"] = code
+        receipt["stage"] = "validate-compile-signing"
         if violation.exists() or evidence["signing_operation"]:
             raise ValueError("signing operation rejected")
+        receipt["stage"] = "source-identity-after-compilation"
         if source_identity(root, args.expected_source) != before:
             raise ValueError("source inputs changed during compilation")
         app = derived / "Build/Products/Release-iphoneos/Runner.app"
