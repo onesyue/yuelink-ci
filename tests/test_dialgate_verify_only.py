@@ -48,6 +48,38 @@ def admitted(workflow: str, name: str, values: dict[str, str]) -> bool:
 
 
 class DialgateVerifyOnlyTests(unittest.TestCase):
+    def test_sdk_package_and_go_preload_execute_with_fail_closed_order(self) -> None:
+        workflow = (ROOT / '.github/workflows/dialgate-verify.yml').read_text()
+        go_block = workflow.split('      - name: Run exact-candidate dialgate Go regressions\n', 1)[1].split('      - name:', 1)[0]
+        go_script = textwrap.dedent(go_block.split('        run: |\n', 1)[1])
+        android = builder.job(workflow, 'android_kotlin_compile')
+        sdk_script = android.split('        run: sdkmanager ', 1)[1].splitlines()[0]
+        sdk_script = 'sdkmanager ' + sdk_script
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for tool in ('go', 'sdkmanager'):
+                path = root / tool
+                path.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS"\nif [ "$1" = mod ] && [ "$PRELOAD_FAIL" = yes ]; then exit 23; fi\n')
+                path.chmod(0o755)
+            calls = root / 'calls'
+            env = {**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH'],
+                   'RUNNER_TEMP': directory, 'CALLS': str(calls), 'PRELOAD_FAIL': 'no'}
+            result = subprocess.run(['bash', '-c', sdk_script], env=env, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(calls.read_text().splitlines(), ['platforms;android-37.0 platforms;android-36 ndk;28.2.13676358'])
+            calls.unlink()
+            result = subprocess.run(['bash', '-c', go_script], env=env, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(calls.read_text().splitlines(), [
+                'mod download github.com/metacubex/gvisor',
+                'test -p 2 ./dialgate/...', 'test -race -p 2 ./recovery .',
+                'test -tags with_gvisor -p 2 ./dialgate/...',
+                'test -tags with_gvisor -race -p 2 ./recovery .'])
+            calls.unlink()
+            result = subprocess.run(['bash', '-c', go_script], env={**env, 'PRELOAD_FAIL': 'yes'}, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 23)
+            self.assertEqual(calls.read_text().splitlines(), ['mod download github.com/metacubex/gvisor'])
+
     def test_generated_workflow_matches_canonical_dial_jobs(self) -> None:
         source = (ROOT / '.github/workflows/build.yml').read_text()
         workflow = (ROOT / '.github/workflows/dialgate-verify.yml').read_text()
@@ -242,23 +274,28 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
             env = {**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH'],
                    'RUNNER_TEMP': str(root), 'CALLS': str(root / 'calls'), 'GOTOOLCHAIN': 'local'}
             expected = [
+                ['mod', 'download', 'github.com/metacubex/gvisor'],
                 ['test', '-p', '2', './dialgate/...'],
                 ['test', '-race', '-p', '2', './recovery', '.'],
                 ['test', '-tags', 'with_gvisor', '-p', '2', './dialgate/...'],
                 ['test', '-tags', 'with_gvisor', '-race', '-p', '2', './recovery', '.'],
             ]
-            for fail_at in range(5):
+            for fail_at in range(6):
                 (root / 'calls').unlink(missing_ok=True)
+                (root / 'linux-dialgate-go-tests.log').unlink(missing_ok=True)
                 result = subprocess.run(['bash', '-c', script], cwd=core,
                                         env={**env, 'FAKE_FAIL_AT': str(fail_at)}, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 17 if fail_at else 0, result.stderr)
                 calls = [json.loads(line) for line in (root / 'calls').read_text().splitlines()]
-                self.assertEqual([call['args'] for call in calls], expected[:fail_at or 4])
+                self.assertEqual([call['args'] for call in calls], expected[:fail_at or 5])
                 for call in calls:
                     self.assertEqual(call['toolchain'], 'local')
                     self.assertEqual(Path(call['cwd']), core.resolve())
-                self.assertEqual((root / 'linux-dialgate-go-tests.log').read_text(),
-                                 'synthetic Go test report\n' * (fail_at or 4))
+                if fail_at == 1:
+                    self.assertFalse((root / 'linux-dialgate-go-tests.log').exists())
+                else:
+                    self.assertEqual((root / 'linux-dialgate-go-tests.log').read_text(),
+                                     'synthetic Go test report\n' * ((fail_at or 5) - 1))
 
     def test_go_regressions_use_exact_source_toolchain_scope_and_propagate_failure(self) -> None:
         self.assert_go_regression_contract((ROOT / '.github/workflows/dialgate-verify.yml').read_text())
@@ -273,7 +310,7 @@ class DialgateVerifyOnlyTests(unittest.TestCase):
             ('GOTOOLCHAIN: local', 'GOTOOLCHAIN: auto'),
             ('-tags with_gvisor', '-tags other_tag'),
             ('-race -p 2 ./recovery .', '-p 2 ./recovery .'),
-            ('set -euo pipefail\n          go test', 'set -eu\n          go test'),
+            ('set -euo pipefail\n          # The default', 'set -eu\n          # The default'),
             ('ref: ${{ needs.dial_source_binding.outputs.candidate_commit }}', 'ref: master'),
         ):
             with self.subTest(mutation=after):

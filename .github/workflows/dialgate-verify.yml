@@ -125,6 +125,8 @@ jobs:
           GOTOOLCHAIN: local
         run: |
           set -euo pipefail
+          # The default build does not import gVisor; ABI guards inspect its sources.
+          go mod download github.com/metacubex/gvisor
           go test -p 2 ./dialgate/... 2>&1 | tee "$RUNNER_TEMP/linux-dialgate-go-tests.log"
           go test -race -p 2 ./recovery . 2>&1 | tee -a "$RUNNER_TEMP/linux-dialgate-go-tests.log"
           go test -tags with_gvisor -p 2 ./dialgate/... 2>&1 | tee -a "$RUNNER_TEMP/linux-dialgate-go-tests.log"
@@ -234,7 +236,7 @@ jobs:
         with:
           packages: platform-tools
       - name: Install candidate Android SDK dependencies
-        run: sdkmanager "platforms;android-37" "platforms;android-36" "ndk;28.2.13676358"
+        run: sdkmanager "platforms;android-37.0" "platforms;android-36" "ndk;28.2.13676358"
       - name: Resolve locked Android dependencies
         run: flutter pub get --enforce-lockfile
       - name: Compile only the admitted debug Kotlin graph
