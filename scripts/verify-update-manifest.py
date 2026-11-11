@@ -13,6 +13,7 @@ import binascii
 import importlib.util
 import json
 import re
+import urllib.parse
 import subprocess
 import sys
 import tempfile
@@ -76,11 +77,24 @@ REQUIRED_TOP_LEVEL_KEYS = {
 # 但 policy 会要求三键全有或全无并严格交叉绑定，不能把“前向兼容”误写成任意扩展。
 OPTIONAL_TOP_LEVEL_KEYS = {
     "compatibility",
+    "force",
+    "forceDeadline",
+    "forcePlatforms",
+    "forceReason",
+    "iosStoreUrl",
     "notesEn",
-    "sourceCommit",
-    "sha256SumsSha256",
     "promotionEvidence",
+    "rollout",
+    "sha256SumsSha256",
+    "sourceCommit",
 }
+# `rollout` and `forcePlatforms` are optional cohort controls. Absence means
+# percent 100 and a global force tier. Lowering percent to 0 or removing hard
+# takes effect on the next client check. Already-upgraded clients are not
+# downgraded; a rollback build must ship as a higher version. `force`,
+# `forceReason`, `forceDeadline` and `iosStoreUrl` are the same optional keys
+# the 1.3.165+ client already accepts; the night check has to allow them or a
+# signed hard manifest is rejected as an unknown key.
 TOP_LEVEL_KEYS = REQUIRED_TOP_LEVEL_KEYS | OPTIONAL_TOP_LEVEL_KEYS
 EXPECTED_PLATFORM_ARTIFACTS = {
     "android-arm64-v8a": "android-arm64-v8a.apk",
@@ -239,6 +253,100 @@ def _utc_timestamp(raw: Any, field: str) -> datetime:
 def _published_at(raw: Any) -> datetime:
     return _utc_timestamp(raw, "publishedAt")
 
+_ROLLOUT_SALT = re.compile(r"[A-Za-z0-9_-]{1,64}")
+_FORCE_DEADLINE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+
+
+def _validate_ios_store_url(raw: Any) -> None:
+    if not isinstance(raw, str):
+        raise ManifestError(
+            "iosStoreUrl must be an App Store or TestFlight HTTPS link"
+        )
+    try:
+        parsed = urllib.parse.urlparse(raw)
+        invalid = (
+            parsed.scheme != "https"
+            or parsed.username
+            or parsed.password
+            or parsed.port is not None
+            or parsed.hostname not in {"apps.apple.com", "testflight.apple.com"}
+            or len(parsed.path) < 2
+        )
+    except ValueError as exc:
+        raise ManifestError(
+            "iosStoreUrl must be an App Store or TestFlight HTTPS link"
+        ) from exc
+    if invalid:
+        raise ManifestError(
+            "iosStoreUrl must be an App Store or TestFlight HTTPS link"
+        )
+
+
+def _validate_rollout_extension(manifest: dict[str, Any]) -> None:
+    """Validate optional cohort keys without requiring them.
+
+    A missing `rollout` is percent 100. A missing `forcePlatforms` keeps
+    `force: hard` global. Changing either value on a later manifest takes
+    effect on the next client check and does not downgrade an install that
+    already updated. A rollback build must use a higher version number.
+    """
+    platforms = manifest.get("platforms")
+    platform_names = set(platforms) if isinstance(platforms, dict) else set()
+
+    if "rollout" in manifest:
+        rollout = manifest["rollout"]
+        if not isinstance(rollout, dict) or set(rollout) != {"salt", "percent"}:
+            raise ManifestError("rollout must be an object with salt and percent")
+        salt = rollout["salt"]
+        percent = rollout["percent"]
+        if not isinstance(salt, str) or _ROLLOUT_SALT.fullmatch(salt) is None:
+            raise ManifestError("rollout salt must be a short non-empty token")
+        if (
+            isinstance(percent, bool)
+            or not isinstance(percent, int)
+            or not 0 <= percent <= 100
+        ):
+            raise ManifestError("rollout percent must be an integer from 0 to 100")
+
+    if "forcePlatforms" in manifest:
+        names = manifest["forcePlatforms"]
+        if (
+            not isinstance(names, list)
+            or not names
+            or any(not isinstance(name, str) for name in names)
+            or len(names) != len(set(names))
+            or any(name not in platform_names for name in names)
+        ):
+            raise ManifestError(
+                "forcePlatforms must name distinct platforms on this manifest"
+            )
+
+    if "force" in manifest and (
+        not isinstance(manifest["force"], str) or manifest["force"] not in {"soft", "hard"}
+    ):
+        raise ManifestError("force must be soft or hard")
+    if "forceReason" in manifest and (
+        not isinstance(manifest["forceReason"], str)
+        or manifest["forceReason"] not in {"security", "incompatible"}
+    ):
+        raise ManifestError("forceReason must be security or incompatible")
+    if "forceDeadline" in manifest:
+        deadline = manifest["forceDeadline"]
+        if not isinstance(deadline, str) or _FORCE_DEADLINE.fullmatch(deadline) is None:
+            raise ManifestError("forceDeadline must be a UTC timestamp")
+        try:
+            parsed = datetime.fromisoformat(deadline[:-1] + "+00:00")
+        except ValueError as exc:
+            raise ManifestError("forceDeadline must be a UTC timestamp") from exc
+        if parsed.strftime("%Y-%m-%dT%H:%M:%SZ") != deadline:
+            raise ManifestError("forceDeadline must be a UTC timestamp")
+    force = manifest.get("force", "soft")
+    if (force == "hard" or "forceDeadline" in manifest) and (
+        "forceReason" not in manifest
+    ):
+        raise ManifestError("hard enforcement requires forceReason")
+    if "iosStoreUrl" in manifest:
+        _validate_ios_store_url(manifest["iosStoreUrl"])
 
 def _validate_manifest_policy(
     manifest: dict[str, Any], *, now: datetime | None = None
@@ -361,6 +469,7 @@ def _validate_manifest_policy(
             raise ManifestError(f"platform {platform} URL is missing")
         if url != f"https://{ASSET_HOST}{expected_path}":
             raise ManifestError(f"platform {platform} URL is outside the reviewed CDN path")
+    _validate_rollout_extension(manifest)
 
 
 def _enforce_minimum(manifest: dict[str, Any], floor: dict[str, Any]) -> None:

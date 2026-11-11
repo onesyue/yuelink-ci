@@ -186,6 +186,77 @@ class UpdateManifestVerifierTests(unittest.TestCase):
             verifier._verify_signed_manifest(raw)["version"], manifest["version"]
         )
 
+    def test_rollout_keys_pass_the_schema_gate_and_stay_signed(self) -> None:
+        """New optional keys are allowlisted, so a bad signature is the failure.
+
+        An unknown key still fails the schema gate. `rollout` and
+        `forcePlatforms` must not: they are inside the signed payload, and
+        old clients ignore them. Lowering percent or removing hard is a
+        later manifest, not a downgrade of clients that already updated.
+        """
+        with_optional = dict(self.manifest)
+        with_optional["rollout"] = {"salt": "cohort", "percent": 10}
+        with_optional["forcePlatforms"] = ["ios"]
+        with_optional["force"] = "hard"
+        with_optional["forceReason"] = "security"
+        raw = json.dumps(with_optional, ensure_ascii=False).encode()
+        with self.assertRaises(verifier.ManifestError) as caught:
+            verifier.verify(raw)
+        self.assertNotIn("unknown top-level", str(caught.exception))
+        self.assertIn("signature", str(caught.exception))
+
+    def test_rollout_percent_bounds_and_platform_names(self) -> None:
+        for percent in (0, 100):
+            candidate = json.loads(self.raw)
+            candidate["rollout"] = {"salt": "cohort", "percent": percent}
+            verifier._validate_manifest_policy(candidate)
+        self.assert_policy_rejects(
+            "percent",
+            lambda candidate: candidate.__setitem__(
+                "rollout", {"salt": "cohort", "percent": 101}
+            ),
+        )
+        self.assert_policy_rejects(
+            "percent",
+            lambda candidate: candidate.__setitem__(
+                "rollout", {"salt": "cohort", "percent": True}
+            ),
+        )
+        self.assert_policy_rejects(
+            "forcePlatforms",
+            lambda candidate: candidate.__setitem__(
+                "forcePlatforms", ["not-a-platform"]
+            ),
+        )
+        self.assert_policy_rejects(
+            "forcePlatforms",
+            lambda candidate: candidate.__setitem__("forcePlatforms", ["ios", "ios"]),
+        )
+        listed = json.loads(self.raw)
+        listed["force"] = "hard"
+        listed["forceReason"] = "security"
+        listed["forcePlatforms"] = ["ios", "windows-amd64-setup"]
+        verifier._validate_manifest_policy(listed)
+
+    def test_optional_force_fields_reject_invalid_types_consistently(self) -> None:
+        for field in ("force", "forceReason"):
+            for value in ([], {}, None, True, 1):
+                with self.subTest(field=field, value=value):
+                    with self.assertRaises(verifier.ManifestError):
+                        verifier._validate_rollout_extension({field: value})
+
+    def test_ios_store_url_rejects_malformed_authority_consistently(self) -> None:
+        for url in (
+            "https://apps.apple.com:invalid/app/example",
+            "https://apps.apple.com:99999/app/example",
+            "https://[apps.apple.com/app/example",
+        ):
+            with self.subTest(url=url):
+                with self.assertRaises(verifier.ManifestError):
+                    verifier._validate_rollout_extension({"iosStoreUrl": url})
+        for url in ("https://apps.apple.com/app/example", "https://testflight.apple.com/join/example"):
+            verifier._validate_rollout_extension({"iosStoreUrl": url})
+
     def test_current_promoted_production_root_is_valid(self) -> None:
         raw = CURRENT_PROMOTED_FIXTURE.read_bytes()
         manifest = json.loads(raw)
