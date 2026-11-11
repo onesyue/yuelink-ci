@@ -83,16 +83,20 @@ OPTIONAL_TOP_LEVEL_KEYS = {
     "forceReason",
     "iosStoreUrl",
     "notesEn",
+    "platformForce",
     "promotionEvidence",
+    "rollout",
     "sha256SumsSha256",
     "sourceCommit",
 }
-# `forcePlatforms`, when present, limits `force: hard` to those platform keys.
-# iOS is never a member: a hard manifest without that list, or with iOS in it,
-# is rejected. 1.3.174 ignores the list and reads only `force`. `force`,
-# `forceReason`, `forceDeadline` and `iosStoreUrl` are the same optional keys
-# the 1.3.165+ client already accepts; the night check has to allow them or a
-# signed hard manifest is rejected as an unknown key.
+# Historical signed manifests may still carry `rollout` or a global `force`.
+# Those keys stay verifiable. The new producer does not emit `rollout`, a
+# global hard value, or `forceDeadline`. `platformForce: hard` is the
+# new-client signal and requires global `force: soft`, `forceReason`, and
+# non-iOS `forcePlatforms`. 1.3.174 reads only `force`. `force`,
+# `forceReason`, `forceDeadline` and `iosStoreUrl` are keys the 1.3.165+
+# client already accepts; the night check has to allow them or a signed
+# manifest is rejected as an unknown key.
 TOP_LEVEL_KEYS = REQUIRED_TOP_LEVEL_KEYS | OPTIONAL_TOP_LEVEL_KEYS
 EXPECTED_PLATFORM_ARTIFACTS = {
     "android-arm64-v8a": "android-arm64-v8a.apk",
@@ -281,18 +285,30 @@ def _validate_ios_store_url(raw: Any) -> None:
 
 
 def _validate_rollout_extension(manifest: dict[str, Any]) -> None:
-    """Validate optional force keys. Percentage rollout is not a manifest field.
+    """Validate optional force keys, including historical rollout shapes.
 
-    A missing `force` is soft. `force: hard` requires `forceReason` and
-    `forcePlatforms` naming every forced platform except iOS. A later manifest
-    that removes hard takes effect on the next client check and does not
-    downgrade an install that already updated.
+    A missing `rollout` is not a percentage. Historical objects that still
+    contain salt and percent 0–100 remain verifiable. `platformForce` is
+    absent on those objects. When present it must be hard, the global force
+    must stay soft, and the platform list must not name iOS.
     """
     platforms = manifest.get("platforms")
     platform_names = set(platforms) if isinstance(platforms, dict) else set()
 
     if "rollout" in manifest:
-        raise ManifestError("rollout percentage fields are not accepted")
+        rollout = manifest["rollout"]
+        if not isinstance(rollout, dict) or set(rollout) != {"salt", "percent"}:
+            raise ManifestError("rollout must be an object with salt and percent")
+        salt = rollout["salt"]
+        percent = rollout["percent"]
+        if not isinstance(salt, str) or _ROLLOUT_SALT.fullmatch(salt) is None:
+            raise ManifestError("rollout salt must be a short non-empty token")
+        if (
+            isinstance(percent, bool)
+            or not isinstance(percent, int)
+            or not 0 <= percent <= 100
+        ):
+            raise ManifestError("rollout percent must be an integer from 0 to 100")
 
     if "forcePlatforms" in manifest:
         names = manifest["forcePlatforms"]
@@ -302,10 +318,9 @@ def _validate_rollout_extension(manifest: dict[str, Any]) -> None:
             or any(not isinstance(name, str) for name in names)
             or len(names) != len(set(names))
             or any(name not in platform_names for name in names)
-            or any(name == "ios" or name.startswith("ios") for name in names)
         ):
             raise ManifestError(
-                "forcePlatforms must name distinct non-iOS platforms on this manifest"
+                "forcePlatforms must name distinct platforms on this manifest"
             )
 
     if "force" in manifest and (
@@ -332,25 +347,21 @@ def _validate_rollout_extension(manifest: dict[str, Any]) -> None:
         "forceReason" not in manifest
     ):
         raise ManifestError("hard enforcement requires forceReason")
-    if force == "hard" or "forceDeadline" in manifest:
-        expected = sorted(
-            name
-            for name in platform_names
-            if isinstance(name, str)
-            and name != "ios"
-            and not name.startswith("ios")
-        )
-        actual = manifest.get("forcePlatforms")
+    if "platformForce" in manifest:
+        if manifest["platformForce"] != "hard":
+            raise ManifestError("platformForce must be hard")
+        if force != "soft" or "forceDeadline" in manifest:
+            raise ManifestError("platformForce requires global force soft")
+        if manifest.get("forceReason") not in {"security", "incompatible"}:
+            raise ManifestError("platformForce requires forceReason")
+        names = manifest.get("forcePlatforms")
         if (
-            not isinstance(actual, list)
-            or set(actual) != set(expected)
-            or not expected
+            not isinstance(names, list)
+            or not names
+            or any(not isinstance(name, str) for name in names)
+            or any(name == "ios" or name.startswith("ios") for name in names)
         ):
-            raise ManifestError(
-                "hard enforcement must name every non-iOS platform"
-            )
-    elif "forcePlatforms" in manifest:
-        raise ManifestError("soft force must not list forcePlatforms")
+            raise ManifestError("platformForce must name non-iOS platforms")
     if "iosStoreUrl" in manifest:
         _validate_ios_store_url(manifest["iosStoreUrl"])
 

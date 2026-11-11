@@ -60,12 +60,16 @@ platforms = {
 }
 manifest = {"schemaVersion": 1, "platforms": platforms}
 module.apply_force(manifest, force=force, reason=reason or None)
+if module.legacy_client_tier(manifest) != "soft":
+    raise SystemExit("global hard would force 1.3.174 including iOS")
 if module.current_client_tier(manifest, "ios") != "soft":
     raise SystemExit("iOS is never forced")
-if "rollout" in manifest or "percent" in manifest:
-    raise SystemExit("percentage rollout is not accepted")
-legacy = module.legacy_client_tier(manifest)
-print(f"Admitted {force} root policy for {version} over {baseline}; iOS stays a prompt for current clients")
-if legacy == "hard":
-    print("1.3.174 reads only force and would treat this hard manifest as global, including iOS")
+if "rollout" in manifest or "percent" in manifest or manifest.get("force") == "hard":
+    raise SystemExit("global hard and percentage rollout are not accepted")
+print(f"Admitted {force} root policy for {version} over {baseline}; iOS stays a prompt")
+print(f"wireForce={manifest.get('force')}")
+if force == "hard":
+    print("global force stays soft so 1.3.174 remains a prompt, including iOS")
+    print(f"platformForce={manifest['platformForce']}")
+    print("forcePlatforms=" + ",".join(manifest["forcePlatforms"]))
 PY

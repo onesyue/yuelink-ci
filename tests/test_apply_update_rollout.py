@@ -55,45 +55,75 @@ class ApplyUpdateRolloutTest(unittest.TestCase):
         self.assertNotIn("forcePlatforms", original)
 
     def test_three_readers_cover_legacy_current_and_ios(self) -> None:
-        """Execute the three manifest readers the release gate has to keep apart.
+        """Execute the three readers the release gate has to keep apart.
 
-        Removing the iOS exclusion, or teaching the legacy reader to honor
-        forcePlatforms, fails this test. 1.3.174 reads only force.
+        1.3.174 reads only force and forceDeadline. The agreed new reader
+        forces only when platformForce is hard, and never on iOS. yuelink#122
+        does not parse platformForce. The publisher refuses to emit global
+        hard, a deadline, or a rollout field.
         """
         soft = self.manifest()
         self.assertTrue(APPLY.apply_force(soft, force="soft", reason=None))
+        self.assertEqual(soft["force"], "soft")
+        self.assertNotIn("platformForce", soft)
+        self.assertNotIn("forcePlatforms", soft)
+        self.assertNotIn("rollout", soft)
         self.assertEqual(APPLY.legacy_client_tier(soft), "soft")
         self.assertEqual(APPLY.current_client_tier(soft, "ios"), "soft")
         self.assertEqual(APPLY.current_client_tier(soft, "windows-amd64-setup"), "soft")
-        self.assertNotIn("forcePlatforms", soft)
-        self.assertNotIn("rollout", soft)
         verifier = APPLY.load_verifier(VERIFIER)
         verifier._validate_rollout_extension(soft)
 
         hard = self.manifest()
         self.assertTrue(APPLY.apply_force(hard, force="hard", reason="security"))
+        self.assertEqual(hard["force"], "soft")
+        self.assertEqual(hard["platformForce"], "hard")
+        self.assertEqual(hard["forceReason"], "security")
         self.assertEqual(hard["forcePlatforms"], self.non_ios(hard))
         self.assertNotIn("ios", hard["forcePlatforms"])
         self.assertNotIn("rollout", hard)
-        self.assertEqual(APPLY.legacy_client_tier(hard), "hard")
+        self.assertNotIn("forceDeadline", hard)
+        self.assertEqual(APPLY.legacy_client_tier(hard), "soft")
         self.assertEqual(APPLY.current_client_tier(hard, "ios"), "soft")
+        self.assertEqual(APPLY.current_client_tier(hard, "windows-amd64-setup"), "hard")
         self.assertEqual(APPLY.current_client_tier(hard, "android-arm64-v8a"), "hard")
         self.assertEqual(APPLY.current_client_tier(hard, "linux-amd64-appimage"), "hard")
+        self.assertEqual(APPLY.current_client_tier(hard, "macos-universal"), "hard")
         verifier._validate_rollout_extension(hard)
 
-        poisoned = self.manifest()
-        poisoned["force"] = "hard"
-        poisoned["forceReason"] = "security"
-        poisoned["forcePlatforms"] = ["ios", "windows-amd64-setup"]
-        with self.assertRaises(Exception):
-            verifier._validate_rollout_extension(poisoned)
-        global_hard = self.manifest()
-        global_hard["force"] = "hard"
-        global_hard["forceReason"] = "security"
-        with self.assertRaises(Exception):
-            verifier._validate_rollout_extension(global_hard)
-        with self.assertRaises(ValueError):
-            APPLY.apply_force(dict(self.manifest(), rollout={"percent": 10}), force="soft", reason=None)
+        historical = self.manifest()
+        historical["force"] = "soft"
+        historical["forcePlatforms"] = self.non_ios(historical)
+        self.assertNotIn("platformForce", historical)
+        self.assertEqual(APPLY.legacy_client_tier(historical), "soft")
+        self.assertEqual(APPLY.current_client_tier(historical, "windows-amd64-setup"), "soft")
+        self.assertEqual(APPLY.current_client_tier(historical, "ios"), "soft")
+        verifier._validate_rollout_extension(historical)
+
+        hole = self.manifest()
+        hole["force"] = "hard"
+        hole["forceReason"] = "security"
+        hole["forcePlatforms"] = self.non_ios(hole)
+        self.assertEqual(APPLY.legacy_client_tier(hole), "hard")
+        self.assertEqual(APPLY.current_client_tier(hole, "ios"), "soft")
+        self.assertEqual(APPLY.current_client_tier(hole, "windows-amd64-setup"), "soft")
+        verifier._validate_rollout_extension(hole)
+        with self.assertRaisesRegex(ValueError, "global hard would force 1.3.174 including iOS"):
+            APPLY.apply_force(hole, force=None, reason=None)
+
+        deadline = self.manifest()
+        deadline["force"] = "soft"
+        deadline["forceDeadline"] = "2026-12-01T00:00:00Z"
+        deadline["forceReason"] = "security"
+        self.assertEqual(APPLY.legacy_client_tier(deadline), "hard")
+        verifier._validate_rollout_extension(deadline)
+        with self.assertRaisesRegex(ValueError, "deadline"):
+            APPLY.apply_force(deadline, force="soft", reason=None)
+
+        with self.assertRaisesRegex(ValueError, "rollout percentage"):
+            APPLY.apply_force(
+                dict(self.manifest(), rollout={"percent": 10}), force="soft", reason=None
+            )
 
     def test_publisher_rejects_partial_and_ios_force(self) -> None:
         with self.assertRaises(ValueError):
@@ -148,11 +178,30 @@ class ApplyUpdateRolloutTest(unittest.TestCase):
         manifest = json.loads(after)
         self.assertNotIn("rollout", manifest)
         self.assertNotIn("percent", manifest)
-        self.assertEqual(manifest["force"], "hard")
+        self.assertEqual(manifest["force"], "soft")
+        self.assertEqual(manifest["platformForce"], "hard")
         self.assertEqual(manifest["forceReason"], "incompatible")
         self.assertEqual(manifest["forcePlatforms"], self.non_ios(manifest))
-        self.assertEqual(APPLY.legacy_client_tier(manifest), "hard")
+        self.assertEqual(APPLY.legacy_client_tier(manifest), "soft")
         self.assertEqual(APPLY.current_client_tier(manifest, "ios"), "soft")
+        self.assertEqual(APPLY.current_client_tier(manifest, "windows-amd64-setup"), "hard")
+
+    def test_cli_rejects_global_hard_without_rewriting(self) -> None:
+        env = {key: value for key, value in os.environ.items() if key not in RETIRED}
+        original = json.loads((ROOT / "tests/fixtures/update-manifest-v1.json").read_text())
+        original["force"] = "hard"
+        original["forceReason"] = "security"
+        raw = json.dumps(original).encode()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "candidate.json"
+            path.write_bytes(raw)
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT), "--manifest", str(path)],
+                env=env, capture_output=True, text=True, check=False,
+            )
+            self.assertNotEqual(completed.returncode, 0, completed.stdout)
+            self.assertIn("global hard", completed.stderr)
+            self.assertEqual(path.read_bytes(), raw)
 
 
 if __name__ == "__main__":

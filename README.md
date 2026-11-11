@@ -32,12 +32,13 @@ dial candidate, or the live manifest read. The live read is limited to master pu
 and explicit manual runs on master.
 
 The manual workflow `.github/workflows/promote-update-rollout.yml` admits a
-`force` / `forceReason` policy for a later root promotion. `soft` prompts every
-platform. `hard` requires `security` or `incompatible` and applies only to
-non-iOS platforms. iOS stays a prompt for clients that understand
-`forcePlatforms`. 1.3.174 reads only `force`, so a hard value is global on that
-client; use soft when those installs must not be blocked. The workflow does not
-sign or write `update.json`. Percentage rollout is not accepted.
+force policy for a later root promotion. `soft` prompts every platform. A hard
+request keeps the signed global `force` soft and sets `platformForce` to hard
+for every platform except iOS, with `forceReason` of `security` or
+`incompatible`. 1.3.174 reads only `force`, so that global soft value stays a
+prompt, including on iOS. The workflow does not sign or write `update.json`.
+Percentage rollout is not generated. Historical signed manifests that still
+contain it remain verifiable.
 
 ## Release contract
 

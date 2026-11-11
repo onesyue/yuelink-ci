@@ -186,19 +186,37 @@ class UpdateManifestVerifierTests(unittest.TestCase):
             verifier._verify_signed_manifest(raw)["version"], manifest["version"]
         )
 
-    def test_rollout_percentage_is_an_unknown_key(self) -> None:
-        """`rollout` is not an allowlisted key.
+    def test_historical_rollout_stays_allowlisted_and_bounded(self) -> None:
+        """Historical rollout stays verifiable.
 
-        Re-adding it to OPTIONAL_TOP_LEVEL_KEYS would let this signed mutation
-        fail at the signature gate instead of the schema gate.
+        Removing it from the allowlist makes this signed mutation fail as an
+        unknown key. Re-rejecting a 0–100 percent inside policy fails the
+        positive checks below.
         """
-        with_optional = dict(self.manifest)
-        with_optional["rollout"] = {"salt": "cohort", "percent": 10}
-        raw = json.dumps(with_optional, ensure_ascii=False).encode()
+        with_rollout = dict(self.manifest)
+        with_rollout["rollout"] = {"salt": "cohort", "percent": 10}
+        raw = json.dumps(with_rollout, ensure_ascii=False).encode()
         with self.assertRaises(verifier.ManifestError) as caught:
             verifier.verify(raw)
-        self.assertIn("unknown top-level", str(caught.exception))
-        self.assertIn("rollout", str(caught.exception))
+        self.assertNotIn("unknown top-level", str(caught.exception))
+        self.assertIn("signature", str(caught.exception))
+
+        for percent in (0, 100):
+            candidate = json.loads(self.raw)
+            candidate["rollout"] = {"salt": "cohort", "percent": percent}
+            verifier._validate_manifest_policy(candidate)
+        self.assert_policy_rejects(
+            "rollout percent",
+            lambda candidate: candidate.__setitem__(
+                "rollout", {"salt": "cohort", "percent": 101}
+            ),
+        )
+        self.assert_policy_rejects(
+            "rollout salt",
+            lambda candidate: candidate.__setitem__(
+                "rollout", {"salt": "", "percent": 10}
+            ),
+        )
 
     def test_force_platforms_stay_inside_the_signed_schema(self) -> None:
         """Non-iOS force keys are signed fields, not unknown keys."""
@@ -214,52 +232,63 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         self.assertNotIn("unknown top-level", str(caught.exception))
         self.assertIn("signature", str(caught.exception))
 
-    def test_hard_force_names_every_non_ios_platform(self) -> None:
-        self.assert_policy_rejects(
-            "rollout percentage",
-            lambda candidate: candidate.__setitem__(
-                "rollout", {"salt": "cohort", "percent": 10}
-            ),
+    def test_platform_force_is_signed_and_cannot_cover_ios(self) -> None:
+        """platformForce is allowlisted and cannot revive global hard or iOS.
+
+        Historical soft-plus-forcePlatforms and historical global hard stay
+        valid. A signed platformForce mutation fails at the signature.
+        """
+        names = sorted(
+            name for name in self.manifest["platforms"] if not str(name).startswith("ios")
         )
+        signed = dict(self.manifest)
+        signed["force"] = "soft"
+        signed["platformForce"] = "hard"
+        signed["forceReason"] = "security"
+        signed["forcePlatforms"] = names
+        raw = json.dumps(signed, ensure_ascii=False).encode()
+        with self.assertRaises(verifier.ManifestError) as caught:
+            verifier.verify(raw)
+        self.assertNotIn("unknown top-level", str(caught.exception))
+        self.assertIn("signature", str(caught.exception))
+
+        admitted = json.loads(self.raw)
+        admitted["force"] = "soft"
+        admitted["platformForce"] = "hard"
+        admitted["forceReason"] = "security"
+        admitted["forcePlatforms"] = names
+        verifier._validate_manifest_policy(admitted)
+
         self.assert_policy_rejects(
-            "distinct non-iOS",
+            "global force soft",
             lambda candidate: candidate.update(
                 {
                     "force": "hard",
+                    "platformForce": "hard",
+                    "forceReason": "security",
+                    "forcePlatforms": names,
+                }
+            ),
+        )
+        self.assert_policy_rejects(
+            "non-iOS",
+            lambda candidate: candidate.update(
+                {
+                    "force": "soft",
+                    "platformForce": "hard",
                     "forceReason": "security",
                     "forcePlatforms": ["ios", "windows-amd64-setup"],
                 }
             ),
         )
-        self.assert_policy_rejects(
-            "every non-iOS",
-            lambda candidate: candidate.update(
-                {
-                    "force": "hard",
-                    "forceReason": "security",
-                    "forcePlatforms": ["windows-amd64-setup"],
-                }
-            ),
-        )
-        self.assert_policy_rejects(
-            "every non-iOS",
-            lambda candidate: candidate.update(
-                {"force": "hard", "forceReason": "security"}
-            ),
-        )
-        listed = json.loads(self.raw)
-        listed["force"] = "hard"
-        listed["forceReason"] = "incompatible"
-        listed["forcePlatforms"] = sorted(
-            name for name in listed["platforms"] if not str(name).startswith("ios")
-        )
-        verifier._validate_manifest_policy(listed)
-        self.assert_policy_rejects(
-            "soft force must not list",
-            lambda candidate: candidate.__setitem__(
-                "forcePlatforms", ["windows-amd64-setup"]
-            ),
-        )
+        historical_soft = json.loads(self.raw)
+        historical_soft["force"] = "soft"
+        historical_soft["forcePlatforms"] = ["windows-amd64-setup"]
+        verifier._validate_manifest_policy(historical_soft)
+        historical_hard = json.loads(self.raw)
+        historical_hard["force"] = "hard"
+        historical_hard["forceReason"] = "security"
+        verifier._validate_manifest_policy(historical_hard)
 
     def test_optional_force_fields_reject_invalid_types_consistently(self) -> None:
         for field in ("force", "forceReason"):

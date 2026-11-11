@@ -21,23 +21,26 @@ The workflow admits that policy and exits. It has no cloud credentials and
 no permission to write the root.
 
 `soft` is the post-dial website manifest: a prompt on every platform, with
-no `forcePlatforms` list. `hard` requires `forceReason` of `security` or
-`incompatible` and names every platform except iOS. iOS stays a prompt for
-a client that understands `forcePlatforms`.
+no `forcePlatforms` list and no `platformForce`. A hard request is operator
+intent. The signed global `force` stays `soft`. The manifest sets
+`platformForce` to `hard` for every platform except iOS, with `forceReason`
+of `security` or `incompatible`. There is no `forceDeadline`.
 
 ## Three readers
 
-| Reader | What it honors | Hard manifest from this publisher |
+| Reader | What it honors | Manifest from a hard request |
 | --- | --- | --- |
-| 1.3.174 | `force` only | Global, including iOS |
-| Current client | `forcePlatforms` limits `hard` | Non-iOS hard, iOS prompt |
-| Publisher | Rejects `ios` in the list and a hard value with no list | iOS is never a member |
+| 1.3.174 | `force` and `forceDeadline` only | Prompt on every platform, including iOS |
+| Agreed new client | `platformForce: hard` on the listed platforms; iOS stays a prompt | Non-iOS hard, iOS prompt |
+| Publisher | Rejects global hard, a deadline, rollout fields, and any iOS name | iOS is never a member |
 
-There is no manifest that forces already-shipped 1.3.174 desktops and also
-leaves 1.3.174 iOS on a prompt, because that client does not read
-`forcePlatforms`. A hard root is therefore only admissible when that legacy
-behavior is accepted. Until then the published root stays soft.
+Shipped 1.3.174 does not read `platformForce` or `forcePlatforms`. The first
+migration of those installs can only prompt, on desktop and on iOS. A new
+root is refused when global `force` is hard or a deadline is present,
+because that client would force iOS as well. The draft client change in
+yuelink#122 reads `force` and `forcePlatforms`. It does not parse
+`platformForce`.
 
-`rollout`, `percent`, and `salt` are not manifest fields. A retired
-percentage variable fails the candidate step and the promotion script
-before any rewrite.
+Historical signed manifests may still contain `rollout` or a global hard
+`force`. The shared verifier still checks those objects. The new producer
+and this root admission do not emit or admit them.

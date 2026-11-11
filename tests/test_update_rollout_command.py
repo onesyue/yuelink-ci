@@ -39,19 +39,38 @@ class RolloutCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Admitted soft root policy", result.stdout)
         self.assertIn("iOS stays a prompt", result.stdout)
+        self.assertIn("wireForce=soft", result.stdout)
+        self.assertNotIn("platformForce", result.stdout)
         self.assertNotIn("reads only force", result.stdout)
         self.assertNotIn("percent", result.stdout)
 
-    def test_hard_admission_records_the_legacy_global_hole(self) -> None:
+    def test_hard_admission_keeps_global_force_soft(self) -> None:
         result = self.execute({
             "PROMOTE_FORCE": "hard",
             "PROMOTE_FORCE_REASON": "security",
         })
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Admitted hard root policy", result.stdout)
-        self.assertIn("iOS stays a prompt for current clients", result.stdout)
-        self.assertIn("1.3.174 reads only force", result.stdout)
-        self.assertIn("including iOS", result.stdout)
+        self.assertIn("wireForce=soft", result.stdout)
+        self.assertIn("platformForce=hard", result.stdout)
+        self.assertIn(
+            "global force stays soft so 1.3.174 remains a prompt, including iOS",
+            result.stdout,
+        )
+        listed = next(
+            line for line in result.stdout.splitlines() if line.startswith("forcePlatforms=")
+        )
+        names = listed.split("=", 1)[1].split(",")
+        self.assertEqual(len(names), 8)
+        self.assertNotIn("ios", names)
+        self.assertTrue(all(not name.startswith("ios") for name in names))
+        for required in (
+            "android-arm64-v8a",
+            "linux-amd64-appimage",
+            "macos-universal",
+            "windows-amd64-setup",
+        ):
+            self.assertIn(required, names)
 
     def test_invalid_policy_never_succeeds(self) -> None:
         for changes in (

@@ -42,19 +42,37 @@ class RolloutAdmissionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'rollout percentage'):
                 ADMISSION.policy(dict(self.candidate, **extra), NOW)
         ADMISSION.policy(self.candidate, NOW)
-        with self.assertRaisesRegex(ValueError, 'iOS is never forced'):
+        with self.assertRaisesRegex(ValueError, 'global hard'):
             ADMISSION.policy(dict(
                 self.candidate, force='hard', forceReason='security',
                 forcePlatforms=['ios', 'windows-amd64-setup'],
             ), NOW)
-        with self.assertRaisesRegex(ValueError, 'soft promotion rejects a hard manifest'):
-            ADMISSION.policy(dict(self.candidate, force='hard', forceReason='security'), NOW)
-        with self.assertRaisesRegex(ValueError, 'hard promotion requires force'):
+        with self.assertRaisesRegex(ValueError, 'global hard'):
+            ADMISSION.policy(dict(
+                self.candidate, force='soft', forceDeadline='2026-12-01T00:00:00Z',
+                forceReason='security',
+            ), NOW)
+        with self.assertRaisesRegex(ValueError, 'iOS is never forced'):
+            ADMISSION.policy(dict(
+                self.candidate, force='soft',
+                forcePlatforms=['ios', 'windows-amd64-setup'],
+            ), NOW)
+        names = sorted(name for name in self.candidate['platforms'] if not str(name).startswith('ios'))
+        with self.assertRaisesRegex(ValueError, 'soft promotion rejects a platform-force manifest'):
+            ADMISSION.policy(dict(
+                self.candidate, force='soft', platformForce='hard',
+                forceReason='security', forcePlatforms=names,
+            ), NOW)
+        with self.assertRaisesRegex(ValueError, 'every non-iOS'):
             ADMISSION.policy(self.candidate, NOW, force='hard', force_reason='security')
-        platforms = self.candidate['platforms']
-        names = sorted(name for name in platforms if not str(name).startswith('ios'))
+        with self.assertRaisesRegex(ValueError, 'every non-iOS'):
+            ADMISSION.policy(dict(
+                self.candidate, force='soft', platformForce='hard', forceReason='security',
+                forcePlatforms=['windows-amd64-setup'],
+            ), NOW, force='hard', force_reason='security')
         hard = dict(
-            self.candidate, force='hard', forceReason='incompatible', forcePlatforms=names,
+            self.candidate, force='soft', platformForce='hard',
+            forceReason='incompatible', forcePlatforms=names,
         )
         ADMISSION.policy(hard, NOW, force='hard', force_reason='incompatible')
 
@@ -138,18 +156,24 @@ class RolloutAdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'does not match this archive'):
             self.prepare({**args, 'previous': previous})
 
-    def test_hard_admission_records_ios_prompt_and_legacy_global_force(self):
+    def test_hard_admission_keeps_global_force_soft(self):
         names = sorted(name for name in self.candidate['platforms'] if not str(name).startswith('ios'))
         self.candidate['force'] = 'hard'
         self.candidate['forceReason'] = 'security'
         self.candidate['forcePlatforms'] = names
         args = self.arguments()
+        with self.assertRaisesRegex(ValueError, 'global hard'):
+            self.prepare({**args, 'force': 'hard', 'force_reason': 'security'})
+        self.candidate['force'] = 'soft'
+        self.candidate['platformForce'] = 'hard'
         result = self.prepare({**args, 'force': 'hard', 'force_reason': 'security'})
+        self.assertEqual(result['force'], 'hard')
         self.assertEqual(result['iosForce'], 'soft')
-        self.assertEqual(result['legacyClientForce'], 'hard')
+        self.assertEqual(result['legacyClientForce'], 'soft')
+        self.assertEqual(result['platformForce'], 'hard')
         self.assertEqual(result['forceReason'], 'security')
+        self.assertEqual(result['forcePlatforms'], names)
         self.assertNotIn('ios', result['forcePlatforms'])
-        self.assertEqual(set(result['forcePlatforms']), set(names))
 
     def test_duplicate_binding_keys_rejected(self):
         with self.assertRaises(ValueError):
