@@ -49,6 +49,40 @@ def build_job_needs(text: str) -> list[str]:
         ]
     return []
 
+_LOCAL_USES = re.compile(
+    r"uses:\s+\./\.github/workflows/([A-Za-z0-9_.-]+\.ya?ml)\b"
+)
+
+
+def composed_workflow(path: Path) -> str:
+    """Caller text plus every local reusable workflow it reaches.
+
+    A checkout that moved into a called workflow still counts. A missing
+    called file fails closed instead of looking like a smaller workflow.
+    """
+    repo = path.resolve()
+    while not (repo / ".github" / "workflows").is_dir():
+        if repo.parent == repo:
+            raise FileNotFoundError(f"no workflow directory above {path}")
+        repo = repo.parent
+    seen: set[Path] = set()
+    parts: list[str] = []
+
+    def add(item: Path) -> None:
+        resolved = item.resolve()
+        if resolved in seen:
+            return
+        seen.add(resolved)
+        if not item.is_file():
+            raise FileNotFoundError(f"reusable workflow is missing: {item}")
+        text = item.read_text(encoding="utf-8")
+        parts.append(text)
+        for name in _LOCAL_USES.findall(text):
+            add(repo / ".github" / "workflows" / name)
+
+    add(path)
+    return "\n".join(parts)
+
 def issues(text: str) -> list[str]:
     found: list[str] = []
     for marker in REQUIRED:
@@ -126,7 +160,12 @@ def main(argv: list[str]) -> int:
     if not path.is_file():
         print(f"::error::missing public workflow {path}", file=sys.stderr)
         return 1
-    found = issues(path.read_text(encoding="utf-8"))
+    try:
+        text = composed_workflow(path)
+    except FileNotFoundError as exc:
+        print(f"::error::{exc}", file=sys.stderr)
+        return 1
+    found = issues(text)
     if found:
         for item in found:
             print(f"::error::{item}", file=sys.stderr)

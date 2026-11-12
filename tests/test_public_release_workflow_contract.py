@@ -87,12 +87,13 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("Verify APK signature is the pinned release key", android)
 
     def test_dropping_preflight_from_build_needs_is_rejected(self) -> None:
-        from scripts.check_public_build import issues
+        from scripts.check_public_build import composed_workflow, issues
 
         needs = build_job_needs(self.build)
         self.assertIn("preflight", needs)
-        self.assertEqual(issues(self.build), [])
-        head, tail = self.build.split("\n  build:\n", 1)
+        composed = composed_workflow(BUILD)
+        self.assertEqual(issues(composed), [])
+        head, tail = composed.split("\n  build:\n", 1)
         mutated_tail = tail.replace(
             "needs: [source_binding, prepare, preflight, coverage_join]",
             "needs: [source_binding, prepare, coverage_join]",
@@ -141,30 +142,69 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
                 self.assertEqual(len(uses), 1)
 
     def test_public_self_check_rejects_a_private_checkout_without_the_deploy_key(self) -> None:
-        from scripts.check_public_build import issues
+        from scripts.check_public_build import composed_workflow, issues
 
-        self.assertEqual(issues(self.build), [])
-        mutated = self.build.replace(
+        composed = composed_workflow(BUILD)
+        self.assertEqual(issues(composed), [])
+        mutated = composed.replace(
             "ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}\n", "", 1
         )
-        self.assertNotEqual(mutated, self.build)
+        self.assertNotEqual(mutated, composed)
         self.assertTrue(issues(mutated))
         self.assertTrue(issues(""))
 
     def test_android_sdk_packages_must_stay_platform_tools(self) -> None:
-        from scripts.check_public_build import issues
+        from scripts.check_public_build import composed_workflow, issues
 
-        self.assertEqual(issues(self.build), [])
-        mutated = self.build.replace(
+        composed = composed_workflow(BUILD)
+        self.assertEqual(issues(composed), [])
+        mutated = composed.replace(
             "packages: platform-tools",
             "packages: tools platform-tools",
             1,
         )
-        self.assertNotEqual(mutated, self.build)
+        self.assertNotEqual(mutated, composed)
         self.assertTrue(
             any("platform-tools" in item for item in issues(mutated))
         )
+    def test_called_workflow_checkouts_hold_the_private_floor(self) -> None:
+        from scripts.check_public_build import composed_workflow, issues
 
+        caller = BUILD.read_text(encoding="utf-8")
+        composed = composed_workflow(BUILD)
+        self.assertTrue(composed.startswith(caller))
+        called = composed[len(caller) :]
+        self.assertIn("repository: onesyue/yuelink", called)
+        self.assertEqual(issues(composed), [])
+        stripped = caller + called.replace(
+            "repository: onesyue/yuelink", "repository: example.invalid"
+        )
+        self.assertTrue(
+            any("fell below the floor" in item for item in issues(stripped))
+        )
+
+    def test_a_missing_local_workflow_is_not_a_smaller_success(self) -> None:
+        import tempfile
+
+        from scripts.check_public_build import composed_workflow
+
+        with tempfile.TemporaryDirectory() as directory:
+            workflows = Path(directory) / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            entry = workflows / "build.yml"
+            entry.write_text(
+                "uses: ./.github/workflows/missing-called.yml\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(FileNotFoundError):
+                composed_workflow(entry)
+            called = workflows / "called.yml"
+            called.write_text("called-only-marker\n", encoding="utf-8")
+            entry.write_text(
+                "uses: ./.github/workflows/called.yml\n", encoding="utf-8"
+            )
+            text = composed_workflow(entry)
+            self.assertIn("called-only-marker", text)
 
 class PublicWorkflowShellObservationTests(unittest.TestCase):
     def run_shell(self, script: str, data: str, *, status: int = 0) -> subprocess.CompletedProcess[str]:
