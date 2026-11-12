@@ -15,7 +15,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 TARGETS = ("Runner", "PacketTunnel")
 _SWIFT_LINE = re.compile(
     r"SwiftCompile\b.*(?:/|\\)(?P<target>Runner|PacketTunnel)(?:/|\\)"
@@ -23,7 +22,7 @@ _SWIFT_LINE = re.compile(
 
 # The candidate Release configuration sets SUPPORTED_PLATFORMS to iphoneos,
 # and Flutter only supports Debug on the simulator. PacketTunnel links
-# ios/Frameworks/libclash.a, so that archive has to be a simulator build.
+# libclash through SDK-specific search paths; simulator outputs belong in sim/.
 CONFIGURATION = "Debug"
 PRODUCT_DIRECTORY = "Debug-iphonesimulator"
 _SIMULATOR_PLATFORM = re.compile(r"platform (?:7|IOSSIMULATOR)\b")
@@ -103,14 +102,26 @@ def simulator_archive_issues(text: str) -> list[str]:
 
 
 def _emit_failure(text: str) -> None:
+    text = re.sub(
+        r"(?i)\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b",
+        "<redacted-id>",
+        text,
+    )
     lines = [line[:400] for line in text.splitlines() if line.strip()]
-    matched = [line for line in lines if "error:" in line.lower()]
-    tail = matched[-20:] or lines[-20:]
+    # Clang's final error omits ld's cause and undefined-symbol references.
+    # Include the preceding diagnostic block, while keeping console output bounded.
+    indices = [i for i, line in enumerate(lines) if "error:" in line.lower()]
+    selected = set()
+    for index in indices[-20:]:
+        selected.update(range(max(0, index - 12), index + 1))
+    tail = [lines[i] for i in sorted(selected)][-80:] or lines[-20:]
     if tail:
         print("\n".join(tail), file=sys.stderr)
 
 
-def _capture(argv: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+def _capture(
+    argv: list[str], cwd: Path, timeout: int
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         argv,
         cwd=cwd,
@@ -122,11 +133,16 @@ def _capture(argv: list[str], cwd: Path, timeout: int) -> subprocess.CompletedPr
 
 
 def build_simulator_kernel(source: Path, log) -> None:
-    """Write a simulator c-archive over the device library PacketTunnel links."""
+    """Build into PacketTunnel's simulator SDK library search directory."""
     sdk = _capture(["xcrun", "--sdk", "iphonesimulator", "--show-sdk-path"], source, 60)
     cc = _capture(["xcrun", "--sdk", "iphonesimulator", "--find", "clang"], source, 60)
     log.write(sdk.stdout + sdk.stderr + cc.stdout + cc.stderr)
-    if sdk.returncode != 0 or cc.returncode != 0 or not sdk.stdout.strip() or not cc.stdout.strip():
+    if (
+        sdk.returncode != 0
+        or cc.returncode != 0
+        or not sdk.stdout.strip()
+        or not cc.stdout.strip()
+    ):
         raise ValueError("kernel")
     flags = (
         "-target arm64-apple-ios15.5-simulator -isysroot "
@@ -142,7 +158,7 @@ def build_simulator_kernel(source: Path, log) -> None:
     env["GOTOOLCHAIN"] = env.get("GOTOOLCHAIN") or "local"
     if "-mod=" not in env.get("GOFLAGS", ""):
         env["GOFLAGS"] = (env.get("GOFLAGS", "") + " -mod=readonly").strip()
-    archive = source / "ios" / "Frameworks" / "libclash.a"
+    archive = source / "ios" / "Frameworks" / "sim" / "libclash.a"
     archive.parent.mkdir(parents=True, exist_ok=True)
     code = subprocess.run(
         [
@@ -248,7 +264,13 @@ def verify(args: argparse.Namespace) -> int:
         receipt["status"] = "passed"
         receipt["stage"] = "passed"
         result = 0
-    except (OSError, ValueError, TypeError, subprocess.TimeoutExpired, json.JSONDecodeError):
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        subprocess.TimeoutExpired,
+        json.JSONDecodeError,
+    ):
         receipt["outcome"] = "verification_failed"
         if log_path is not None and log_path.exists():
             _emit_failure(log_path.read_text(encoding="utf-8", errors="replace"))

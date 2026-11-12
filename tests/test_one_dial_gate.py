@@ -45,6 +45,7 @@ def _permission_lines(block: str) -> set[str]:
         break
     return granted
 
+
 def one_dial_issues(build: str, dial: str, sync: str, ios: str) -> list[str]:
     issues: list[str] = []
     if build.count("\n  dial_gate:\n") != 1:
