@@ -358,10 +358,13 @@ class LinkPlatformCacheTests(unittest.TestCase):
             "Restore Go compiler cache",
             "Restore Go compiler cache (Windows)",
             "Restore Gradle dependency caches",
+            "Restore built Go core",
         ):
             assert "continue-on-error: true" in _step_body(workflow, name)
         core = _step_body(workflow, "Build & install Go core")
-        assert "cache-hit" not in core
+        assert "uses: actions/cache" not in core
+        assert "steps.go_core_build.outputs.cache-hit" in core
+        assert core.count("cache-hit") == 1
 
         linux = _step_body(workflow, "Install Linux build dependencies")
         assert "sudo timeout --signal=KILL 180 apt-get" in linux
@@ -465,11 +468,20 @@ class LinkPlatformCacheTests(unittest.TestCase):
         fields = ("frameworkVersion", "frameworkRevision", "engineRevision", "dartSdkVersion")
         identity = "-sdk-" + "-".join(sdk[field] for field in fields)
         blocks = re.split(r"(?m)^      - ", workflow)
-        caches = [block for block in blocks if re.search(r"(?m)^(?:        )?uses: actions/cache", block)]
+        caches = [
+            block
+            for block in blocks
+            if re.search(r"(?m)^(?:        )?uses: actions/cache", block)
+        ]
         dial = [block for block in caches if "yue-dialkernel-v1-" in block]
-        caches = [block for block in caches if block not in dial]
-        assert dial
-        assert len(caches) == 9
+        output_caches = [block for block in caches if "yue-gocore-v1-" in block]
+        dependency_caches = [
+            block
+            for block in caches
+            if "yue-dialkernel-v1-" not in block and "yue-gocore-v1-" not in block
+        ]
+        assert dial and output_caches and dependency_caches
+        assert len(dependency_caches) == 9
         for block in dial:
             assert "steps.dial_kernel.outputs.key" in block
             assert "${{ env.GO_VERSION }}" in block
@@ -478,7 +490,13 @@ class LinkPlatformCacheTests(unittest.TestCase):
             assert "path: dial-out/kernel-cache" in block
             assert identity not in block
             assert "${{ hashFiles('pubspec.lock') }}" not in block
-        for block in caches:
+        for block in output_caches:
+            key = re.search(r"(?m)^          key: (.+)$", block)
+            assert key is not None
+            assert "${{ env.CORE_SHA }}" in key[1]
+            assert "${{ env.CORE_INPUTS_SHA }}" in key[1]
+            assert "restore-keys:" not in block
+        for block in dependency_caches:
             key = re.search(r"(?m)^          key: (.+)$", block)
             assert key is not None
             assert identity in key[1]
@@ -505,6 +523,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
             "${{ runner.os == 'macOS' && '~/Library/Caches/go-build' || '~/.cache/go-build' }}",
             r"~\AppData\Local\go-build", "~/.pub-cache", r"~\AppData\Local\Pub\Cache",
             "~/.gradle/caches", "~/.gradle/wrapper",
+            "core/build", "service/build",
         }
         blocks = re.split(r"(?m)^      - ", workflow)
         seen = set()
@@ -530,8 +549,12 @@ class LinkPlatformCacheTests(unittest.TestCase):
         attest = _step_body(workflow, "Attest build provenance")
         assert "subject-path: 'dist/*'" in attest
         assert "continue-on-error" not in attest
-        for name in ("Build & install Go core", "Verify exact attested source checkout"):
-            assert "cache-hit" not in _step_body(workflow, name)
+        assert "cache-hit" not in _step_body(
+            workflow, "Verify exact attested source checkout"
+        )
+        core = _step_body(workflow, "Build & install Go core")
+        assert "uses: actions/cache" not in core
+        assert core.count("cache-hit") == 1
 
     def test_cache_contract_rejects_anonymous_output_restore_and_broad_fallback(self) -> None:
         workflow = (ROOT / ".github/workflows/build.yml").read_text()
