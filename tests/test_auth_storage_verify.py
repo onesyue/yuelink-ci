@@ -160,6 +160,10 @@ class AuthStorageTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(receipt["status"], "passed")
         self.assertIn(["flutter", "pub", "get", "--enforce-lockfile"], commands)
+        pub = commands.index(["flutter", "pub", "get", "--enforce-lockfile"])
+        slang = commands.index(["dart", "run", "slang"])
+        self.assertLess(pub, slang)
+        self.assertEqual(commands[slang + 1][:2], ["flutter", "test"])
         self.assertEqual(
             commands[-1],
             [
@@ -174,7 +178,7 @@ class AuthStorageTests(unittest.TestCase):
         self.assertEqual(len(verify.TEST_PATHS), 8)
 
     def test_failures_short_circuit_and_preserve_only_enum_and_code(self):
-        for stage in ("identity", "clean", "sdk", "pub", "machine"):
+        for stage in ("identity", "clean", "sdk", "pub", "slang", "machine"):
             code, receipt, commands = self.run_fixture(stage)
             self.assertNotEqual(code, 0)
             self.assertEqual(receipt["status"], "failed")
