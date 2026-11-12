@@ -2608,10 +2608,12 @@ jobs:
       GOTOOLCHAIN: local
     # Hosted macOS arm64 accepts one macos-26 job at a time. Run 43029993034
     # queued Dial gate (ios) beside Dial gate (macos); iOS was cancelled with
-    # zero steps ("not acquired by Runner of type hosted"). This group makes
-    # the iOS leg wait until that runner is free. Other platforms stay parallel.
+    # zero steps ("not acquired by Runner of type hosted"). The macOS legs of
+    # this run share one group so iOS waits for that runner. The group includes
+    # the workflow and run id, so each run keeps its own queue. Other platforms
+    # stay parallel, each on its own per-run group.
     concurrency:
-      group: ${{ matrix.os == 'macos-26' && 'yuelink-ci-macos-26-dial' || format('yuelink-ci-dial-{0}', matrix.name) }}
+      group: ${{ matrix.os == 'macos-26' && format('{0}-{1}-macos-26-dial', github.workflow, github.run_id) || format('{0}-{1}-dial-{2}', github.workflow, github.run_id, matrix.name) }}
       cancel-in-progress: false
     strategy:
       fail-fast: false
