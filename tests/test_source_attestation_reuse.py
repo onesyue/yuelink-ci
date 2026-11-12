@@ -49,6 +49,8 @@ class SharedVerifierBehaviorTests(unittest.TestCase):
             'name': 'Source attestation',
             'path': '.github/workflows/source-attestation.yml',
             'event': 'workflow_dispatch', 'conclusion': 'success',
+            'status': 'completed',
+            'repository': {'full_name': 'onesyue/yuelink-ci'},
             'head_branch': 'master', 'workflow_id': 789,
             'created_at': '2026-11-12T00:00:00Z', 'head_sha': BUILDER}]})
         self.env['SIGNED_DIGEST'] = hashlib.sha256((self.root / 'proof.json').read_bytes()).hexdigest()
@@ -243,6 +245,8 @@ sys.exit(9)
             'name': 'Source attestation',
             'path': '.github/workflows/source-attestation.yml',
             'event': 'workflow_dispatch', 'conclusion': 'success',
+            'status': 'completed',
+            'repository': {'full_name': 'onesyue/yuelink-ci'},
             'head_branch': 'master', 'workflow_id': 789,
             'created_at': '2026-11-12T00:00:00Z', 'head_sha': BUILDER}]})
         result = self.same_source()
@@ -256,12 +260,16 @@ sys.exit(9)
              'name': 'Source attestation',
              'path': '.github/workflows/source-attestation.yml',
              'event': 'workflow_dispatch', 'conclusion': 'success',
+             'status': 'completed',
+             'repository': {'full_name': 'onesyue/yuelink-ci'},
              'head_branch': 'master', 'workflow_id': 789,
              'created_at': '2026-11-11T00:00:00Z', 'head_sha': BUILDER},
             {'id': 123, 'display_title': 'Source attestation ' + SOURCE,
              'name': 'Source attestation',
              'path': '.github/workflows/source-attestation.yml',
              'event': 'workflow_dispatch', 'conclusion': 'success',
+             'status': 'completed',
+             'repository': {'full_name': 'onesyue/yuelink-ci'},
              'head_branch': 'master', 'workflow_id': 789,
              'created_at': '2026-11-12T00:00:00Z', 'head_sha': BUILDER}]})
         result = self.same_source()

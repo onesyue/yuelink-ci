@@ -12,6 +12,42 @@ gh_read() {
   python3 "$SCRIPT_DIR/gh-read-retry.py" "$@"
 }
 
+REPOSITORY=onesyue/yuelink-ci
+WORKFLOW_PATH=.github/workflows/source-attestation.yml
+
+# Each contract marker lives once. The mutation check deletes the first copy
+# only; a second copy would leave the deleted gate looking present.
+fetch_workflow_json() {
+  GH_PROMPT_DISABLED=1 gh_read gh api \
+    "repos/$REPOSITORY/actions/workflows/source-attestation.yml" > "$1"
+}
+
+read_active_workflow_id() {
+  jq -er --arg expected_name "Source attestation" '
+    select(.name == $expected_name and
+           .path == ".github/workflows/source-attestation.yml" and
+           .state == "active") |
+    .id | tostring | select(test("^[1-9][0-9]*$"))
+  ' "$1"
+}
+
+download_attestation_proof() {
+  GH_PROMPT_DISABLED=1 gh_read gh run download "$RUN_ID" \
+    -R "$REPOSITORY" \
+    --name "yuelink-source-attestation-$SOURCE_COMMIT" \
+    --dir "$1"
+}
+
+EXACT_RUN_FILTER='
+    ((.workflow_id | tostring) == $workflow_id) and
+    (.name == "Source attestation" or
+     .name == ("Source attestation " + $source)) and
+    .display_title == ("Source attestation " + $source) and
+    .path == $workflow and .event == "workflow_dispatch" and
+    .status == "completed" and .conclusion == "success" and
+    .head_sha == $builder and .head_branch == "master" and
+    .repository.full_name == $repository'
+
 # Preview reuse. The tag path below stays strict: proof.workflowSha must equal
 # the builder argument, and that argument is what the caller claims. This
 # entry looks the run up from the source SHA, then re-enters the tag path
@@ -45,7 +81,6 @@ if [ "${1:-}" = "--same-source" ]; then
       exit 1
     }
   done
-  REPOSITORY=onesyue/yuelink-ci
   tmp_root="${TMPDIR:-/tmp}"
   case "$tmp_root" in
     /*) ;;
@@ -63,14 +98,8 @@ if [ "${1:-}" = "--same-source" ]; then
   trap cleanup_lookup EXIT
   page_json="$lookup_root/runs.json"
   workflow_json="$lookup_root/workflow.json"
-  GH_PROMPT_DISABLED=1 gh_read gh api \
-    "repos/$REPOSITORY/actions/workflows/source-attestation.yml" > "$workflow_json"
-  WORKFLOW_ID="$(jq -er --arg expected_name "Source attestation" '
-    select(.name == $expected_name and
-           .path == ".github/workflows/source-attestation.yml" and
-           .state == "active") |
-    .id | tostring | select(test("^[1-9][0-9]*$"))
-  ' "$workflow_json")" || {
+  fetch_workflow_json "$workflow_json"
+  WORKFLOW_ID="$(read_active_workflow_id "$workflow_json")" || {
     echo "::error::source-attestation workflow identity is not the exact active workflow" >&2
     exit 1
   }
@@ -79,22 +108,21 @@ if [ "${1:-}" = "--same-source" ]; then
     GH_PROMPT_DISABLED=1 gh_read gh api \
       "repos/$REPOSITORY/actions/workflows/source-attestation.yml/runs?status=success&branch=master&per_page=100&page=${page}" \
       > "$page_json"
-    chosen="$(jq -r --arg source "$SOURCE_COMMIT" --arg workflow_id "$WORKFLOW_ID" '
-      [.workflow_runs[]?
-        | select(.display_title == ("Source attestation " + $source)
-            and .name == "Source attestation"
-            and .path == ".github/workflows/source-attestation.yml"
-            and .event == "workflow_dispatch"
-            and .conclusion == "success"
-            and .head_branch == "master"
-            and ((.workflow_id | tostring) == $workflow_id)
-            and (.created_at | type == "string")
-            and (.head_sha | test("^[0-9a-f]{40}$"))
-            and (.id | tostring | test("^[1-9][0-9]*$")))]
+    list_filter='[.workflow_runs[]?
+      | select((.head_sha | type == "string") and (.head_sha | test("^[0-9a-f]{40}$"))
+          and (.id | tostring | test("^[1-9][0-9]*$"))
+          and (.created_at | type == "string"))
+      | .head_sha as $builder
+      | select('"$EXACT_RUN_FILTER"')]
       | sort_by(.created_at)
       | last
-      | if . == null then "" else [.id, .head_sha] | @tsv end
-    ' "$page_json")"
+      | if . == null then "" else [.id, .head_sha] | @tsv end'
+    chosen="$(jq -r \
+      --arg source "$SOURCE_COMMIT" \
+      --arg workflow_id "$WORKFLOW_ID" \
+      --arg workflow "$WORKFLOW_PATH" \
+      --arg repository "$REPOSITORY" \
+      "$list_filter" "$page_json")"
     if [ -n "$chosen" ]; then
       break
     fi
@@ -109,10 +137,7 @@ if [ "${1:-}" = "--same-source" ]; then
   BUILDER_COMMIT="${chosen#*$'\t'}"
   proof_dir="$lookup_root/proof"
   mkdir -p "$proof_dir"
-  GH_PROMPT_DISABLED=1 gh_read gh run download "$RUN_ID" \
-    -R "$REPOSITORY" \
-    --name "yuelink-source-attestation-$SOURCE_COMMIT" \
-    --dir "$proof_dir"
+  download_attestation_proof "$proof_dir"
   release_tag="$(jq -er --arg source "$SOURCE_COMMIT" '
     select(.sourceSha == $source
            and (.releaseTag | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
@@ -148,8 +173,6 @@ if (( $# > 4 )); then
     echo "::error::source proof export must be a new file" >&2; exit 2;
   }
 fi
-REPOSITORY=onesyue/yuelink-ci
-WORKFLOW_PATH=.github/workflows/source-attestation.yml
 WORKFLOW_IDENTITY=onesyue/yuelink-ci/.github/workflows/source-attestation.yml
 
 [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] &&
@@ -191,43 +214,27 @@ mkdir -p "$proof_dir"
 
 GH_PROMPT_DISABLED=1 gh_read gh api \
   "repos/$REPOSITORY/actions/runs/$RUN_ID" > "$run_json"
-GH_PROMPT_DISABLED=1 gh_read gh api \
-  "repos/$REPOSITORY/actions/workflows/source-attestation.yml" > "$workflow_json"
-WORKFLOW_ID="$(jq -er --arg expected_name "Source attestation" '
-  select(.name == $expected_name and
-         .path == ".github/workflows/source-attestation.yml" and
-         .state == "active") |
-  .id | tostring | select(test("^[1-9][0-9]*$"))
-' "$workflow_json")" || {
+fetch_workflow_json "$workflow_json"
+WORKFLOW_ID="$(read_active_workflow_id "$workflow_json")" || {
   echo "::error::source-attestation workflow identity is not the exact active workflow" >&2
   exit 1
 }
+identity_filter='(.id | tostring) == $run and
+'"$EXACT_RUN_FILTER"
 jq -e \
   --arg repository "$REPOSITORY" \
   --arg workflow "$WORKFLOW_PATH" \
   --arg workflow_id "$WORKFLOW_ID" \
   --arg source "$SOURCE_COMMIT" \
   --arg builder "$BUILDER_COMMIT" \
-  --arg run "$RUN_ID" '
-    (.id | tostring) == $run and
-    ((.workflow_id | tostring) == $workflow_id) and
-    (.name == "Source attestation" or
-     .name == ("Source attestation " + $source)) and
-    .display_title == ("Source attestation " + $source) and
-    .path == $workflow and .event == "workflow_dispatch" and
-    .status == "completed" and .conclusion == "success" and
-    .head_sha == $builder and .head_branch == "master" and
-    .repository.full_name == $repository
-  ' "$run_json" >/dev/null || {
+  --arg run "$RUN_ID" \
+  "$identity_filter" "$run_json" >/dev/null || {
   echo "::error::source-attestation run identity does not match exact workflow/event/title/source/builder" >&2
   exit 1
 }
 RUN_ATTEMPT="$(jq -er '.run_attempt | tostring | select(test("^[1-9][0-9]*$"))' "$run_json")"
 
-GH_PROMPT_DISABLED=1 gh_read gh run download "$RUN_ID" \
-  -R "$REPOSITORY" \
-  --name "yuelink-source-attestation-$SOURCE_COMMIT" \
-  --dir "$proof_dir"
+download_attestation_proof "$proof_dir"
 [ -f "$proof" ] && [ ! -L "$proof" ] &&
   [ "$(find -P "$proof_dir" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d '[:space:]')" = 1 ] &&
   [ -z "$(find -P "$proof_dir" -mindepth 1 -maxdepth 1 ! -type f -print -quit)" ] || {
