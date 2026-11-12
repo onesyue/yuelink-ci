@@ -331,8 +331,8 @@ class GoCoreCacheContractTests(unittest.TestCase):
     def test_dial_gate_needs_are_load_bearing(self) -> None:
         text = pipeline()
         broken = text.replace(
-            "  dial_gate:\n    name: Dial gate (${{ matrix.name }})\n    needs: [plan]\n",
-            "  dial_gate:\n    name: Dial gate (${{ matrix.name }})\n    needs: [plan, preflight]\n",
+            "  dial_gate:\n    name: Dial gate\n    needs: [plan]\n",
+            "  dial_gate:\n    name: Dial gate\n    needs: [plan, preflight]\n",
             1,
         )
         self.assertNotEqual(broken, text)

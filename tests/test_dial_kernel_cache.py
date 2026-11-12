@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = ROOT / '.github/workflows/build.yml'
+BUILD = ROOT / '.github/workflows/build.yml'
+DIAL = ROOT / '.github/workflows/dial-gate.yml'
 
 _JOB = re.compile(r'(?m)^(?=  [A-Za-z0-9_-]+:\s*$)')
 _STEP = re.compile(r'(?m)^(?=      - )')
@@ -14,6 +15,16 @@ _STEP = re.compile(r'(?m)^(?=      - )')
 def dial_job(workflow):
     for job in _JOB.split(workflow):
         if job.startswith('  dial_gate:\n'):
+            return job
+    return ''
+
+
+def dial_step_job(workflow):
+    for job in _JOB.split(workflow):
+        if (
+            job.startswith('  dial_gate:\n')
+            and 'Dial inside the iOS simulator' in job
+        ):
             return job
     return ''
 
@@ -28,15 +39,19 @@ def step_named(job, name):
 def dial_kernel_cache_issues(workflow):
     """The kernel cache is optional. The iOS dial command still runs."""
     issues = []
-    job = dial_job(workflow)
+    job = dial_step_job(workflow)
     if not job:
         return ['dial_gate job is missing']
-    needs = re.search(r'(?m)^    needs:\s*\[([^\]]*)\]', job)
-    items = []
-    if needs:
-        items = [item.strip() for item in needs.group(1).split(',') if item.strip()]
-    if items != ['plan']:
-        issues.append('dial_gate does not need the plan that binds source')
+    caller = dial_job(workflow)
+    if 'uses: ./.github/workflows/dial-gate.yml' in caller:
+        needs = re.search(r'(?m)^    needs:\s*\[([^\]]*)\]', caller)
+        items = []
+        if needs:
+            items = [item.strip() for item in needs.group(1).split(',') if item.strip()]
+        if items != ['plan']:
+            issues.append('dial_gate does not need the plan that binds source')
+        if 'needs.plan.outputs.source_commit' not in caller:
+            issues.append('dial_gate does not pass the attested source commit')
     if 'value: ${{ jobs.source_binding.outputs.source_commit }}' not in workflow:
         issues.append('plan does not publish the attested source commit')
     ios = step_named(job, 'Dial inside the iOS simulator')
@@ -66,13 +81,51 @@ def dial_kernel_cache_issues(workflow):
     return issues
 
 
+def caller_source_issues(workflow):
+    """The build caller still binds the attested source and calls the shared gate."""
+    job = dial_job(workflow)
+    if not job:
+        return ['dial_gate job is missing']
+    issues = []
+    needs = re.search(r'(?m)^    needs:\s*\[([^\]]*)\]', job)
+    items = []
+    if needs:
+        items = [item.strip() for item in needs.group(1).split(',') if item.strip()]
+    if items != ['plan']:
+        issues.append('dial_gate does not need the plan that binds source')
+    if 'needs.plan.outputs.source_commit' not in job:
+        issues.append('dial_gate does not pass the attested source commit')
+    if 'uses: ./.github/workflows/dial-gate.yml' not in job:
+        issues.append('dial_gate does not call the shared workflow')
+    return issues
+
+
 class DialKernelCacheTests(unittest.TestCase):
     def test_ios_dial_survives_a_missing_kernel_cache(self):
-        from scripts.check_public_build import composed_text
+        from scripts.check_public_build import composed_workflow
 
-        workflow = composed_text(WORKFLOW)
+        caller = BUILD.read_text(encoding='utf-8')
+        workflow = composed_workflow(BUILD)
+        self.assertEqual(caller_source_issues(caller), [])
         self.assertEqual(dial_kernel_cache_issues(workflow), [])
-        job = dial_job(workflow)
+        without_bind = caller.replace(
+            '  dial_gate:\n    name: Dial gate\n    needs: [plan]\n',
+            '  dial_gate:\n    name: Dial gate\n    needs: [prepare]\n',
+            1,
+        )
+        self.assertNotEqual(without_bind, caller)
+        self.assertIn(
+            'dial_gate does not need the plan that binds source',
+            caller_source_issues(without_bind))
+        without_ref = caller.replace(
+            '|| needs.plan.outputs.source_commit }}',
+            '|| github.sha }}',
+            1,
+        )
+        self.assertIn(
+            'dial_gate does not pass the attested source commit',
+            caller_source_issues(without_ref))
+        job = dial_step_job(workflow)
         without_ios = workflow.replace(
             'run: bash candidate/core/dialgate/ci/run.sh ios\n',
             'run: echo skipped\n', 1)
@@ -90,7 +143,7 @@ class DialKernelCacheTests(unittest.TestCase):
         self.assertIn(
             'dial kernel cache has restore-keys',
             dial_kernel_cache_issues(with_prefix))
-        job = dial_job(workflow)
+        job = dial_step_job(workflow)
         without_continue = workflow.replace(
             job,
             job.replace(

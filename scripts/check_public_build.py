@@ -3,8 +3,9 @@
 
 The private repository no longer carries a product workflow, so this file is
 not a projection of one. Write mode is refused by sync-build.sh. build.yml
-calls plan, validate, build-matrix and publish. A missing called workflow,
-a missing marker, or a private checkout without the deploy key fails closed.
+calls plan, validate, build-matrix, publish and the dial gate. A missing
+called workflow, a missing marker, or a private checkout without the deploy
+key fails closed.
 """
 
 from __future__ import annotations
@@ -69,9 +70,10 @@ def job_body(text: str, name: str) -> str:
 
 
 def composed_text(path: Path) -> str:
-    """Concatenate the orchestrator and the workflows it calls.
+    """Concatenate the orchestrator and the four workflows it always calls.
 
-    A missing sibling raises. Callers that only have a string use issues().
+    A missing sibling raises. The dial workflow is reached by
+    composed_workflow(), because the orchestrator calls it by path.
     """
     parts = [path.read_text(encoding="utf-8")]
     for name in CALLED:
@@ -81,6 +83,41 @@ def composed_text(path: Path) -> str:
         parts.append(sibling.read_text(encoding="utf-8"))
     return "\n".join(parts)
 
+
+_LOCAL_USES = re.compile(
+    r"uses:\s+\./\.github/workflows/([A-Za-z0-9_.-]+\.ya?ml)\b"
+)
+
+
+def composed_workflow(path: Path) -> str:
+    """Caller text plus every local reusable workflow it reaches.
+
+    A checkout or a dial step that moved into a called workflow still counts.
+    A missing called file fails closed instead of looking like a smaller
+    workflow. Remote actions are not workflows and are left unread.
+    """
+    repo = path.resolve()
+    while not (repo / ".github" / "workflows").is_dir():
+        if repo.parent == repo:
+            raise FileNotFoundError(f"no workflow directory above {path}")
+        repo = repo.parent
+    seen: set[Path] = set()
+    parts: list[str] = []
+
+    def add(item: Path) -> None:
+        resolved = item.resolve()
+        if resolved in seen:
+            return
+        seen.add(resolved)
+        if not item.is_file():
+            raise FileNotFoundError(f"reusable workflow is missing: {item}")
+        text = item.read_text(encoding="utf-8")
+        parts.append(text)
+        for name in _LOCAL_USES.findall(text):
+            add(repo / ".github" / "workflows" / name)
+
+    add(path)
+    return "\n".join(parts)
 
 def issues(text: str) -> list[str]:
     found: list[str] = []
@@ -180,7 +217,12 @@ def main(argv: list[str]) -> int:
         for name in missing:
             print(f"::error::missing reusable workflow {name}", file=sys.stderr)
         return 1
-    found = issues(composed_text(path))
+    try:
+        text = composed_workflow(path)
+    except FileNotFoundError as exc:
+        print(f"::error::{exc}", file=sys.stderr)
+        return 1
+    found = issues(text)
     if found:
         for item in found:
             print(f"::error::{item}", file=sys.stderr)

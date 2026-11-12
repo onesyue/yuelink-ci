@@ -359,14 +359,27 @@ class LinkPlatformCacheTests(unittest.TestCase):
             match.start()
             for match in re.finditer(r"- uses: actions/setup-go@", workflow)
         ]
-        # preflight, the release build, and the dial gate
-        assert len(starts) == 3
+        # preflight and the release build. Dial setup-go lives in dial-gate.yml.
+        assert len(starts) == 2
         for start in starts:
             end = workflow.find("\n      - ", start)
             block = workflow[start:end]
             assert "cache: false" in block
             assert "cache: true" not in block
             assert "cache-dependency-path" not in block
+        dial = (ROOT / ".github" / "workflows" / "dial-gate.yml").read_text(
+            encoding="utf-8"
+        )
+        dial_starts = [
+            match.start()
+            for match in re.finditer(r"- uses: actions/setup-go@", dial)
+        ]
+        assert dial_starts
+        for start in dial_starts:
+            end = dial.find("\n      - ", start)
+            block = dial[start:end if end > start else None]
+            assert "cache: false" in block
+            assert "cache: true" not in block
         java = workflow.index("- name: Set up Java for native ownership tests")
         restore = workflow.index("- name: Restore Go module cache\n")
         between = [start for start in starts if java < start < restore]
@@ -488,6 +501,10 @@ class LinkPlatformCacheTests(unittest.TestCase):
         self._assert_cache_identity(workflow)
 
     def _assert_cache_identity(self, workflow: str) -> None:
+        # The kernel cache moved into the shared dial workflow. Identity still
+        # has to see that block together with the release caches.
+        if "yue-dialkernel-v1-" not in workflow:
+            workflow += "\n" + (ROOT / ".github/workflows/dial-gate.yml").read_text()
         sdk = json.loads((ROOT / "tests/fixtures/flutter-coverage-groups-20261028.json").read_text())["live_sdk"]
         fields = ("frameworkVersion", "frameworkRevision", "engineRevision", "dartSdkVersion")
         identity = "-sdk-" + "-".join(sdk[field] for field in fields)

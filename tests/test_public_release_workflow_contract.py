@@ -94,19 +94,35 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("Verify APK signature is the pinned release key", android)
 
     def test_dropping_validate_from_build_needs_is_rejected(self) -> None:
-        from scripts.check_public_build import issues
+        from scripts.check_public_build import composed_workflow, issues
 
-        needs = build_job_needs(self.build)
+        composed = composed_workflow(BUILD)
+        needs = build_job_needs(composed)
         self.assertIn("validate", needs)
-        self.assertEqual(issues(self.build), [])
-        mutated = self.build.replace(
+        self.assertEqual(issues(composed), [])
+        mutated = composed.replace(
             "needs: [plan, validate]",
             "needs: [plan]",
             1,
         )
-        self.assertNotEqual(mutated, self.build)
+        self.assertNotEqual(mutated, composed)
         self.assertNotIn("validate", build_job_needs(mutated))
         self.assertTrue(issues(mutated))
+
+    def test_dial_platforms_arrive_from_the_called_workflow(self) -> None:
+        from scripts.check_public_build import composed_workflow, issues
+
+        caller = BUILD.read_text(encoding="utf-8")
+        composed = composed_workflow(BUILD)
+        self.assertEqual(issues(composed), [])
+        self.assertNotIn("\n          - name: ios\n", caller)
+        self.assertIn("\n          - name: ios\n", composed)
+        mutated = composed.replace(
+            "\n          - name: ios\n",
+            "\n          - name: ios-removed\n",
+            1,
+        )
+        self.assertTrue(any("lost ios" in item for item in issues(mutated)))
 
     def test_orchestrator_alone_is_not_a_pass(self) -> None:
         from scripts.check_public_build import issues
@@ -151,30 +167,69 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
                 self.assertEqual(len(uses), 1)
 
     def test_public_self_check_rejects_a_private_checkout_without_the_deploy_key(self) -> None:
-        from scripts.check_public_build import issues
+        from scripts.check_public_build import composed_workflow, issues
 
-        self.assertEqual(issues(self.build), [])
-        mutated = self.build.replace(
+        composed = composed_workflow(BUILD)
+        self.assertEqual(issues(composed), [])
+        mutated = composed.replace(
             "ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}\n", "", 1
         )
-        self.assertNotEqual(mutated, self.build)
+        self.assertNotEqual(mutated, composed)
         self.assertTrue(issues(mutated))
         self.assertTrue(issues(""))
 
     def test_android_sdk_packages_must_stay_platform_tools(self) -> None:
-        from scripts.check_public_build import issues
+        from scripts.check_public_build import composed_workflow, issues
 
-        self.assertEqual(issues(self.build), [])
-        mutated = self.build.replace(
+        composed = composed_workflow(BUILD)
+        self.assertEqual(issues(composed), [])
+        mutated = composed.replace(
             "packages: platform-tools",
             "packages: tools platform-tools",
             1,
         )
-        self.assertNotEqual(mutated, self.build)
+        self.assertNotEqual(mutated, composed)
         self.assertTrue(
             any("platform-tools" in item for item in issues(mutated))
         )
+    def test_called_workflow_checkouts_hold_the_private_floor(self) -> None:
+        from scripts.check_public_build import composed_workflow, issues
 
+        caller = BUILD.read_text(encoding="utf-8")
+        composed = composed_workflow(BUILD)
+        self.assertTrue(composed.startswith(caller))
+        called = composed[len(caller) :]
+        self.assertIn("repository: onesyue/yuelink", called)
+        self.assertEqual(issues(composed), [])
+        stripped = caller + called.replace(
+            "repository: onesyue/yuelink", "repository: example.invalid"
+        )
+        self.assertTrue(
+            any("fell below the floor" in item for item in issues(stripped))
+        )
+
+    def test_a_missing_local_workflow_is_not_a_smaller_success(self) -> None:
+        import tempfile
+
+        from scripts.check_public_build import composed_workflow
+
+        with tempfile.TemporaryDirectory() as directory:
+            workflows = Path(directory) / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            entry = workflows / "build.yml"
+            entry.write_text(
+                "uses: ./.github/workflows/missing-called.yml\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(FileNotFoundError):
+                composed_workflow(entry)
+            called = workflows / "called.yml"
+            called.write_text("called-only-marker\n", encoding="utf-8")
+            entry.write_text(
+                "uses: ./.github/workflows/called.yml\n", encoding="utf-8"
+            )
+            text = composed_workflow(entry)
+            self.assertIn("called-only-marker", text)
 
 class PublicWorkflowShellObservationTests(unittest.TestCase):
     def run_shell(self, script: str, data: str, *, status: int = 0) -> subprocess.CompletedProcess[str]:

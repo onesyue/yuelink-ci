@@ -179,6 +179,13 @@ def actions_policy_issues(automation: dict[str, str], readme: str) -> list[str]:
     for path, source in automation.items():
         actions = re.findall(r"(?m)^\s*(?:-\s*)?uses:\s*([^\s#]+)", source)
         for action in actions:
+            if re.fullmatch(r"\./\.github/workflows/[A-Za-z0-9._-]+\.ya?ml", action):
+                target = action[2:]
+                if target not in automation:
+                    issues.append(
+                        f"{path}: reusable workflow is not in the automation inventory: {action}"
+                    )
+                continue
             action_count += 1
             if action.startswith("./"):
                 # A same-commit reusable workflow is pinned by this commit.
@@ -752,6 +759,21 @@ class SourceAttestationContractTests(unittest.TestCase):
             "jobs:\n  check:\n    steps:\n      - uses: actions/checkout@"
             + ("ab" * 20)
             + "\n"
+        )
+        self.assertEqual(actions_policy_issues(automation, self.readme), [])
+
+    def test_actions_policy_rejects_a_local_action_path(self) -> None:
+        automation = dict(self.automation)
+        automation[".github/workflows/added-later.yml"] = (
+            "jobs:\n  check:\n    steps:\n      - uses: ./local-action\n"
+        )
+        issues = actions_policy_issues(automation, self.readme)
+        self.assertTrue(any("local/dynamic action" in item for item in issues))
+
+    def test_actions_policy_allows_a_same_repo_workflow(self) -> None:
+        automation = dict(self.automation)
+        automation[".github/workflows/added-later.yml"] = (
+            "jobs:\n  check:\n    uses: ./.github/workflows/dial-gate.yml\n"
         )
         self.assertEqual(actions_policy_issues(automation, self.readme), [])
 
