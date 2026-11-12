@@ -46,7 +46,8 @@ WORKER_MEMORY = 5 * GIB // 2
 GROUP_FILE_CAP = 8
 # A declaration is the cost unit. Eight small files still share a group.
 # A file with many tests is not packed beside them, which is what made
-# group 53 spend 300s and then split. Callers without a tree keep weight 1.
+# group 53 spend 300s and then split. Missing declarations and callers
+# without a tree keep weight 1.
 GROUP_WEIGHT_BUDGET = 8
 
 
@@ -137,12 +138,13 @@ def execution_plan(root: Path, inventory: list[list[str]]) -> tuple[dict, list[l
     }
     return data, groups, "directory_groups", PLAN
 
-
 def declaration_weight(root: Path | None, path: str) -> int:
-    """Estimate one file from its test declarations.
+    """Estimate how long one file takes from its test declarations.
 
-    No per-file duration exists before the group runs. Missing declarations
-    still cost one unit so an unreadable fixture keeps the old chunks.
+    No per-file duration exists before the group runs. A declaration is the
+    unit: eight small files still share a group, and a file with many tests
+    is not packed beside them. Missing declarations still cost one unit.
+    Callers without a tree keep weight 1.
     """
     if root is None:
         return 1
@@ -645,6 +647,26 @@ def main() -> None:
                     f"single-file retry limit reached; see {retry_report.name}")
             return retry_report, retry_lcov
 
+        def retry_pure_timeout(index: int, attempt: str, path: str) -> tuple[Path, Path]:
+            """Re-run one file once after a timeout with no recorded test failure."""
+            retry_report = out / f"{attempt}.retry.jsonl"
+            retry_lcov = out / f"{attempt}.retry.info"
+            result = invoke(index, [path], retry_report, retry_lcov)
+            if result.returncode:
+                clear_compiler_cache()
+                classification = timeout_classification(retry_report)
+                (out / f"{attempt}.retry.timeout.json").write_text(json.dumps({
+                    "classification": classification, "exit_code": result.returncode,
+                    "report": retry_report.name,
+                }, indent=2) + "\n")
+                if classification == "recorded_failure":
+                    raise ValueError(
+                        f"single-file retry for {path} recorded a failure; see {retry_report.name}")
+                raise ValueError(
+                    f"infra-timeout: group {index} file {path} timed out after one retry "
+                    f"with no recorded test failure; see {retry_report.name}")
+            return retry_report, retry_lcov
+
         def stitch(index: int, tests: list[str], report: Path, lcov: Path) -> None:
             """Bisect engine-fault timeouts and stitch validated successful leaves."""
             leaves: list[tuple[Path, Path]] = []
@@ -668,6 +690,11 @@ def main() -> None:
                                 split(half, half_path)
                                 continue
                         else:
+                            if (code == TIMEOUT_EXIT_CODE
+                                    and classification == "no_recorded_failure"):
+                                raise ValueError(
+                                    f"infra-timeout: group {index} timed out after one retry "
+                                    f"with no recorded test failure; see {attempt}.initial.jsonl")
                             raise subprocess.CalledProcessError(code, half_result.args)
                     cases(half_report, worker, half, counter)
                     if not half_lcov.is_file():
@@ -737,7 +764,14 @@ def main() -> None:
                         shutil.copyfile(retry_report, report)
                         shutil.copyfile(retry_lcov, lcov)
                     else:
-                        raise subprocess.CalledProcessError(code, result.args)
+                        if (code == TIMEOUT_EXIT_CODE
+                                and classification == "no_recorded_failure"):
+                            retry_report, retry_lcov = retry_pure_timeout(
+                                index, str(index), tests[0])
+                            shutil.copyfile(retry_report, report)
+                            shutil.copyfile(retry_lcov, lcov)
+                        else:
+                            raise subprocess.CalledProcessError(code, result.args)
                 observed, visible = cases(report, worker, tests, counter)
                 if not lcov.is_file():
                     raise ValueError(f"coverage report missing for file {index}")
