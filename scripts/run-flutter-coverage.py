@@ -43,6 +43,11 @@ GIB = 1024 ** 3
 # Scheduling headroom above the observed 1.53 GiB sample maximum, not a
 # full-corpus peak-memory claim. Unknown capacity admits only one worker.
 WORKER_MEMORY = 5 * GIB // 2
+GROUP_FILE_CAP = 8
+# A declaration is the cost unit. Eight small files still share a group.
+# A file with many tests is not packed beside them, which is what made
+# group 53 spend 300s and then split. Callers without a tree keep weight 1.
+GROUP_WEIGHT_BUDGET = 8
 
 
 
@@ -121,7 +126,7 @@ def execution_plan(root: Path, inventory: list[list[str]]) -> tuple[dict, list[l
         return data, groups, "reviewed_groups", PLAN
 
     sdk = frozen_sdk({"sdk": grouped.get("live_sdk")})
-    groups = directory_groups(inventory)
+    groups = directory_groups(inventory, root)
     assert_directory_groups(groups, inventory)
     data = {
         "schema": 1,
@@ -133,8 +138,26 @@ def execution_plan(root: Path, inventory: list[list[str]]) -> tuple[dict, list[l
     return data, groups, "directory_groups", PLAN
 
 
-def directory_groups(inventory: list[list[str]]) -> list[list[str]]:
-    """Group a live tree by parent directory. Do not write a plan file."""
+def declaration_weight(root: Path | None, path: str) -> int:
+    """Estimate one file from its test declarations.
+
+    No per-file duration exists before the group runs. Missing declarations
+    still cost one unit so an unreadable fixture keeps the old chunks.
+    """
+    if root is None:
+        return 1
+    text = (root / path).read_text(encoding="utf-8", errors="replace")
+    declared = len(re.findall(r"(?m)^[ \t]*(?:test|testWidgets)\(", text))
+    return declared if declared else 1
+
+
+def directory_groups(inventory: list[list[str]], root: Path | None = None) -> list[list[str]]:
+    """Group a live tree by parent directory. Do not write a plan file.
+
+    Within one directory, pack by estimated test weight and never exceed
+    eight files. Isolated crash cases stay alone. Omitting root keeps every
+    ordinary file at weight 1, which is the previous eight-file chunk.
+    """
     buckets: dict[str, list[str]] = {}
     order: list[str] = []
     for (path,) in inventory:
@@ -148,20 +171,51 @@ def directory_groups(inventory: list[list[str]]) -> list[list[str]]:
     groups: list[list[str]] = []
     for parent in order:
         ordinary: list[str] = []
+        used = 0
+
+        def flush() -> None:
+            nonlocal ordinary, used
+            if ordinary:
+                groups.append(ordinary)
+                ordinary = []
+                used = 0
+
         for path in buckets[parent]:
             if path in ISOLATED:
-                if ordinary:
-                    groups.append(ordinary)
-                    ordinary = []
+                flush()
                 groups.append([path])
-            else:
-                ordinary.append(path)
-                if len(ordinary) == 8:
-                    groups.append(ordinary)
-                    ordinary = []
-        if ordinary:
-            groups.append(ordinary)
+                continue
+            weight = declaration_weight(root, path)
+            if ordinary and (len(ordinary) >= GROUP_FILE_CAP or used + weight > GROUP_WEIGHT_BUDGET):
+                flush()
+            ordinary.append(path)
+            used += weight
+            if len(ordinary) >= GROUP_FILE_CAP or used >= GROUP_WEIGHT_BUDGET:
+                flush()
+        flush()
     return groups
+
+
+def parse_job_shard(value: str) -> tuple[int, int] | None:
+    """Parse COVERAGE_JOB_SHARD as index/count. Empty means the whole corpus."""
+    if value == "":
+        return None
+    parts = value.split("/")
+    if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
+        raise ValueError("COVERAGE_JOB_SHARD must be index/count")
+    index, count = int(parts[0]), int(parts[1])
+    if count < 1 or index < 0 or index >= count:
+        raise ValueError("COVERAGE_JOB_SHARD index is outside its count")
+    return index, count
+
+
+def select_shard(groups: list[list[str]], shard: tuple[int, int] | None) -> list[tuple[int, list[str]]]:
+    """Keep original group indexes so a join can prove the corpus was covered once."""
+    indexed = list(enumerate(groups))
+    if shard is None:
+        return indexed
+    index, count = shard
+    return [item for item in indexed if item[0] % count == index]
 
 
 def assert_directory_groups(groups: list[list[str]], inventory: list[list[str]]) -> None:
@@ -465,6 +519,8 @@ def main() -> None:
     subprocess.run(["git", "diff", "--exit-code", "HEAD", "--", "test", "lib", "pubspec.lock"],
                    cwd=root, check=True)
     plan, groups, mode, plan_path = execution_plan(root, inventory)
+    shard = parse_job_shard(os.environ.get("COVERAGE_JOB_SHARD", ""))
+    selected = select_shard(groups, shard)
     (out / "inventory.json").write_text(json.dumps(inventory, indent=2) + "\n")
     assignments = {path: ("macos_integration" if path == MACOS_TEST else "source_contract")
                    for group in inventory for path in group}
@@ -720,7 +776,7 @@ def main() -> None:
                 add_gitlinks(root, worker, source, gitlinks)
                 subprocess.run(["flutter", "pub", "get", "--offline", "--enforce-lockfile"],
                                cwd=worker, check=True, timeout=120)
-            assignments = list(enumerate(groups))
+            assignments = selected
             with ThreadPoolExecutor(max_workers=capacity) as pool:
                 futures = [pool.submit(execute, worker, assignments[index::capacity])
                            for index, worker in enumerate(workers)]
@@ -728,10 +784,25 @@ def main() -> None:
                     completed.extend(future.result())
             for _, target in gitlinks:
                 subprocess.run(["git", "diff", "--exit-code", "HEAD"], cwd=target, check=True)
-            if sorted(index for index, _, _ in completed) != list(range(len(groups))):
-                raise ValueError("complete test corpus did not execute")
+            expected_indexes = [index for index, _ in selected]
+            if sorted(index for index, _, _ in completed) != expected_indexes:
+                raise ValueError(
+                    "complete test corpus did not execute" if shard is None
+                    else "coverage shard did not execute its groups")
             observed = sum(count for _, count, _ in completed)
-            counter.enforce_floor(observed, MINIMUM_TESTS)
+            if shard is None:
+                counter.enforce_floor(observed, MINIMUM_TESTS)
+            else:
+                # One shard is not the corpus. The join job enforces the floor.
+                (out / "shard.json").write_text(json.dumps({
+                    "schema": 1,
+                    "shard": shard[0],
+                    "count": shard[1],
+                    "indexes": expected_indexes,
+                    "files": [path for _, tests in selected for path in tests],
+                    "observed": observed,
+                    "source_sha": source,
+                }, indent=2) + "\n")
             case_rows = [[*identity, count] for identity, count in sorted(case_union.items())]
             summary = {"cases_sha256": digest(case_rows), "coverage_sha256": digest(sorted(coverage_union)),
                        "visible_cases": sum(case_union.values()),
@@ -740,17 +811,20 @@ def main() -> None:
             receipt["union"] = summary
             (out / "case-union.json").write_text(json.dumps(case_rows, indent=2) + "\n")
             (out / "coverage-union.json").write_text(json.dumps(sorted(coverage_union)) + "\n")
-            if mode == "reviewed_groups" and summary != plan["baseline_union"]:
+            if shard is None and mode == "reviewed_groups" and summary != plan["baseline_union"]:
                 raise ValueError("full-corpus case/skip or coverage union differs from reviewed baseline")
             # Source-contract tests may execute no application library lines.
             # Flutter still emits their empty LCOV file; absent output refuses.
             nonempty = [path for _, _, path in sorted(completed) if path.stat().st_size]
             if not nonempty:
-                raise ValueError("no application coverage collected from the complete corpus")
-            coverage = [argument for path in nonempty
-                        for argument in ("--add-tracefile", str(path))]
-            subprocess.run(["lcov", *coverage, "--output-file", "coverage/lcov.info"],
-                           cwd=root, check=True)
+                if shard is None:
+                    raise ValueError("no application coverage collected from the complete corpus")
+                (root / "coverage/lcov.info").write_text("")
+            else:
+                coverage = [argument for path in nonempty
+                            for argument in ("--add-tracefile", str(path))]
+                subprocess.run(["lcov", *coverage, "--output-file", "coverage/lcov.info"],
+                               cwd=root, check=True)
             receipt["tests_complete"] = True
         finally:
             receipt["resources_after"] = resource_snapshot()
