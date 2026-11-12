@@ -13,6 +13,37 @@ SYNC = ROOT / "sync-build.sh"
 IOS = ROOT / "scripts" / "ios-unsigned-compile.py"
 TABLE = "| platform | protocol | baseline | candidate | baseline p95 ms | candidate p95 ms | pass |"
 
+def _caller_job(build: str) -> str:
+    marker = "\n  dial_gate:\n"
+    if build.count(marker) != 1:
+        return ""
+    lines: list[str] = []
+    for line in build.split(marker, 1)[1].splitlines():
+        if (
+            line.startswith("  ")
+            and not line.startswith("   ")
+            and line.rstrip().endswith(":")
+            and not line.startswith("  #")
+        ):
+            break
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _permission_lines(block: str) -> set[str]:
+    granted: set[str] = set()
+    in_permissions = False
+    for line in block.splitlines():
+        if line == "    permissions:":
+            in_permissions = True
+            continue
+        if not in_permissions:
+            continue
+        if line.startswith("      ") and ": " in line:
+            granted.add(line.strip())
+            continue
+        break
+    return granted
 
 def one_dial_issues(build: str, dial: str, sync: str, ios: str) -> list[str]:
     issues: list[str] = []
@@ -20,6 +51,18 @@ def one_dial_issues(build: str, dial: str, sync: str, ios: str) -> list[str]:
         issues.append("build.yml must call the dial gate once")
     if "uses: ./.github/workflows/dial-gate.yml" not in build:
         issues.append("dial gate is not the reusable workflow")
+    caller = _caller_job(build)
+    granted = _permission_lines(caller)
+    if granted != {"contents: read", "actions: write"}:
+        issues.append("dial caller must grant contents: read and actions: write")
+    for fragment in dial.split("\n    permissions:\n")[1:]:
+        requested = _permission_lines("    permissions:\n" + fragment)
+        extra = requested - granted
+        if extra:
+            issues.append(
+                "dial workflow requests permissions the caller does not grant: "
+                + ", ".join(sorted(extra))
+            )
     if "needs.dial_gate.result == 'success'" not in build:
         issues.append("release no longer blocks on the dial gate")
     if "needs.dial_gate_summary.result == 'success'" not in build:
@@ -61,3 +104,22 @@ class OneDialGateTests(unittest.TestCase):
             IOS.read_text(encoding="utf-8"),
         )
         self.assertTrue(any("unsigned iOS" in issue for issue in issues))
+
+    def test_caller_must_grant_the_actions_write_the_dial_job_requests(self) -> None:
+        build = BUILD.read_text(encoding="utf-8").replace(
+            "    needs: [source_binding]\n"
+            "    permissions:\n"
+            "      contents: read\n"
+            "      actions: write\n",
+            "    needs: [source_binding]\n"
+            "    permissions:\n"
+            "      contents: read\n",
+            1,
+        )
+        issues = one_dial_issues(
+            build,
+            DIAL.read_text(encoding="utf-8"),
+            SYNC.read_text(encoding="utf-8"),
+            IOS.read_text(encoding="utf-8"),
+        )
+        self.assertTrue(any("actions: write" in issue for issue in issues))

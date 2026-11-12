@@ -338,6 +338,7 @@ jobs:
           set -euo pipefail
           flutter config --enable-swift-package-manager
           flutter pub get --enforce-lockfile
+          dart run slang
           dart setup.dart build -p ios
           dart setup.dart install -p ios
           flutter build ios --release --no-codesign --config-only --no-pub

@@ -9,22 +9,23 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOWS = (
-    ".github/workflows/build.yml",
-    ".github/workflows/source-attestation.yml",
-)
+WORKFLOW_DIR = ROOT / ".github/workflows"
 
 
 class SlangGenerationTests(unittest.TestCase):
     def test_every_locked_pub_get_runs_slang(self) -> None:
-        for relative in WORKFLOWS:
-            text = (ROOT / relative).read_text(encoding="utf-8")
-            self.assertEqual(
-                text.count("flutter pub get --enforce-lockfile"),
-                text.count("dart run slang"),
-                relative,
-            )
-            self.assertIn("dart run slang", text)
+        files = sorted(WORKFLOW_DIR.glob("*.yml"))
+        self.assertTrue(files)
+        locked = 0
+        for path in files:
+            text = path.read_text(encoding="utf-8")
+            pub_gets = text.count("flutter pub get --enforce-lockfile")
+            slang = text.count("dart run slang")
+            self.assertEqual(pub_gets, slang, path.name)
+            if pub_gets:
+                self.assertIn("dart run slang", text)
+            locked += pub_gets
+        self.assertGreater(locked, 0)
 
 
 if __name__ == "__main__":

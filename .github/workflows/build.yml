@@ -2947,6 +2947,9 @@ jobs:
   dial_gate:
     name: Dial gate
     needs: [source_binding]
+    permissions:
+      contents: read
+      actions: write
     if: >-
       always() &&
       (github.event_name == 'pull_request' || needs.source_binding.result == 'success')
