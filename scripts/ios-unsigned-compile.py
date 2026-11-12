@@ -15,7 +15,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 TARGETS = ("Runner", "PacketTunnel")
 _SWIFT_LINE = re.compile(
     r"SwiftCompile\b.*(?:/|\\)(?P<target>Runner|PacketTunnel)(?:/|\\)"
@@ -104,13 +103,20 @@ def simulator_archive_issues(text: str) -> list[str]:
 
 def _emit_failure(text: str) -> None:
     lines = [line[:400] for line in text.splitlines() if line.strip()]
-    matched = [line for line in lines if "error:" in line.lower()]
-    tail = matched[-20:] or lines[-20:]
+    # Clang's final error omits ld's cause and undefined-symbol references.
+    # Include the preceding diagnostic block, while keeping console output bounded.
+    indices = [i for i, line in enumerate(lines) if "error:" in line.lower()]
+    selected = set()
+    for index in indices[-20:]:
+        selected.update(range(max(0, index - 12), index + 1))
+    tail = [lines[i] for i in sorted(selected)][-80:] or lines[-20:]
     if tail:
         print("\n".join(tail), file=sys.stderr)
 
 
-def _capture(argv: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+def _capture(
+    argv: list[str], cwd: Path, timeout: int
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         argv,
         cwd=cwd,
@@ -126,7 +132,12 @@ def build_simulator_kernel(source: Path, log) -> None:
     sdk = _capture(["xcrun", "--sdk", "iphonesimulator", "--show-sdk-path"], source, 60)
     cc = _capture(["xcrun", "--sdk", "iphonesimulator", "--find", "clang"], source, 60)
     log.write(sdk.stdout + sdk.stderr + cc.stdout + cc.stderr)
-    if sdk.returncode != 0 or cc.returncode != 0 or not sdk.stdout.strip() or not cc.stdout.strip():
+    if (
+        sdk.returncode != 0
+        or cc.returncode != 0
+        or not sdk.stdout.strip()
+        or not cc.stdout.strip()
+    ):
         raise ValueError("kernel")
     flags = (
         "-target arm64-apple-ios15.5-simulator -isysroot "
@@ -248,7 +259,13 @@ def verify(args: argparse.Namespace) -> int:
         receipt["status"] = "passed"
         receipt["stage"] = "passed"
         result = 0
-    except (OSError, ValueError, TypeError, subprocess.TimeoutExpired, json.JSONDecodeError):
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        subprocess.TimeoutExpired,
+        json.JSONDecodeError,
+    ):
         receipt["outcome"] = "verification_failed"
         if log_path is not None and log_path.exists():
             _emit_failure(log_path.read_text(encoding="utf-8", errors="replace"))

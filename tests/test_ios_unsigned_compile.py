@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import unittest
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -56,7 +57,9 @@ class IosUnsignedCompileTests(unittest.TestCase):
         self.assertEqual(argv[argv.index("-configuration") + 1], "Debug")
         self.assertNotIn("Release", argv)
         self.assertEqual(compile_mod.PRODUCT_DIRECTORY, "Debug-iphonesimulator")
-        source = (ROOT / "scripts" / "ios-unsigned-compile.py").read_text(encoding="utf-8")
+        source = (ROOT / "scripts" / "ios-unsigned-compile.py").read_text(
+            encoding="utf-8"
+        )
         self.assertNotIn("generic/platform", source)
 
     def test_device_destination_is_rejected(self) -> None:
@@ -93,3 +96,33 @@ class IosUnsignedCompileTests(unittest.TestCase):
         self.assertIn("flutter build ios --simulator --config-only --no-pub", job)
         self.assertNotIn("flutter build ios --release", job)
         self.assertNotIn("dart setup.dart build -p ios", job)
+
+
+class FailureDiagnosticsTests(unittest.TestCase):
+    def test_linker_cause_survives_generic_clang_error(self) -> None:
+        log = "\n".join(
+            (
+                "Ld PacketTunnel normal arm64",
+                "ld: framework 'MissingFramework' not found",
+                "clang: error: linker command failed with exit code 1",
+            )
+        )
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            compile_mod._emit_failure(log)
+        self.assertIn("ld: framework 'MissingFramework' not found", stderr.getvalue())
+
+    def test_undefined_symbol_references_are_preserved(self) -> None:
+        log = "\n".join(
+            (
+                "Undefined symbols for architecture arm64:",
+                '  "_missing_native_call", referenced from:',
+                "      _start in bridge.o",
+                "ld: symbol(s) not found for architecture arm64",
+                "clang: error: linker command failed with exit code 1",
+            )
+        )
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            compile_mod._emit_failure(log)
+        self.assertIn("_missing_native_call", stderr.getvalue())
