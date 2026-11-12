@@ -115,64 +115,57 @@ def validate_dial_gate_concurrency(workflow: str) -> None:
         )
 
 
-def validate_pull_request_dial_ref(caller: str, dial: str) -> None:
+def validate_pull_request_dial_ref(workflow: str) -> None:
     """Pull-request dial checks out current yuelink master.
 
-    The candidate expression lives on the build.yml caller. The comparison
-    baseline stays v1.3.174 inside the reusable dial workflow.
+    feat/real-dial-gate-20261111 was removed after the gate landed. A
+    missing ref fails every dial leg in checkout, before a sample runs.
+    The comparison baseline stays v1.3.174.
     """
-    if "feat/real-dial-gate-20261111" in caller or "feat/real-dial-gate-20261111" in dial:
+    job = dial_gate_job(workflow)
+    refs = re.findall(r"(?m)^          ref: (.+)$", job)
+    if len(refs) < 2:
+        raise DialConcurrencyError(
+            f"dial_gate expected a candidate ref and the v1.3.174 baseline, found {len(refs)}"
+        )
+    candidate, baseline = refs[0], refs[1]
+    if "feat/real-dial-gate-20261111" in candidate:
         raise DialConcurrencyError(
             "pull-request dial still names the deleted feature branch"
         )
-    if "github.event_name == 'pull_request' && 'master'" not in caller:
+    if "github.event_name == 'pull_request' && 'master'" not in candidate:
         raise DialConcurrencyError(
             "pull-request dial must check out yuelink master"
         )
-    job = dial_gate_job(dial)
-    baselines = [
-        ref.strip()
-        for ref in re.findall(r"(?m)^          ref: (.+)$", job)
-        if ref.strip() == "v1.3.174"
-    ]
-    if baselines != ["v1.3.174"]:
+    if baseline.strip() != "v1.3.174":
         raise DialConcurrencyError("dial baseline ref changed")
 
 
 class DialGateConcurrencyTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.caller = WORKFLOW.read_text(encoding="utf-8")
-        self.workflow = (ROOT / ".github" / "workflows" / "dial-gate.yml").read_text(
-            encoding="utf-8"
-        )
-        self.assertGreater(len(self.caller), 10000)
-        self.assertGreater(len(self.workflow), 5000)
+        self.workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.assertGreater(len(self.workflow), 10000)
 
     def test_live_workflow_keys_each_run(self) -> None:
         validate_dial_gate_concurrency(self.workflow)
-        validate_pull_request_dial_ref(self.caller, self.workflow)
+        validate_pull_request_dial_ref(self.workflow)
         self.assertEqual(self.workflow.count(MACOS_ARM), 1)
         self.assertEqual(self.workflow.count(OTHER_ARM), 1)
-        self.assertNotIn(MACOS_ARM, self.caller)
         self.assertNotIn("'yuelink-ci-macos-26-dial'", self.workflow)
         self.assertNotIn("feat/real-dial-gate-20261111", self.workflow)
-        self.assertNotIn("feat/real-dial-gate-20261111", self.caller)
 
     def test_deleted_dial_branch_is_rejected(self) -> None:
-        needle = "github.event_name == 'pull_request' && 'master'"
-        self.assertEqual(self.caller.count(needle), 1)
-        mutated = self.caller.replace(
-            needle,
+        mutated = self._replace_once(
+            "github.event_name == 'pull_request' && 'master'",
             "github.event_name == 'pull_request' && 'feat/real-dial-gate-20261111'",
-            1,
         )
         with self.assertRaises(DialConcurrencyError):
-            validate_pull_request_dial_ref(mutated, self.workflow)
+            validate_pull_request_dial_ref(mutated)
 
     def test_dial_baseline_pin_is_rejected_when_moved(self) -> None:
         mutated = self._replace_once("          ref: v1.3.174", "          ref: v1.3.175")
         with self.assertRaises(DialConcurrencyError):
-            validate_pull_request_dial_ref(self.caller, mutated)
+            validate_pull_request_dial_ref(mutated)
 
     def _replace_once(self, old: str, new: str) -> str:
         count = self.workflow.count(old)

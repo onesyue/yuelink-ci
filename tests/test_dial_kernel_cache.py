@@ -5,8 +5,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BUILD = ROOT / '.github/workflows/build.yml'
-DIAL = ROOT / '.github/workflows/dial-gate.yml'
+WORKFLOW = ROOT / '.github/workflows/build.yml'
 
 _JOB = re.compile(r'(?m)^(?=  [A-Za-z0-9_-]+:\s*$)')
 _STEP = re.compile(r'(?m)^(?=      - )')
@@ -32,6 +31,12 @@ def dial_kernel_cache_issues(workflow):
     job = dial_job(workflow)
     if not job:
         return ['dial_gate job is missing']
+    needs = re.search(r'(?m)^    needs:\s*\[([^\]]*)\]', job)
+    items = []
+    if needs:
+        items = [item.strip() for item in needs.group(1).split(',') if item.strip()]
+    if 'source_binding' not in items:
+        issues.append('dial_gate does not need source_binding')
     ios = step_named(job, 'Dial inside the iOS simulator')
     if 'run: bash candidate/core/dialgate/ci/run.sh ios\n' not in ios:
         issues.append('iOS dial command is missing')
@@ -59,33 +64,10 @@ def dial_kernel_cache_issues(workflow):
     return issues
 
 
-def caller_source_issues(workflow):
-    """The build caller still binds the attested source and calls the shared gate."""
-    job = dial_job(workflow)
-    if not job:
-        return ['dial_gate job is missing']
-    issues = []
-    needs = re.search(r'(?m)^    needs:\s*\[([^\]]*)\]', job)
-    items = []
-    if needs:
-        items = [item.strip() for item in needs.group(1).split(',') if item.strip()]
-    if 'source_binding' not in items:
-        issues.append('dial_gate does not need source_binding')
-    if 'uses: ./.github/workflows/dial-gate.yml' not in job:
-        issues.append('dial_gate does not call the shared workflow')
-    return issues
-
-
 class DialKernelCacheTests(unittest.TestCase):
     def test_ios_dial_survives_a_missing_kernel_cache(self):
-        caller = BUILD.read_text(encoding='utf-8')
-        workflow = DIAL.read_text(encoding='utf-8')
-        self.assertEqual(caller_source_issues(caller), [])
+        workflow = WORKFLOW.read_text(encoding='utf-8')
         self.assertEqual(dial_kernel_cache_issues(workflow), [])
-        without_bind = caller.replace('needs: [source_binding]', 'needs: [prepare]', 1)
-        self.assertIn(
-            'dial_gate does not need source_binding',
-            caller_source_issues(without_bind))
         job = dial_job(workflow)
         without_ios = workflow.replace(
             'run: bash candidate/core/dialgate/ci/run.sh ios\n',
