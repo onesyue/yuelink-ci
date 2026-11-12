@@ -923,6 +923,8 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
             ALLOW_ORDINARY_CACHE="1", SPLIT_TIMEOUT="always",
             FIXTURE_GROUPS=str(len(groups)), YUELINK_COVERAGE_MAX_WORKERS="1")
         self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("infra-timeout", refused.stderr)
+        self.assertNotIn("recorded a failure", refused.stderr)
         shutil.rmtree(self.root / "coverage", ignore_errors=True)
         accepted = self.run_gate(
             ALLOW_ORDINARY_CACHE="1", SPLIT_TIMEOUT="once",
@@ -954,6 +956,7 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
                     FIXTURE_GROUPS=str(len(groups)), YUELINK_COVERAGE_MAX_WORKERS="1")
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("recorded a failure", result.stderr)
+                self.assertNotIn("infra-timeout", result.stderr)
                 out = self.root / "coverage/source-gate"
                 originals = list(out.glob("*.initial.jsonl"))
                 self.assertEqual(len(originals), 1)
@@ -1169,6 +1172,54 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
         self.assertIn(f"engine shutdown fault timed out for file {target}", refused.stderr)
         self.assertIn("single-file retry limit reached", refused.stderr)
         self.assertFalse((self.root / "coverage/lcov.info").exists())
+
+    def test_single_file_pure_timeout_retries_once_then_reports_infra_timeout(self):
+        target = "test/services/rotating_log_file_test.dart"
+        groups = self.prepare_timeout_groups()
+        index = groups.index([target])
+        recovered = self.run_gate(
+            SINGLE_FAULT=target, SPLIT_EXIT_CODE="124", BEFORE_TIMEOUT="",
+            FIXTURE_GROUPS=str(len(groups)), YUELINK_COVERAGE_MAX_WORKERS="1")
+        self.assertEqual(recovered.returncode, 0, recovered.stderr)
+        self.assertNotIn("infra-timeout", recovered.stderr)
+        out = self.root / "coverage/source-gate"
+        self.assertEqual(json.loads((out / f"{index}.retry.execution.json").read_text())["exit_code"], 0)
+        shutil.rmtree(self.root / "coverage", ignore_errors=True)
+        for marker in self.root.glob("**/single-fault-count"):
+            marker.unlink()
+        refused = self.run_gate(
+            SINGLE_FAULT=target, SINGLE_FAULT_TIMES="2", SPLIT_EXIT_CODE="124",
+            BEFORE_TIMEOUT="", FIXTURE_GROUPS=str(len(groups)),
+            YUELINK_COVERAGE_MAX_WORKERS="1")
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("infra-timeout", refused.stderr)
+        self.assertNotIn("recorded a failure", refused.stderr)
+        self.assertNotIn("engine shutdown fault", refused.stderr)
+        self.assertFalse((self.root / "coverage/lcov.info").exists())
+
+    def test_declaration_weight_isolates_a_heavy_file(self):
+        timing = self.root / "test/timing"
+        timing.mkdir()
+        (timing / "a_test.dart").write_text("void main() {}\n")
+        (timing / "b_test.dart").write_text("void main() {}\n")
+        heavy = "void main() {\n" + "".join(
+            f"  test('case {i}', () {{}});\n" for i in range(8)) + "}\n"
+        (timing / "heavy_test.dart").write_text(heavy)
+        subprocess.run(["git", "add", "test"], cwd=self.root, check=True)
+        self.commit_fixture(self.root, "timing weight corpus")
+        inventory = RUNNER.partition(self.root)
+        light = ["test/timing/a_test.dart", "test/timing/b_test.dart"]
+        heavy_path = "test/timing/heavy_test.dart"
+        self.assertIn(light + [heavy_path], RUNNER.directory_groups(inventory))
+        weighted = RUNNER.directory_groups(inventory, self.root)
+        self.assertIn(light, weighted)
+        self.assertIn([heavy_path], weighted)
+        self.assertNotIn(light + [heavy_path], weighted)
+        with patch.object(RUNNER, "PLAN", self.plan_path), \
+                patch.object(RUNNER, "GROUPED_PLAN_SHA256", self.grouped_digest):
+            _plan, groups, mode, _path = RUNNER.execution_plan(self.root, inventory)
+        self.assertEqual(mode, "directory_groups")
+        self.assertEqual(groups, weighted)
 
     def test_timeout_halves_must_each_have_terminal_and_coverage(self):
         self.admitted_singleton_corpus()

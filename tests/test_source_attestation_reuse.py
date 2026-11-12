@@ -44,6 +44,13 @@ class SharedVerifierBehaviorTests(unittest.TestCase):
         self.write_json('workflow.json', dict(id=789, name='Source attestation',
             path='.github/workflows/source-attestation.yml', state='active'))
         self.write_json('run.json', self.run_metadata); self.write_json('proof.json', self.proof)
+        self.write_json('runs.json', {'workflow_runs': [{
+            'id': 123, 'display_title': 'Source attestation ' + SOURCE,
+            'name': 'Source attestation',
+            'path': '.github/workflows/source-attestation.yml',
+            'event': 'workflow_dispatch', 'conclusion': 'success',
+            'head_branch': 'master', 'workflow_id': 789,
+            'created_at': '2026-11-12T00:00:00Z', 'head_sha': BUILDER}]})
         self.env['SIGNED_DIGEST'] = hashlib.sha256((self.root / 'proof.json').read_bytes()).hexdigest()
         for name in ['verify-source-attestation.sh', 'gh-read-retry.py']:
             shutil.copyfile(ROOT / 'scripts' / name, self.root / name)
@@ -52,7 +59,8 @@ class SharedVerifierBehaviorTests(unittest.TestCase):
 import hashlib,json,os,pathlib,shutil,sys
 p=pathlib.Path(os.environ['FIXTURE']); a=sys.argv[1:]
 if a[:1]==['api']:
-    name='workflow.json' if '/workflows/' in a[1] else 'run.json'
+    url=a[1]
+    name='runs.json' if '/runs?' in url else 'workflow.json' if '/workflows/' in url else 'run.json'
     print((p/name).read_text()); sys.exit(0)
 if a[:2]==['run','download']:
     shutil.copyfile(p/'proof.json', pathlib.Path(a[a.index('--dir')+1])/'source-attestation.json')
@@ -211,6 +219,66 @@ sys.exit(9)
                 self.assertNotEqual(self.verify().returncode, 0)
                 self.assertFalse((self.root/'export.json').exists())
         self.write_json('run.json', self.run_metadata)
+
+    def same_source(self, source=SOURCE):
+        output = self.root / 'export.json'
+        output.unlink(missing_ok=True)
+        env = dict(self.env, GITHUB_SHA='c' * 40)
+        command = ['bash', str(self.root / 'verify-source-attestation.sh'),
+                   '--same-source', source, '--export-proof', str(output)]
+        return subprocess.run(command, env=env, capture_output=True, text=True, timeout=20)
+
+    def test_same_source_reuses_an_older_builder_for_the_current_workflow(self):
+        result = self.same_source()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'export.json').read_bytes(), (self.root / 'proof.json').read_bytes())
+        crypto = json.loads((self.root / 'crypto-args.json').read_text())
+        self.assertEqual(crypto[crypto.index('--source-digest') + 1], BUILDER)
+        self.assertEqual(crypto[crypto.index('--signer-digest') + 1], BUILDER)
+        self.assertNotIn('c' * 40, crypto)
+
+    def test_same_source_without_a_green_run_fails_closed(self):
+        self.write_json('runs.json', {'workflow_runs': [{
+            'id': 123, 'display_title': 'Source attestation ' + ('d' * 40),
+            'name': 'Source attestation',
+            'path': '.github/workflows/source-attestation.yml',
+            'event': 'workflow_dispatch', 'conclusion': 'success',
+            'head_branch': 'master', 'workflow_id': 789,
+            'created_at': '2026-11-12T00:00:00Z', 'head_sha': BUILDER}]})
+        result = self.same_source()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('no green Source attestation', result.stderr)
+        self.assertFalse((self.root / 'export.json').exists())
+
+    def test_same_source_picks_the_newest_green_run(self):
+        self.write_json('runs.json', {'workflow_runs': [
+            {'id': 111, 'display_title': 'Source attestation ' + SOURCE,
+             'name': 'Source attestation',
+             'path': '.github/workflows/source-attestation.yml',
+             'event': 'workflow_dispatch', 'conclusion': 'success',
+             'head_branch': 'master', 'workflow_id': 789,
+             'created_at': '2026-11-11T00:00:00Z', 'head_sha': BUILDER},
+            {'id': 123, 'display_title': 'Source attestation ' + SOURCE,
+             'name': 'Source attestation',
+             'path': '.github/workflows/source-attestation.yml',
+             'event': 'workflow_dispatch', 'conclusion': 'success',
+             'head_branch': 'master', 'workflow_id': 789,
+             'created_at': '2026-11-12T00:00:00Z', 'head_sha': BUILDER}]})
+        result = self.same_source()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_same_source_refuses_a_builder_that_does_not_match_the_proof(self):
+        mismatched = 'd' * 40
+        runs = json.loads((self.root / 'runs.json').read_text())
+        runs['workflow_runs'][0]['head_sha'] = mismatched
+        self.write_json('runs.json', runs)
+        run = copy.deepcopy(self.run_metadata)
+        run['head_sha'] = mismatched
+        self.write_json('run.json', run)
+        result = self.same_source()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('proof is not the exact source/tag/builder/run/gate closure', result.stderr)
+        self.assertFalse((self.root / 'export.json').exists())
 
 
 class ReuseWorkflowTests(unittest.TestCase):
