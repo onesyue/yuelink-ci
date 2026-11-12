@@ -53,6 +53,9 @@ class IosUnsignedCompileTests(unittest.TestCase):
         self.assertIn("iphonesimulator", argv)
         self.assertIn("build", argv)
         self.assertNotIn("CODE_SIGNING_ALLOWED=YES", argv)
+        self.assertEqual(argv[argv.index("-configuration") + 1], "Debug")
+        self.assertNotIn("Release", argv)
+        self.assertEqual(compile_mod.PRODUCT_DIRECTORY, "Debug-iphonesimulator")
         source = (ROOT / "scripts" / "ios-unsigned-compile.py").read_text(encoding="utf-8")
         self.assertNotIn("generic/platform", source)
 
@@ -75,3 +78,18 @@ class IosUnsignedCompileTests(unittest.TestCase):
             )
         )
         self.assertEqual(compile_mod.swift_compile_issues(log), [])
+
+    def test_device_archive_is_not_a_simulator_binary(self) -> None:
+        self.assertTrue(compile_mod.simulator_archive_issues(""))
+        self.assertTrue(compile_mod.simulator_archive_issues("platform 2\n"))
+        self.assertEqual(
+            compile_mod.simulator_archive_issues("platform IOSSIMULATOR\n"), []
+        )
+        self.assertEqual(compile_mod.simulator_archive_issues("platform 7\n"), [])
+
+    def test_prepare_step_targets_the_simulator(self) -> None:
+        job = (ROOT / ".github/workflows/dial-gate.yml").read_text(encoding="utf-8")
+        job = job.split("ios_unsigned_compile:", 1)[1]
+        self.assertIn("flutter build ios --simulator --config-only --no-pub", job)
+        self.assertNotIn("flutter build ios --release", job)
+        self.assertNotIn("dart setup.dart build -p ios", job)
