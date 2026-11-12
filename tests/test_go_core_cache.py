@@ -323,8 +323,8 @@ class GoCoreCacheContractTests(unittest.TestCase):
     def test_dial_gate_needs_are_load_bearing(self) -> None:
         text = BUILD.read_text(encoding="utf-8")
         broken = text.replace(
-            "  dial_gate:\n    name: Dial gate\n    needs: [source_binding]\n",
-            "  dial_gate:\n    name: Dial gate\n    needs: [source_binding, preflight]\n",
+            "  dial_gate:\n    name: Dial gate (${{ matrix.name }})\n    needs: [source_binding]\n",
+            "  dial_gate:\n    name: Dial gate (${{ matrix.name }})\n    needs: [source_binding, preflight]\n",
             1,
         )
         self.assertNotEqual(broken, text)
