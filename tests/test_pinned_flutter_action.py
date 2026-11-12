@@ -477,6 +477,10 @@ class LinkPlatformCacheTests(unittest.TestCase):
         self._assert_cache_identity(workflow)
 
     def _assert_cache_identity(self, workflow: str) -> None:
+        # The kernel cache moved into the shared dial workflow. Identity still
+        # has to see that block together with the release caches.
+        if "yue-dialkernel-v1-" not in workflow:
+            workflow += "\n" + (ROOT / ".github/workflows/dial-gate.yml").read_text()
         sdk = json.loads((ROOT / "tests/fixtures/flutter-coverage-groups-20261028.json").read_text())["live_sdk"]
         fields = ("frameworkVersion", "frameworkRevision", "engineRevision", "dartSdkVersion")
         identity = "-sdk-" + "-".join(sdk[field] for field in fields)
@@ -486,9 +490,23 @@ class LinkPlatformCacheTests(unittest.TestCase):
             for block in blocks
             if re.search(r"(?m)^(?:        )?uses: actions/cache", block)
         ]
+        dial = [block for block in caches if "yue-dialkernel-v1-" in block]
         output_caches = [block for block in caches if "yue-gocore-v1-" in block]
-        dependency_caches = [block for block in caches if "yue-gocore-v1-" not in block]
-        assert output_caches and dependency_caches
+        dependency_caches = [
+            block
+            for block in caches
+            if "yue-dialkernel-v1-" not in block and "yue-gocore-v1-" not in block
+        ]
+        assert dial and output_caches and dependency_caches
+        assert len(dependency_caches) == 9
+        for block in dial:
+            assert "steps.dial_kernel.outputs.key" in block
+            assert "${{ env.GO_VERSION }}" in block
+            assert "restore-keys" not in block
+            assert "continue-on-error: true" in block
+            assert "path: dial-out/kernel-cache" in block
+            assert identity not in block
+            assert "${{ hashFiles('pubspec.lock') }}" not in block
         for block in output_caches:
             key = re.search(r"(?m)^          key: (.+)$", block)
             assert key is not None
@@ -528,6 +546,10 @@ class LinkPlatformCacheTests(unittest.TestCase):
         seen = set()
         for block in blocks:
             if re.search(r"(?m)^(?:        )?uses: actions/cache", block):
+                if "yue-dialkernel-v1-" in block:
+                    dial_path = block.split("          path: ", 1)[1].split("          key:", 1)[0].strip()
+                    assert dial_path == "dial-out/kernel-cache"
+                    continue
                 path = block.split("          path: ", 1)[1].split("          key:", 1)[0].strip()
                 paths = path[1:].splitlines() if path.startswith("|") else [path]
                 for item in paths:
