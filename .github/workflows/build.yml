@@ -801,6 +801,7 @@ jobs:
           echo "BUILD_NUM=${BUILD_NUM}" >> "$GITHUB_ENV"
 
       - run: flutter pub get --enforce-lockfile
+      - run: dart run slang
 
       - name: Probe Windows durable credential storage
         if: matrix.platform == 'windows'
@@ -1910,6 +1911,9 @@ jobs:
       - name: Resolve locked verification dependencies
         if: needs.preflight.outputs.tag_kind == 'stable'
         run: flutter pub get --enforce-lockfile
+      - name: Generate translations
+        if: needs.preflight.outputs.tag_kind == 'stable'
+        run: dart run slang
 
       # 2026-06-01: 只从 R2 下 .sha256(KB 级), 不下 ~5GB 二进制 —— 二进制 build job
       # 已传 R2, release job 只需 sha256 拼 manifest。省 R2 下载带宽(免费档 1GB/天,
