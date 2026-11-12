@@ -26,6 +26,38 @@ def _step_body(workflow: str, name: str) -> str:
     return marker + (rest[: match.start()] if match else rest)
 
 
+def _setup_flutter_issues(workflow: str) -> list[str]:
+    """Every setup-flutter use is a pinned SHA with the reviewed cache flag.
+
+    The set is whatever the workflow contains. A new job may add a use.
+    An unpinned ref, a missing cache flag, or cache: false is a failure.
+    An empty set is a failure: the workflow always installs Flutter.
+    """
+    issues: list[str] = []
+    matches = list(
+        re.finditer(
+            r"uses:\s*(onesyue/yuelink-ci/\.github/actions/setup-flutter@\S+)",
+            workflow,
+        )
+    )
+    if not matches:
+        return ["setup-flutter is absent"]
+    pinned = re.compile(
+        r"onesyue/yuelink-ci/\.github/actions/setup-flutter@[0-9a-f]{40}"
+    )
+    for match in matches:
+        ref = match.group(1)
+        if pinned.fullmatch(ref) is None:
+            issues.append(f"unpinned setup-flutter: {ref}")
+            continue
+        end = workflow.find("\n      - ", match.start())
+        block = workflow[match.start() :] if end < 0 else workflow[match.start() : end]
+        if re.search(r"(?m)^\s+cache: false\s*$", block):
+            issues.append(f"setup-flutter cache is off: {ref}")
+        elif re.search(r"(?m)^\s+cache: true\s*$", block) is None:
+            issues.append(f"setup-flutter omits cache: true: {ref}")
+    return issues
+
 def _installer_module():
     spec = importlib.util.spec_from_file_location("install_flutter_sdk", INSTALLER)
     assert spec is not None and spec.loader is not None
@@ -395,20 +427,35 @@ class LinkPlatformCacheTests(unittest.TestCase):
         assert "path: ~\\AppData\\Local\\go-build" in windows_compiler
         assert "runner.os" in compiler
 
-        flutter_starts = [
-            match.start()
-            for match in re.finditer(
+        assert _setup_flutter_issues(workflow) == []
+
+    def test_each_setup_flutter_pin_is_mutation_sensitive(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "build.yml").read_text(
+            encoding="utf-8"
+        )
+        matches = list(
+            re.finditer(
                 r"onesyue/yuelink-ci/\.github/actions/setup-flutter@[0-9a-f]{40}",
                 workflow,
             )
-        ]
-        assert len(flutter_starts) == 3
-        for start in flutter_starts:
-            end = workflow.find("\n      - ", start)
-            block = workflow[start:end]
-            assert re.search(r"(?m)^\s+cache: true\s*$", block)
-            assert re.search(r"(?m)^\s+cache: false\s*$", block) is None
-
+        )
+        assert matches
+        for match in matches:
+            mutated = (
+                workflow[: match.start()]
+                + "onesyue/yuelink-ci/.github/actions/setup-flutter@v1"
+                + workflow[match.end() :]
+            )
+            assert _setup_flutter_issues(mutated)
+            end = workflow.find("\n      - ", match.start())
+            assert end > match.start()
+            block = workflow[match.start() : end]
+            assert "cache: true" in block
+            removed = block.replace("cache: true", "cache: omitted", 1)
+            dropped = workflow[: match.start()] + removed + workflow[end:]
+            assert any(
+                "omits cache: true" in issue for issue in _setup_flutter_issues(dropped)
+            )
     def test_dependency_cache_actions_keys_and_restore_prefixes(self) -> None:
         workflow = (ROOT / ".github/workflows/build.yml").read_text()
         self._assert_cache_identity(workflow)

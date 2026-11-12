@@ -119,7 +119,50 @@ must_replace(
 """,
 "release-checkout")
 
-# 5) dial-gate candidate checkout. Unique because of path: candidate.
+# 5) coverage shard and join checkouts. Named so they stay distinct from preflight.
+must_replace(
+"""      - name: Checkout attested source for one coverage shard
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ needs.source_binding.outputs.source_commit }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+""",
+"""      - name: Checkout attested source for one coverage shard
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ needs.source_binding.outputs.source_commit }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+""",
+"coverage-shard-checkout")
+
+must_replace(
+"""      - name: Checkout attested source for the coverage join
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ needs.source_binding.outputs.source_commit }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+""",
+"""      - name: Checkout attested source for the coverage join
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ needs.source_binding.outputs.source_commit }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+""",
+"coverage-join-checkout")
+
+# 6) dial-gate candidate checkout. Unique because of path: candidate.
 must_replace(
 """      - name: Checkout dial-gate candidate
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -143,7 +186,7 @@ must_replace(
 """,
 "dial-gate-candidate-checkout")
 
-# 6) dial-gate baseline checkout.
+# 7) dial-gate baseline checkout.
 must_replace(
 """      - name: Checkout dial-gate baseline v1.3.174
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0

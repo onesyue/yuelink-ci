@@ -431,8 +431,19 @@ jobs:
             sudo apt-get install -y lcov
           fi
 
+      - name: Place coverage outside preflight when the source allows it
+        id: coverage_place
+        run: |
+          set -euo pipefail
+          if grep -q 'COVERAGE_EXTERNAL' scripts/ci/release_preflight.sh; then
+            echo "external=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "external=0" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run in-workflow release gates
         env:
+          COVERAGE_EXTERNAL: ${{ steps.coverage_place.outputs.external }}
           GH_TOKEN: ${{ github.token }}
           ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
           SOURCE_ATTESTATION_RUN_ID: ${{ needs.source_binding.outputs.attestation_run_id }}
@@ -499,9 +510,166 @@ jobs:
         if: github.repository == 'onesyue/yuelink-ci'
         run: bash .public-builder/sync-build.sh --check "$GITHUB_WORKSPACE"
 
+
+  coverage_shard:
+    name: Coverage shard ${{ matrix.shard }}
+    if: github.event_name != 'pull_request' && !(github.repository == 'onesyue/yuelink-ci' && startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-24.04
+    needs: source_binding
+    environment: yuelink-build
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ['0', '1', '2', '3']
+    steps:
+      - name: Checkout attested source for one coverage shard
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ needs.source_binding.outputs.source_commit }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Verify exact attested source checkout
+        shell: bash
+        env:
+          ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          BUILT_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          [ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ] || {
+            echo "::error::coverage source drift: attested=$ATTESTED_SOURCE_COMMIT built=$BUILT_SOURCE_COMMIT"
+            exit 1
+          }
+
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Checkout coverage tools
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.repository == 'onesyue/yuelink-ci' && github.sha || env.COVERAGE_TOOLS_SHA }}
+          path: coverage/canonical-tools
+          persist-credentials: false
+
+      - name: Install lcov
+        run: |
+          if ! command -v lcov >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y lcov
+          fi
+
+      - name: Run one coverage shard
+        env:
+          COVERAGE_JOB_SHARD: ${{ matrix.shard }}/4
+          YUELINK_CI_TOOLS_DIR: ${{ github.workspace }}/coverage/canonical-tools/scripts
+        run: |
+          set -euo pipefail
+          if ! grep -q 'COVERAGE_EXTERNAL' scripts/ci/release_preflight.sh; then
+            echo "source preflight still owns coverage"
+            exit 0
+          fi
+          bash scripts/ci/run_flutter_coverage.sh
+
+      - name: Upload coverage shard
+        if: hashFiles('coverage/source-gate/shard.json') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: |
+            coverage/source-gate/shard.json
+            coverage/lcov.info
+          if-no-files-found: error
+          retention-days: 3
+
+  coverage_join:
+    name: Stitch coverage shards
+    if: github.event_name != 'pull_request' && !cancelled() && needs.preflight.result == 'success' && (needs.coverage_shard.result == 'success' || needs.coverage_shard.result == 'skipped')
+    runs-on: ubuntu-24.04
+    needs: [source_binding, preflight, coverage_shard]
+    environment: yuelink-build
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout attested source for the coverage join
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ needs.source_binding.outputs.source_commit }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Verify exact attested source checkout
+        shell: bash
+        env:
+          ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          BUILT_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          [ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ] || {
+            echo "::error::coverage source drift: attested=$ATTESTED_SOURCE_COMMIT built=$BUILT_SOURCE_COMMIT"
+            exit 1
+          }
+
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Checkout coverage tools
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.repository == 'onesyue/yuelink-ci' && github.sha || env.COVERAGE_TOOLS_SHA }}
+          path: coverage/canonical-tools
+          persist-credentials: false
+
+      - name: Download coverage shards
+        if: needs.coverage_shard.result == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: coverage-shard-*
+          path: coverage-shards
+
+      - name: Stitch shards or accept the in-process suite
+        env:
+          YUELINK_CI_TOOLS_DIR: ${{ github.workspace }}/coverage/canonical-tools/scripts
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          manifests=(coverage-shards/*/shard.json)
+          if [ ${#manifests[@]} -eq 0 ]; then
+            if [ "${GITHUB_REPOSITORY}" = onesyue/yuelink-ci ] && [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+              echo "tag reuses the attested suite"
+              exit 0
+            fi
+            if ! grep -q 'COVERAGE_EXTERNAL' scripts/ci/release_preflight.sh; then
+              echo "source preflight still owns coverage"
+              exit 0
+            fi
+            echo "::error::coverage shards produced no manifest"
+            exit 1
+          fi
+          if ! command -v lcov >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y lcov
+          fi
+          python3 "$YUELINK_CI_TOOLS_DIR/stitch-coverage-shards.py" coverage-shards
+          dart run tool/automation/coverage_ratchet.dart --check
+
   build:
     name: Build (${{ matrix.platform }})
-    needs: [source_binding, prepare, preflight]
+    needs: [source_binding, prepare, preflight, coverage_join]
     runs-on: ${{ matrix.os }}
     # Same credential boundary as preflight (see the note there).
     environment: yuelink-build

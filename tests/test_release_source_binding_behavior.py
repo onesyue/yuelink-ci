@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import stat
 import subprocess
 import tempfile
@@ -123,6 +124,56 @@ def source_proof(**overrides: object) -> str:
 def source_runs(*runs: str) -> str:
     payloads = [json.loads(run) for run in runs] if runs else [json.loads(source_run())]
     return json.dumps({"workflow_runs": payloads})
+
+_EXACT_SOURCE_REF = "ref: ${{ needs.source_binding.outputs.source_commit }}"
+_SOURCE_EQUALITY = '[ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ]'
+_SOURCE_DEPLOY_KEY = "ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}"
+_COVERAGE_SOURCE_CHECKOUTS = (
+    "Checkout attested source for one coverage shard",
+    "Checkout attested source for the coverage join",
+)
+
+
+def public_source_binding_issues(workflow: str) -> list[str]:
+    """Bind every exact public source checkout. Do not freeze how many exist.
+
+    A checkout of onesyue/yuelink whose ref is exactly the attested source
+    commit must carry the deploy key, and the same job must compare HEAD to
+    that commit. The dial candidate uses a compound ref and the baseline
+    stays on its reviewed tag, so neither is an exact attested checkout.
+    Coverage shard and join checkouts belong to that derived set.
+    """
+    issues: list[str] = []
+    bound: list[str] = []
+    jobs = re.split(r"(?m)^(?=  [A-Za-z0-9_-]+:\s*$)", workflow)
+    for job in jobs:
+        steps = re.split(r"(?m)^(?=      - )", job)
+        for step in steps:
+            if "repository: onesyue/yuelink\n" not in step:
+                continue
+            if _EXACT_SOURCE_REF not in step:
+                continue
+            name_match = re.search(r"(?m)^      - name: (.+)$", step)
+            name = (
+                name_match.group(1).strip()
+                if name_match
+                else "<unnamed attested checkout>"
+            )
+            bound.append(name)
+            if _SOURCE_DEPLOY_KEY not in step:
+                issues.append(
+                    f"{name} checks out public source without the deploy key"
+                )
+            if _SOURCE_EQUALITY not in job:
+                issues.append(
+                    f"{name} does not compare HEAD to the attested source"
+                )
+    if not bound:
+        issues.append("no public source checkout is bound to the attested commit")
+    for name in _COVERAGE_SOURCE_CHECKOUTS:
+        if name not in bound:
+            issues.append(f"missing bound checkout: {name}")
+    return issues
 
 class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -406,14 +457,7 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
         self.assertEqual(output, "")
 
     def test_all_public_source_checkouts_and_summary_are_bound(self) -> None:
-        self.assertEqual(
-            self.workflow.count("ref: ${{ needs.source_binding.outputs.source_commit }}"),
-            3,
-        )
-        self.assertEqual(
-            self.workflow.count('[ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ]'),
-            4,
-        )
+        self.assertEqual(public_source_binding_issues(self.workflow), [])
         for marker in (
             "Checkout exact source-attestation verifier",
             'bash "$SOURCE_ATTESTATION_VERIFIER"',
@@ -423,6 +467,39 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
             "BUILT_SOURCE_COMMIT:",
         ):
             self.assertIn(marker, self.workflow)
+
+    def test_each_attested_source_checkout_is_mutation_sensitive(self) -> None:
+        workflow = self.workflow
+        seen = 0
+        jobs = re.split(r"(?m)^(?=  [A-Za-z0-9_-]+:\s*$)", workflow)
+        for job in jobs:
+            steps = re.split(r"(?m)^(?=      - )", job)
+            for step in steps:
+                if "repository: onesyue/yuelink\n" not in step:
+                    continue
+                if _EXACT_SOURCE_REF not in step:
+                    continue
+                seen += 1
+                without_key = step.replace(
+                    _SOURCE_DEPLOY_KEY, "ssh-key: ${{ secrets.MISSING }}", 1
+                )
+                self.assertNotEqual(without_key, step)
+                self.assertTrue(
+                    public_source_binding_issues(workflow.replace(step, without_key, 1))
+                )
+                self.assertIn(_SOURCE_EQUALITY, job)
+                self.assertTrue(
+                    public_source_binding_issues(
+                        workflow.replace(job, job.replace(_SOURCE_EQUALITY, "true"), 1)
+                    )
+                )
+        self.assertGreaterEqual(seen, 1)
+        for name in _COVERAGE_SOURCE_CHECKOUTS:
+            mutated = workflow.replace(
+                f"      - name: {name}\n", "      - name: unbound checkout\n", 1
+            )
+            issues = public_source_binding_issues(mutated)
+            self.assertTrue(any(name in issue for issue in issues), issues)
 
     def test_platform_identity_uses_attested_commit_not_private_tag_ref(self) -> None:
         start = self.workflow.index("      - name: Record exact sideload identity")
