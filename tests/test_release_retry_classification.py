@@ -170,7 +170,7 @@ gh() {
                 subprocess.run(['patch', '--batch', direction, str(target)], input=patch,
                                capture_output=True, check=True)
             self.assertEqual(target.read_bytes(), expected)
-            self.assertIn('scripts/public-release-retry.patch', (ROOT / 'sync-build.sh').read_text())
+            self.assertIn('gpgverify_unavailable', (ROOT / 'scripts/check_public_build.py').read_text())
 
 
 if __name__ == '__main__':

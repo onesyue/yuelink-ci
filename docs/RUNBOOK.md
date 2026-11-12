@@ -8,9 +8,9 @@ policy checks and workflow ownership are in [README](../README.md).
 From a clean, current `master` checkout:
 
 ```bash
-./sync-build.sh ../yuelink
+./sync-build.sh --check
 git diff -- .github/workflows/build.yml
-./sync-build.sh --check ../yuelink
+./sync-build.sh --check
 
 SOURCE_SHA=$(git -C ../yuelink rev-parse HEAD)
 gh workflow run source-attestation.yml -R onesyue/yuelink-ci \
@@ -150,7 +150,7 @@ establishes a complete release. Use the existing public run's receipts.
 
 | Incident | Response |
 |---|---|
-| Generated workflow parity fails | Fix the private template, regenerate with `sync-build.sh`, then check parity and re-attest the exact identities. |
+| Generated workflow parity fails | Edit the public build.yml, run `sync-build.sh --check`, then re-attest the exact identities. |
 | Attestation/signature/environment check fails | Stop before tag/promotion; never substitute local test output or an older proof. |
 | Terminal transient build failure | Follow the client's bounded same-run recovery; preserve source/builder/tag and finite observation deadline. |
 | Missing platform / immutable-byte conflict | Do not borrow old binaries or overwrite an archive; use guarded recovery or a higher-version repair. |

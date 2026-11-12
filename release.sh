@@ -160,9 +160,9 @@ PUBLIC_TAG_MESSAGE="$(printf \
   'YueLink public builder %s\n\nATTESTED_SOURCE_COMMIT=%s\nSOURCE_ATTESTATION_RUN_ID=%s' \
   "$TAG" "$SOURCE_COMMIT" "$ATTESTATION_RUN_ID")"
 
-# 对比远端私仓同名 tag 中的精确 workflow，而不是旁边 ../yuelink 当前
-# 工作区。后者可能有尚未进入 tag 的修改；用它做 sync check 会让公开 tag
-# 带着“未来 workflow”去 checkout 旧私仓源码，直到 runner 缺脚本才爆炸。
+# Fetch the exact source tag for version verification. The public workflow
+# is no longer generated from a private build.yml, so this snapshot is not
+# a workflow template.
 SOURCE_SNAPSHOT="$(mktemp -d "${TMPDIR:-/tmp}/yuelink-ci-source-tag.XXXXXX")"
 # Fetch the exact source tag over HTTPS using gh's credential helper. Never
 # print authentication data or fall back to a sibling working tree.
@@ -174,20 +174,11 @@ if ! git -C "$SOURCE_SNAPSHOT" -c credential.helper= \
   exit 1
 fi
 bash scripts/verify-source-version.sh "$SOURCE_SNAPSHOT" "$TAG" "$SOURCE_COMMIT"
-mkdir -p "$SOURCE_SNAPSHOT/.github/workflows"
-gh_read gh api \
-  "repos/onesyue/yuelink/contents/.github/workflows/build.yml?ref=$TAG" \
-  --jq '.content' \
-  | tr -d '\r\n' \
-  | openssl base64 -d -A \
-      > "$SOURCE_SNAPSHOT/.github/workflows/build.yml"
-[ -s "$SOURCE_SNAPSHOT/.github/workflows/build.yml" ] || {
-  echo "::error::无法读取私仓 $TAG 的 build.yml；拒绝用本地工作区代替。"
-  exit 1
-}
-./sync-build.sh --check "$SOURCE_SNAPSHOT"
+# The public workflow is canonical. Do not fetch a private build.yml: that
+# file is retired, and a missing private template must not block admission.
+./sync-build.sh --check
 
-echo "✓ 工作区、远端私仓 tag workflow、公开镜像和 tag 状态均已验证"
+echo "✓ 工作区、公开构建器自检和 tag 状态均已验证"
 
 remote_public_tag_state() {
   local status attempt

@@ -2,8 +2,8 @@
 
 ubuntu-latest moves to a newer image on 2026-10-19 and the Linux AppImage
 inherits the runner's glibc floor, so no workflow here may use a floating
-Ubuntu label. build.yml is not hand-edited: it must be exactly what
-sync-build.sh generates from the private repo's build.yml.
+Ubuntu label. build.yml is canonical in this repository. sync-build.sh --check
+validates that file and does not read a private template.
 """
 
 from __future__ import annotations
@@ -40,15 +40,19 @@ class RunnerPinContractTests(unittest.TestCase):
             labels.update(re.findall(r"ubuntu-[0-9][0-9.]*", wf.read_text(encoding="utf-8")))
         assert labels == {"ubuntu-24.04"}
 
-    @unittest.skipUnless(
-        (PRIVATE / ".github/workflows/build.yml").is_file(),
-        "private yuelink checkout not present (set YUELINK_SRC)",
-    )
-    def test_build_yml_equals_sync_output(self) -> None:
+    def test_public_build_self_check_passes_without_a_private_template(self) -> None:
+        missing = ROOT / "does-not-exist-private-source"
         result = subprocess.run(
-            ["bash", str(ROOT / "sync-build.sh"), "--check", str(PRIVATE)],
+            ["bash", str(ROOT / "sync-build.sh"), "--check", str(missing)],
             cwd=ROOT,
             capture_output=True,
             text=True,
         )
         assert result.returncode == 0, result.stdout + result.stderr
+        refused = subprocess.run(
+            ["bash", str(ROOT / "sync-build.sh"), str(missing)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        assert refused.returncode == 2, refused.stdout + refused.stderr

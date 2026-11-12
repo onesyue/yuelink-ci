@@ -241,6 +241,8 @@ jobs:
       # analyze、gitleaks、govulncheck、macOS/Windows 探针和全部发版契约；
       # Flutter 回执只证明 flutter-analyze。全量测试仍可在 PR/日常 CI 跑。
       - name: Capture executed Flutter gate identities
+        env:
+          YUELINK_FLUTTER_INSTALLER: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49
         run: python3 scripts/ci/attested_preflight.py capture --kind flutter --output "$RUNNER_TEMP/flutter-reuse.json"
 
       - name: Retain executed Flutter gate receipt

@@ -32,6 +32,8 @@ def _setup_flutter_issues(workflow: str) -> list[str]:
     The set is whatever the workflow contains. A new job may add a use.
     An unpinned ref, a missing cache flag, or cache: false is a failure.
     An empty set is a failure: the workflow always installs Flutter.
+    YUELINK_FLUTTER_INSTALLER must name that same pin. The private source
+    tree no longer has a workflow for attested_preflight to read.
     """
     issues: list[str] = []
     matches = list(
@@ -45,17 +47,30 @@ def _setup_flutter_issues(workflow: str) -> list[str]:
     pinned = re.compile(
         r"onesyue/yuelink-ci/\.github/actions/setup-flutter@[0-9a-f]{40}"
     )
+    pinned_refs: list[str] = []
     for match in matches:
         ref = match.group(1)
         if pinned.fullmatch(ref) is None:
             issues.append(f"unpinned setup-flutter: {ref}")
             continue
+        pinned_refs.append(ref)
         end = workflow.find("\n      - ", match.start())
         block = workflow[match.start() :] if end < 0 else workflow[match.start() : end]
         if re.search(r"(?m)^\s+cache: false\s*$", block):
             issues.append(f"setup-flutter cache is off: {ref}")
         elif re.search(r"(?m)^\s+cache: true\s*$", block) is None:
             issues.append(f"setup-flutter omits cache: true: {ref}")
+    envs = re.findall(
+        r"(?m)^[ ]*YUELINK_FLUTTER_INSTALLER:\s*(\S+)\s*$",
+        workflow,
+    )
+    if not envs:
+        issues.append("YUELINK_FLUTTER_INSTALLER is absent")
+    elif set(envs) != set(pinned_refs) or len(set(pinned_refs)) != 1:
+        issues.append(
+            "YUELINK_FLUTTER_INSTALLER "
+            f"{sorted(set(envs))} must match setup-flutter {sorted(set(pinned_refs))}"
+        )
     return issues
 
 def _installer_module():
@@ -443,6 +458,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
             )
         )
         assert matches
+        checked_uses = 0
         for match in matches:
             mutated = (
                 workflow[: match.start()]
@@ -450,6 +466,10 @@ class LinkPlatformCacheTests(unittest.TestCase):
                 + workflow[match.end() :]
             )
             assert _setup_flutter_issues(mutated)
+            prefix = workflow[max(0, match.start() - 24) : match.start()]
+            if re.search(r"uses:\s*$", prefix) is None:
+                continue
+            checked_uses += 1
             end = workflow.find("\n      - ", match.start())
             assert end > match.start()
             block = workflow[match.start() : end]
@@ -459,6 +479,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
             assert any(
                 "omits cache: true" in issue for issue in _setup_flutter_issues(dropped)
             )
+        assert checked_uses >= 1
     def test_dependency_cache_actions_keys_and_restore_prefixes(self) -> None:
         workflow = (ROOT / ".github/workflows/build.yml").read_text()
         self._assert_cache_identity(workflow)

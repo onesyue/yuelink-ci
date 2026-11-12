@@ -224,17 +224,21 @@ def source_flutter_issues(workflow: str) -> list[str]:
     # that SHA into this check went stale on the previous pin move and hid later
     # failures. The count and `cache: true` stay: three receipt-verified usages,
     # because `cache: false` puts about five minutes back on every attestation.
+    # YUELINK_FLUTTER_INSTALLER repeats that pin for the private preflight. It
+    # is not a fourth installer use.
     issues: list[str] = []
     pins = list(
         re.finditer(
-            r"onesyue/yuelink-ci/\.github/actions/setup-flutter@[0-9a-f]{40}",
+            r"uses:\s*(onesyue/yuelink-ci/\.github/actions/setup-flutter@[0-9a-f]{40})",
             workflow,
         )
     )
-    starts = [match.start() for match in pins]
-    if len(starts) != 3:
+    if len(pins) != 3:
         issues.append("source attestation must have exactly three installer usages")
-    for index, start in enumerate(starts):
+    refs: list[str] = []
+    for index, match in enumerate(pins):
+        refs.append(match.group(1))
+        start = match.start()
         end = workflow.find("\n      - ", start)
         if end < 0:
             end = len(workflow)
@@ -246,6 +250,14 @@ def source_flutter_issues(workflow: str) -> list[str]:
             )
         if "cache: false" in block or "channel:" in block:
             issues.append(f"source installer usage {index + 1} has legacy inputs")
+    envs = re.findall(
+        r"(?m)^[ ]*YUELINK_FLUTTER_INSTALLER:\s*(\S+)\s*$",
+        workflow,
+    )
+    if set(envs) != set(refs) or len(set(refs)) != 1:
+        issues.append(
+            "YUELINK_FLUTTER_INSTALLER must match the setup-flutter usages"
+        )
     return issues
 
 
@@ -643,7 +655,7 @@ class SourceAttestationContractTests(unittest.TestCase):
         starts = [
             match.start()
             for match in re.finditer(
-                r"onesyue/yuelink-ci/\.github/actions/setup-flutter@[0-9a-f]{40}",
+                r"uses:\s*onesyue/yuelink-ci/\.github/actions/setup-flutter@[0-9a-f]{40}",
                 self.workflow,
             )
         ]
@@ -827,7 +839,7 @@ class SourceAttestationContractTests(unittest.TestCase):
         assert attest == build, (
             f"source-attestation 用 Go {attest}，而发布构建器用 Go {build}。"
             "attestation 证明的是另一份标准库，等于没证。"
-            "sync-build.sh 只镜像 build.yml，这一份要手工跟。")
+            "两份公开工作流的 Go 版本必须一起改。")
 
     def test_flutter_version_matches_release_builder(self):
         """同理，Flutter 版本也必须两边一致。"""

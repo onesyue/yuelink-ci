@@ -44,11 +44,9 @@ remote read. The script never deletes, overwrites or re-tags an immutable name.
 
 ## Workflow ownership
 
-[sync-build.sh](sync-build.sh) generates [build.yml](.github/workflows/build.yml)
-from the private YueLink template with explicit private-source checkout patches.
-The public workflow is the release executor; the private file remains the
-canonical editable template and a gate input. Do not hand-maintain two builders
-or delete the template. Check parity before every builder change.
+[build.yml](.github/workflows/build.yml) is the canonical release workflow.
+[sync-build.sh](sync-build.sh) `--check` validates that file. It does not copy
+a private template. Edit the public workflow in this repository.
 
 The public [key-recovery workflow](.github/workflows/backup-critical-workstation-keys.yml)
 is manual and hosted. The private counterpart supports an ephemeral recovery
@@ -73,6 +71,6 @@ resolved actions are intentionally absent; adding one requires policy review.
 `@*` permissions never permit mutable workflow pins.
 
 Sources: [source-attestation contract](tests/test_source_attestation_contract.py),
-[shared verifier](scripts/verify-source-attestation.sh), [sync generator](sync-build.sh)
+[shared verifier](scripts/verify-source-attestation.sh), [public workflow self-check](sync-build.sh)
 and the operational material consolidated from README.md at base
 `dda16708a19405d0822a1862fc2ecb6b5a2ec519` into [RUNBOOK](docs/RUNBOOK.md).
