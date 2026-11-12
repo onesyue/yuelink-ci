@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -74,6 +77,48 @@ class FlutterMachineCountTests(unittest.TestCase):
     def test_floor_rejects_a_single_missing_test(self) -> None:
         with self.assertRaisesRegex(counter.ProtocolError, "observed 2043"):
             counter.enforce_floor(2043, 2044)
+
+
+    def test_cli_reports_the_count_and_ignores_a_floor(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            path.write_text(
+                '{"type":"start"}\n'
+                '{"type":"testStart","test":{"id":1}}\n'
+                '{"type":"done","success":true}\n',
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/count-flutter-machine-tests.py"),
+                    str(path),
+                    "--minimum",
+                    "999",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("Flutter tests observed: 1", completed.stdout)
+
+    def test_cli_protocol_error_is_nonzero(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            path.write_text('{"type":"start"}\nnot-json\n', encoding="utf-8")
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/count-flutter-machine-tests.py"),
+                    str(path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("malformed Flutter machine JSON", completed.stderr)
 
 
 if __name__ == "__main__":

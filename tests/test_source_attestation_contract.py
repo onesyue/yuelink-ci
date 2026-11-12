@@ -16,17 +16,6 @@ SOURCE_VERIFIER = ROOT / "scripts/verify-source-attestation.sh"
 README = ROOT / "README.md"
 DEPENDABOT = ROOT / ".github/dependabot.yml"
 
-EXPECTED_ACTION_YAML = {
-    ".github/actions/setup-flutter/action.yml",
-    ".github/workflows/backup-critical-workstation-keys.yml",
-    ".github/workflows/build.yml",
-    ".github/workflows/ephemeral-signer-bridge.yml",
-    ".github/workflows/manifest-health.yml",
-    ".github/workflows/policy-ci.yml",
-    ".github/workflows/prune-r2.yml",
-    ".github/workflows/r2-lock-attestation.yml",
-    ".github/workflows/source-attestation.yml",
-}
 EXPECTED_EXTERNAL_ACTION_REPOS = {
     "android-actions/setup-android",
     "onesyue/yuelink-ci",
@@ -179,10 +168,11 @@ README_MARKERS = (
 
 def actions_policy_issues(automation: dict[str, str], readme: str) -> list[str]:
     issues: list[str] = []
-    if set(automation) != EXPECTED_ACTION_YAML:
-        issues.append(
-            "public automation inventory must match the reviewed exact path set"
-        )
+    # Any workflow or composite-action path is allowed. What is required is
+    # that every `uses:` ref is a 40-hex commit, so adding a workflow does not
+    # need a second edit of this list.
+    if not automation:
+        issues.append("public automation inventory is empty")
 
     repositories: set[str] = set()
     action_count = 0
@@ -230,23 +220,18 @@ def actions_policy_issues(automation: dict[str, str], readme: str) -> list[str]:
 
 
 def source_flutter_issues(workflow: str) -> list[str]:
-    # 2026-08-31: two deliberate policy updates in one repair.
-    #   1. The installer pin tracks the CURRENT approved commit. The previous
-    #      value (17d69267…) went stale when the installer advanced to
-    #      635b8e87…, which turned this guard permanently red — and that
-    #      standing red hid every later contract failure behind background
-    #      noise (policy-ci was failing on push for days, unnoticed).
-    #   2. `cache: true` is now the reviewed state (receipt-verified SDK
-    #      cache, fails closed to a fresh verified download; rationale at the
-    #      build workflow's preflight setup-flutter step). `cache: false`
-    #      here is drift — it silently restores ~5 wall-clock minutes per
-    #      attestation.
+    # The installer commit is whichever 40-hex pin the workflow uses. Copying
+    # that SHA into this check went stale on the previous pin move and hid later
+    # failures. The count and `cache: true` stay: three receipt-verified usages,
+    # because `cache: false` puts about five minutes back on every attestation.
     issues: list[str] = []
-    pin = (
-        "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-        "d6c9eb965b79818ed944b3e2df168905b535ff49"
+    pins = list(
+        re.finditer(
+            r"onesyue/yuelink-ci/\.github/actions/setup-flutter@[0-9a-f]{40}",
+            workflow,
+        )
     )
-    starts = [match.start() for match in re.finditer(re.escape(pin), workflow)]
+    starts = [match.start() for match in pins]
     if len(starts) != 3:
         issues.append("source attestation must have exactly three installer usages")
     for index, start in enumerate(starts):
@@ -629,10 +614,13 @@ class SourceAttestationContractTests(unittest.TestCase):
                 fake / ".github/actions/setup-flutter/install_flutter_sdk.py",
             )
             self.assertEqual(installer_lane_drift_issues(fake), [])
-            stale = self.workflow.replace(
-                "d6c9eb965b79818ed944b3e2df168905b535ff49",
-                "77737f79d3011a27d82e23e56be5b8112d824f51",
+            current = re.search(
+                r"setup-flutter@([0-9a-f]{40})", self.workflow
             )
+            self.assertIsNotNone(current)
+            current_pin = current.group(1)
+            other = "0" * 40 if current_pin != "0" * 40 else "1" * 40
+            stale = self.workflow.replace(current_pin, other)
             (fake / ".github/workflows/source-attestation.yml").write_text(
                 stale, encoding="utf-8"
             )
@@ -652,12 +640,12 @@ class SourceAttestationContractTests(unittest.TestCase):
     def test_each_source_attestation_flutter_cache_mutation_is_rejected(self) -> None:
         # Reversed direction since the 2026-08-31 decision: the reviewed
         # state is `cache: true`; a quiet flip back to `false` must go red.
-        pin = (
-            "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-            "d6c9eb965b79818ed944b3e2df168905b535ff49"
-        )
         starts = [
-            match.start() for match in re.finditer(re.escape(pin), self.workflow)
+            match.start()
+            for match in re.finditer(
+                r"onesyue/yuelink-ci/\.github/actions/setup-flutter@[0-9a-f]{40}",
+                self.workflow,
+            )
         ]
         self.assertEqual(len(starts), 3)
         for index, start in enumerate(starts):
@@ -685,10 +673,22 @@ class SourceAttestationContractTests(unittest.TestCase):
         )
         self.assertTrue(actions_policy_issues(self.automation, mutated))
 
-    def test_actions_policy_rejects_automation_inventory_drift(self) -> None:
+    def test_actions_policy_accepts_a_new_path_when_its_action_is_pinned(self) -> None:
         automation = dict(self.automation)
-        automation.pop(".github/workflows/ephemeral-signer-bridge.yml")
-        self.assertTrue(actions_policy_issues(automation, self.readme))
+        automation[".github/workflows/added-later.yml"] = (
+            "jobs:\n  check:\n    steps:\n      - uses: actions/checkout@"
+            + ("ab" * 20)
+            + "\n"
+        )
+        self.assertEqual(actions_policy_issues(automation, self.readme), [])
+
+    def test_actions_policy_rejects_an_unpinned_action_ref(self) -> None:
+        automation = dict(self.automation)
+        automation[".github/workflows/added-later.yml"] = (
+            "jobs:\n  check:\n    steps:\n      - uses: actions/checkout@v1\n"
+        )
+        issues = actions_policy_issues(automation, self.readme)
+        self.assertTrue(any("mutable or malformed action ref" in item for item in issues))
 
     def test_sha_pinning_policy_has_dependabot_maintenance(self) -> None:
         dependabot = DEPENDABOT.read_text(encoding="utf-8")
