@@ -340,14 +340,27 @@ class LinkPlatformCacheTests(unittest.TestCase):
             match.start()
             for match in re.finditer(r"- uses: actions/setup-go@", workflow)
         ]
-        # preflight, the release build, and the dial gate
-        assert len(starts) == 3
+        # preflight and the release build. Dial setup-go lives in dial-gate.yml.
+        assert len(starts) == 2
         for start in starts:
             end = workflow.find("\n      - ", start)
             block = workflow[start:end]
             assert "cache: false" in block
             assert "cache: true" not in block
             assert "cache-dependency-path" not in block
+        dial = (ROOT / ".github" / "workflows" / "dial-gate.yml").read_text(
+            encoding="utf-8"
+        )
+        dial_starts = [
+            match.start()
+            for match in re.finditer(r"- uses: actions/setup-go@", dial)
+        ]
+        assert dial_starts
+        for start in dial_starts:
+            end = dial.find("\n      - ", start)
+            block = dial[start:end if end > start else None]
+            assert "cache: false" in block
+            assert "cache: true" not in block
         java = workflow.index("- name: Set up Java for native ownership tests")
         restore = workflow.index("- name: Restore Go module cache\n")
         assert java < starts[1] < restore
