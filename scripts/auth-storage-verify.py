@@ -277,6 +277,15 @@ def verify(args: argparse.Namespace) -> int:
             )
             if receipt["exit_code"] != 0:
                 raise ValueError("dependencies")
+            receipt["stage"] = "translations"
+            receipt["exit_code"] = capture(
+                ["dart", "run", "slang"],
+                source,
+                raw / "slang",
+                env=env,
+            )
+            if receipt["exit_code"] != 0:
+                raise ValueError("translations")
             receipt["stage"] = "tests"
             receipt["exit_code"] = capture(
                 [
