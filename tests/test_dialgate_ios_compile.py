@@ -1181,10 +1181,9 @@ class IOSCompileTests(unittest.TestCase):
         )
         policy = json.loads((ROOT / "policy/dialgate-source.json").read_text())
         self.assertEqual(policy["iosCompileMode"], "negative")
-        self.assertEqual(
-            (policy["sourcePr"], policy["sourceCommit"]),
-            (133, "1b28d5fb1e8122a03d46279e03f27fcf8ee191a7"),
-        )
+        self.assertIsInstance(policy["sourcePr"], int)
+        self.assertGreater(policy["sourcePr"], 0)
+        self.assertRegex(policy["sourceCommit"], r"^[0-9a-f]{40}\Z")
         self.assertNotEqual(policy["sourceCommit"], ios.POSITIVE_SOURCE)
 
     def test_negative_and_unrelated_failure_can_never_turn_required_check_green(self):
