@@ -466,7 +466,18 @@ class LinkPlatformCacheTests(unittest.TestCase):
         identity = "-sdk-" + "-".join(sdk[field] for field in fields)
         blocks = re.split(r"(?m)^      - ", workflow)
         caches = [block for block in blocks if re.search(r"(?m)^(?:        )?uses: actions/cache", block)]
+        dial = [block for block in caches if "yue-dialkernel-v1-" in block]
+        caches = [block for block in caches if block not in dial]
+        assert dial
         assert len(caches) == 9
+        for block in dial:
+            assert "steps.dial_kernel.outputs.key" in block
+            assert "${{ env.GO_VERSION }}" in block
+            assert "restore-keys" not in block
+            assert "continue-on-error: true" in block
+            assert "path: dial-out/kernel-cache" in block
+            assert identity not in block
+            assert "${{ hashFiles('pubspec.lock') }}" not in block
         for block in caches:
             key = re.search(r"(?m)^          key: (.+)$", block)
             assert key is not None
@@ -499,6 +510,10 @@ class LinkPlatformCacheTests(unittest.TestCase):
         seen = set()
         for block in blocks:
             if re.search(r"(?m)^(?:        )?uses: actions/cache", block):
+                if "yue-dialkernel-v1-" in block:
+                    dial_path = block.split("          path: ", 1)[1].split("          key:", 1)[0].strip()
+                    assert dial_path == "dial-out/kernel-cache"
+                    continue
                 path = block.split("          path: ", 1)[1].split("          key:", 1)[0].strip()
                 paths = path[1:].splitlines() if path.startswith("|") else [path]
                 for item in paths:

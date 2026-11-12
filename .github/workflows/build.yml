@@ -2909,6 +2909,30 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: false
 
+      - name: Dial kernel cache key
+        id: dial_kernel
+        shell: bash
+        run: |
+          set +e
+          key=$(bash candidate/core/dialgate/ci/run.sh cache-key)
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ] && [ -n "$key" ]; then
+            printf 'key=%s\n' "$key" >> "$GITHUB_OUTPUT"
+          else
+            echo "dial kernel cache key is unavailable; the kernels will be compiled"
+            printf 'key=\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore dial kernels
+        id: dial_kernel_cache
+        if: steps.dial_kernel.outputs.key != ''
+        continue-on-error: true
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: dial-out/kernel-cache
+          key: yue-dialkernel-v1-${{ matrix.name }}-${{ runner.os }}-${{ runner.arch }}-${{ env.GO_VERSION }}-${{ steps.dial_kernel.outputs.key }}-xcode-26.6
+
       - name: Enable KVM
         if: matrix.kind == 'android'
         run: |
