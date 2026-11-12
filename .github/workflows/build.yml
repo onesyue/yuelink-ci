@@ -862,17 +862,158 @@ jobs:
       # half fails with `gcc_arm64.S: no such instruction`. Pin to amd64
       # explicitly. Android / iOS / macOS handle their own arch matrices
       # internally (NDK / lipo / static lib).
-      - name: Build & install Go core
+      # The cache stores those built libraries. A hit skips compile. install
+      # always copies them into the Flutter tree, including the macOS lipo.
+      # Service helpers and the desktop feed overlay are yuelink sources, so
+      # the mihomo commit alone is not the cache identity.
+      - name: Record Go core cache identity
         shell: bash
         run: |
+          set -euo pipefail
+          sha="$(git -C core/mihomo rev-parse HEAD)"
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::core/mihomo HEAD is not 40 hex"
+            exit 1
+          fi
           case "$PLATFORM" in
-            windows|linux)
-              dart setup.dart build -p "$PLATFORM" -a amd64
-              ;;
+            windows|linux) arch_scope=amd64 ;;
+            android|ios|macos) arch_scope=all ;;
             *)
-              dart setup.dart build -p "$PLATFORM"
+              echo "::error::unknown platform for Go core cache: $PLATFORM"
+              exit 1
               ;;
           esac
+          # Staged changes disagree with the checkout commit. A worktree-only
+          # diff is not a failure: Windows core.autocrlf can dirty a clean checkout.
+          if ! git diff --cached --quiet -- setup.dart setup_install.dart service core \
+            || ! git -C core/mihomo diff --cached --quiet; then
+            echo "::error::Go core cache inputs are dirty"
+            exit 1
+          fi
+          untracked="$(git ls-files --others --exclude-standard -- setup.dart setup_install.dart service core)"
+          untracked_sub="$(git -C core/mihomo ls-files --others --exclude-standard)"
+          if [ -n "$untracked" ] || [ -n "$untracked_sub" ]; then
+            echo "::error::Go core cache inputs have untracked files"
+            exit 1
+          fi
+          tab="$(printf '\t')"
+          listing="$(git ls-files -s -- setup.dart setup_install.dart service core)"
+          filtered=""
+          while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in
+              *"${tab}core/mihomo"|*"${tab}core/mihomo/"*) continue ;;
+              *"${tab}core/build/"*) continue ;;
+              *"${tab}service/build/"*) continue ;;
+              "") continue ;;
+            esac
+            filtered="${filtered}${line}"$'\n'
+          done < <(printf '%s\n' "$listing")
+          if [ -z "$filtered" ]; then
+            echo "::error::Go core cache inputs are empty"
+            exit 1
+          fi
+          case "$filtered" in
+            *"${tab}setup.dart"*) ;;
+            *) echo "::error::setup.dart missing from Go core cache inputs"; exit 1 ;;
+          esac
+          case "$filtered" in
+            *"${tab}setup_install.dart"*) ;;
+            *) echo "::error::setup_install.dart missing from Go core cache inputs"; exit 1 ;;
+          esac
+          case "$filtered" in
+            *"${tab}service/"*) ;;
+            *) echo "::error::service sources missing from Go core cache inputs"; exit 1 ;;
+          esac
+          case "$filtered" in
+            *"${tab}core/"*) ;;
+            *) echo "::error::core sources missing from Go core cache inputs"; exit 1 ;;
+          esac
+          inputs_sha="$(printf '%s\n' "$filtered" | git hash-object --stdin)"
+          if ! [[ "$inputs_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Go core input hash is not 40 hex"
+            exit 1
+          fi
+          {
+            echo "CORE_SHA=$sha"
+            echo "CORE_ARCH_SCOPE=$arch_scope"
+            echo "CORE_INPUTS_SHA=$inputs_sha"
+          } >> "$GITHUB_ENV"
+      - name: Restore built Go core
+        id: go_core_build
+        continue-on-error: true
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            core/build
+            service/build
+          key: yue-gocore-v1-${{ matrix.platform }}-${{ runner.os }}-${{ runner.arch }}-${{ env.GO_VERSION }}-${{ env.CORE_ARCH_SCOPE }}-${{ env.CORE_SHA }}-${{ env.CORE_INPUTS_SHA }}-ndk-28.2.13676358-xcode-26.6
+      - name: Build & install Go core
+        shell: bash
+        env:
+          GO_CORE_CACHE_HIT: ${{ steps.go_core_build.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          build_core() {
+            case "${CORE_ARCH_SCOPE:-}" in
+              amd64)
+                dart setup.dart build -p "$PLATFORM" -a amd64
+                ;;
+              all)
+                dart setup.dart build -p "$PLATFORM"
+                ;;
+              *)
+                echo "::error::Go core arch scope is not amd64 or all"
+                exit 1
+                ;;
+            esac
+          }
+          libraries_present() {
+            case "$PLATFORM" in
+              android)
+                [ -f core/build/android-arm64/libclash.so ] \
+                  && [ -f core/build/android-arm/libclash.so ] \
+                  && [ -f core/build/android-x86_64/libclash.so ]
+                ;;
+              ios)
+                [ -f core/build/ios-arm64/libclash.a ] \
+                  && [ -f core/build/ios-arm64/libclash.h ]
+                ;;
+              macos)
+                [ -f core/build/macos-arm64/libclash.dylib ] \
+                  && [ -f core/build/macos-amd64/libclash.dylib ] \
+                  && [ -f service/build/macos-arm64/yuelink-service-helper ] \
+                  && [ -f service/build/macos-amd64/yuelink-service-helper ] \
+                  && [ -f service/build/macos-arm64/yuelink-mihomo ] \
+                  && [ -f service/build/macos-amd64/yuelink-mihomo ]
+                ;;
+              windows)
+                [ -f core/build/windows-amd64/libclash.dll ] \
+                  && [ -f service/build/windows-amd64/yuelink-service-helper.exe ] \
+                  && [ -f service/build/windows-amd64/yuelink-mihomo.exe ]
+                ;;
+              linux)
+                [ -f core/build/linux-amd64/libclash.so ] \
+                  && [ -f service/build/linux-amd64/yuelink-service-helper ] \
+                  && [ -f service/build/linux-amd64/yuelink-mihomo ]
+                ;;
+              *)
+                echo "::error::unknown platform $PLATFORM" >&2
+                return 2
+                ;;
+            esac
+          }
+          if [ "${GO_CORE_CACHE_HIT:-}" != "true" ]; then
+            build_core
+          elif libraries_present; then
+            echo "Go core cache hit for $PLATFORM; skipping compile"
+          else
+            status=$?
+            if [ "$status" -eq 2 ]; then
+              exit "$status"
+            fi
+            echo "Go core cache hit did not restore $PLATFORM libraries; building"
+            build_core
+          fi
           dart setup.dart install -p "$PLATFORM"
 
       # ─────────────────────────────────────────────────────────────────────
