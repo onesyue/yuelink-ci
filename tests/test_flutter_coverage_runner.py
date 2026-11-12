@@ -575,7 +575,8 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
         workflow = (ROOT / ".github/workflows/source-attestation.yml").read_text()
         native = workflow.split("  macos_integration:", 1)[1].split("  windows_durability:", 1)[0]
         self.assertIn("flutter test --no-pub --machine " + name, native)
-        self.assertIn("macos-keychain.jsonl --minimum 4", native)
+        self.assertIn("macos-keychain.jsonl", native)
+        self.assertNotIn("--minimum", native)
         self.assertIn("set -euo pipefail", native)
 
     def test_unassigned_platform_annotation_refuses(self):

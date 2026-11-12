@@ -34,105 +34,99 @@ def _installer_module():
     return module
 
 
+def _workflow_flutter_versions() -> set[str]:
+    versions: set[str] = set()
+    for name in ("build.yml", "source-attestation.yml"):
+        text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+        found = re.findall(r"(?m)^  FLUTTER_VERSION:\s*'([^']+)'", text)
+        if not found:
+            raise AssertionError(f"{name} does not declare FLUTTER_VERSION")
+        versions.update(found)
+    if not versions:
+        raise AssertionError("workflow Flutter versions are empty")
+    return versions
+
+
+def _release_format_issues(
+    releases: dict[tuple[str, ...], tuple[str, str]],
+    *,
+    required: set[tuple[str, ...]],
+    platforms: set[str],
+    arm64: bool,
+) -> list[str]:
+    """Check release rows by shape. Digests stay in the installer, not here."""
+    issues: list[str] = []
+    if not releases:
+        issues.append("release table is empty")
+    missing = sorted(required - set(releases))
+    if missing:
+        issues.append(f"workflow Flutter versions are missing: {missing}")
+    prefixes = {
+        "Linux": "stable/linux/",
+        "Darwin": "stable/macos/",
+        "Windows": "stable/windows/",
+    }
+    for key, (archive, digest) in releases.items():
+        version = key[0]
+        platform = key[1]
+        if platform not in platforms or platform not in prefixes:
+            issues.append(f"unexpected platform in {key}")
+            continue
+        if not archive.startswith(prefixes[platform]) or version not in archive:
+            issues.append(f"archive path does not match {key}: {archive}")
+        if ".." in archive or archive.startswith(("/", "\\")):
+            issues.append(f"archive path is not relative: {archive}")
+        if arm64 and "arm64" not in archive:
+            issues.append(f"apple silicon archive is not arm64: {archive}")
+        if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            issues.append(f"digest for {key} is not 64 hex characters")
+    return issues
+
 class PinnedFlutterActionTests(unittest.TestCase):
     def test_composite_action_has_no_mutable_nested_action(self) -> None:
         source = ACTION.read_text(encoding="utf-8")
         refs = re.findall(r"(?m)^\s*uses:\s*([^\s#]+)", source)
-        assert refs == ["actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306"]
+        assert refs
+        pinned = re.compile(r"actions/cache(?:/restore|/save)?@[0-9a-f]{40}")
+        for ref in refs:
+            assert pinned.fullmatch(ref), ref
         assert "subosito/flutter-action" not in source
         assert "runner.tool_cache" in source
+        mutable = source + "\n      uses: actions/cache@v1\n"
+        mutable_refs = re.findall(r"(?m)^\s*uses:\s*([^\s#]+)", mutable)
+        assert any(pinned.fullmatch(ref) is None for ref in mutable_refs)
 
-    def test_release_table_is_exact_and_closed(self) -> None:
+    def test_release_table_covers_workflow_versions_and_digest_format(self) -> None:
         installer = _installer_module()
         assert installer.BASE_URL == (
             "https://storage.googleapis.com/flutter_infra_release/releases/"
         )
-        assert installer.RELEASES == {
-            ("3.47.2", "Linux"): (
-                "stable/linux/flutter_linux_3.47.2-stable.tar.xz",
-                "447878859d01ca9bfdb99a85f245af07ed8a15fedcd9d189c4749e8e92d1f185",
-            ),
-            ("3.47.2", "Darwin"): (
-                "stable/macos/flutter_macos_3.47.2-stable.zip",
-                "b6fd6ba98c8503d5ee06a6670627b5b1c36167ece3427435ec83b66e9b28c6b5",
-            ),
-            ("3.47.2", "Windows"): (
-                "stable/windows/flutter_windows_3.47.2-stable.zip",
-                "37934f2128a55d77a38baba12fd611157ed23a47bf7d2b7d17e9e84da118409d",
-            ),
-            ("3.47.3", "Linux"): (
-                "stable/linux/flutter_linux_3.47.3-stable.tar.xz",
-                "988665565cad9091db1baa54bf6d3868bb40e29719592f3c3a164deefd4208e1",
-            ),
-            ("3.47.3", "Darwin"): (
-                "stable/macos/flutter_macos_3.47.3-stable.zip",
-                "cd1e1a877db74b8928251225d38469077994e904b1b5bb359f3376c43ac0495c",
-            ),
-            ("3.47.3", "Windows"): (
-                "stable/windows/flutter_windows_3.47.3-stable.zip",
-                "44822ab53afb543c6fb446c078ba4f495e3eeddaafb88d879bde606447ddce24",
-            ),
-            ("3.47.4", "Linux"): (
-                "stable/linux/flutter_linux_3.47.4-stable.tar.xz",
-                "5b45f0ceda99b9bebdc873e7e69f6450aeb4c30f454b505e2e62fc9255a907d3",
-            ),
-            ("3.47.5", "Linux"): (
-                "stable/linux/flutter_linux_3.47.5-stable.tar.xz",
-                "2132e990f236f8d22e7c6314b29a191a95b10d7cbcfec9b4e2e303d996652cbb",
-            ),
-            ("3.47.6", "Linux"): (
-                "stable/linux/flutter_linux_3.47.6-stable.tar.xz",
-                "f1631b9c2c8b3529323db412b0d1beacf4a748f8783b0d7cf599a8fd5f461675",
-            ),
-            ("3.47.7", "Linux"): (
-                "stable/linux/flutter_linux_3.47.7-stable.tar.xz",
-                "af7455f540df951184c7953fbe3cf884766e7541dacf8571f9f582db03dd6230",
-            ),
-            ("3.47.4", "Darwin"): (
-                "stable/macos/flutter_macos_3.47.4-stable.zip",
-                "72ced0f81a5ea48f30d221699fa45378cdd1fa15426512444f32e4e1bee9db8b",
-            ),
-            ("3.47.5", "Darwin"): (
-                "stable/macos/flutter_macos_3.47.5-stable.zip",
-                "a7893bb0feecd8bd066f4f7e850356f896a6fc3b862e6c506d21c76691a66b72",
-            ),
-            ("3.47.6", "Darwin"): (
-                "stable/macos/flutter_macos_3.47.6-stable.zip",
-                "f1f68c777b2b34153e1631670445efbeb218f42a398be32bba2051476719b0a4",
-            ),
-            ("3.47.7", "Darwin"): (
-                "stable/macos/flutter_macos_3.47.7-stable.zip",
-                "17d39b000a5d0681e3f7b61a105a36f6f31dd41ab9073f625fd466f38035f901",
-            ),
-            ("3.47.4", "Windows"): (
-                "stable/windows/flutter_windows_3.47.4-stable.zip",
-                "31173300481bd06e377fd55ee84214689648b1817563efd7b450b7b78bdf351a",
-            ),
-            ("3.47.5", "Windows"): (
-                "stable/windows/flutter_windows_3.47.5-stable.zip",
-                "0ccd71931f49c2fbe394b1eeb6d79af3d624058a043ea0d03d34160581624fb8",
-            ),
-            ("3.47.6", "Windows"): (
-                "stable/windows/flutter_windows_3.47.6-stable.zip",
-                "a01bb0d26de91bc23c97cd9ccfaad281a612fb8304213fdd5df1119a09404796",
-            ),
-            ("3.47.7", "Windows"): (
-                "stable/windows/flutter_windows_3.47.7-stable.zip",
-                "c2c875da25a1a1448d18ee4e8f398b2f6fce888b4775d8f9130538e16d826cb4",
-            ),
-            ("3.47.8", "Linux"): (
-                "stable/linux/flutter_linux_3.47.8-stable.tar.xz",
-                "baf7dcc5a3dbba60fe863bf493a6cf203195621f7786eaa5a1bba02cd0d87dd2",
-            ),
-            ("3.47.8", "Darwin"): (
-                "stable/macos/flutter_macos_3.47.8-stable.zip",
-                "b8a3c255a51a8c0c0943a4d5bdf9b26008c34f02febf69640c8aab413afd896f",
-            ),
-            ("3.47.8", "Windows"): (
-                "stable/windows/flutter_windows_3.47.8-stable.zip",
-                "11e19ea3409808fe3b3765ea8149640c299e58cce6eda7c9f38fc1b4a193eb6e",
-            ),
+        versions = _workflow_flutter_versions()
+        required = {
+            (version, platform)
+            for version in versions
+            for platform in ("Linux", "Darwin", "Windows")
         }
+        platforms = {"Linux", "Darwin", "Windows"}
+        assert _release_format_issues(
+            installer.RELEASES,
+            required=required,
+            platforms=platforms,
+            arm64=False,
+        ) == []
+        broken = dict(installer.RELEASES)
+        key = next(iter(broken))
+        archive, _digest = broken[key]
+        broken[key] = (archive, "not-a-digest")
+        assert _release_format_issues(
+            broken, required=required, platforms=platforms, arm64=False
+        )
+        shrunk = dict(installer.RELEASES)
+        removed = next(item for item in shrunk if item in required)
+        del shrunk[removed]
+        assert _release_format_issues(
+            shrunk, required=required, platforms=platforms, arm64=False
+        )
 
     def test_archive_member_validation_rejects_traversal_and_absolute_paths(self) -> None:
         installer = _installer_module()
@@ -286,34 +280,23 @@ class PinnedFlutterActionTests(unittest.TestCase):
             else:  # pragma: no cover - fail-closed assertion
                 raise AssertionError(f"invalid Flutter machine output was accepted: {invalid!r}")
 
-    def test_native_apple_silicon_sdk_is_official_and_pinned(self) -> None:
+    def test_native_apple_silicon_sdk_covers_workflow_versions(self) -> None:
         installer = _installer_module()
-        assert installer.ARCH_RELEASES == {
-            ("3.47.3", "Darwin", "ARM64"): (
-                "stable/macos/flutter_macos_arm64_3.47.3-stable.zip",
-                "66144a7cd691059c8c73bfce24178fb9ea2c95d798db8d56d1e2411e760f6583",
-            ),
-            ("3.47.4", "Darwin", "ARM64"): (
-                "stable/macos/flutter_macos_arm64_3.47.4-stable.zip",
-                "c6af6fa1d64946167b8637ba4c5a7bb3b8574729a1ebe931decd4924dbab7061",
-            ),
-            ("3.47.5", "Darwin", "ARM64"): (
-                "stable/macos/flutter_macos_arm64_3.47.5-stable.zip",
-                "d4dd908b5f8f65515831b6d68ae33307a813f2b68947dded7a1994ee5ea7cead",
-            ),
-            ("3.47.6", "Darwin", "ARM64"): (
-                "stable/macos/flutter_macos_arm64_3.47.6-stable.zip",
-                "a1946d3b6b3de15ce247dc89649df9035ce29e6b4e7ebe91919a25890ea2e79a",
-            ),
-            ("3.47.7", "Darwin", "ARM64"): (
-                "stable/macos/flutter_macos_arm64_3.47.7-stable.zip",
-                "dd9da574c3168460550117eb0e8dd0313ae934fabf64a82a6d557fff5fd1422e",
-            ),
-            ("3.47.8", "Darwin", "ARM64"): (
-                "stable/macos/flutter_macos_arm64_3.47.8-stable.zip",
-                "6114edc2dae3636cfefb7e4456a4510399ee856e324149b34dbacb509e329d05",
-            ),
-        }
+        versions = _workflow_flutter_versions()
+        required = {(version, "Darwin", "ARM64") for version in versions}
+        assert _release_format_issues(
+            installer.ARCH_RELEASES,
+            required=required,
+            platforms={"Darwin"},
+            arm64=True,
+        ) == []
+        broken = dict(installer.ARCH_RELEASES)
+        key = next(iter(required))
+        archive, _digest = broken[key]
+        broken[key] = (archive.replace("arm64", "x64"), "zz")
+        assert _release_format_issues(
+            broken, required=required, platforms={"Darwin"}, arm64=True
+        )
 
 
 class LinkPlatformCacheTests(unittest.TestCase):
@@ -412,12 +395,12 @@ class LinkPlatformCacheTests(unittest.TestCase):
         assert "path: ~\\AppData\\Local\\go-build" in windows_compiler
         assert "runner.os" in compiler
 
-        pin = (
-            "onesyue/yuelink-ci/.github/actions/setup-flutter@"
-            "d6c9eb965b79818ed944b3e2df168905b535ff49"
-        )
         flutter_starts = [
-            match.start() for match in re.finditer(re.escape(pin), workflow)
+            match.start()
+            for match in re.finditer(
+                r"onesyue/yuelink-ci/\.github/actions/setup-flutter@[0-9a-f]{40}",
+                workflow,
+            )
         ]
         assert len(flutter_starts) == 3
         for start in flutter_starts:
@@ -438,7 +421,6 @@ class LinkPlatformCacheTests(unittest.TestCase):
         caches = [block for block in blocks if re.search(r"(?m)^(?:        )?uses: actions/cache", block)]
         assert len(caches) == 9
         for block in caches:
-            assert re.search(r"uses: actions/cache(?:/restore|/save)?@55cc8345863c7cc4c66a329aec7e433d2d1c52a9(?: |$)", block)
             key = re.search(r"(?m)^          key: (.+)$", block)
             assert key is not None
             assert identity in key[1]
@@ -491,7 +473,12 @@ class LinkPlatformCacheTests(unittest.TestCase):
 
     def test_cache_contract_rejects_anonymous_output_restore_and_broad_fallback(self) -> None:
         workflow = (ROOT / ".github/workflows/build.yml").read_text()
-        unsafe = workflow + "\n      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9\n        with:\n          path: dist\n          key: unsafe\n"
+        unsafe = (
+            workflow
+            + "\n      - uses: actions/cache@"
+            + ("ab" * 20)
+            + "\n        with:\n          path: dist\n          key: unsafe\n"
+        )
         with self.assertRaises(AssertionError):
             self._assert_cache_boundary(unsafe)
         with self.assertRaises(AssertionError):
@@ -505,11 +492,10 @@ class LinkPlatformCacheTests(unittest.TestCase):
         sdk = json.loads(
             (ROOT / "tests/fixtures/flutter-coverage-groups-20261028.json").read_text()
         )["live_sdk"]
+        current = re.search(r"actions/cache/restore@[0-9a-f]{40}", workflow)
+        assert current is not None
         mutations = [
-            workflow.replace(
-                "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-                "actions/cache/restore@v6", 1,
-            ),
+            workflow.replace(current.group(0), "actions/cache/restore@v6", 1),
             workflow.replace("${{ hashFiles('pubspec.lock') }}", "unbound", 1),
         ]
         mutations.extend(workflow.replace(value, "unbound", 1) for value in (

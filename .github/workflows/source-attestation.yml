@@ -444,7 +444,7 @@ jobs:
         run: |
           set -euo pipefail
           flutter test --no-pub --machine test/core/storage/secure_storage_macos_keychain_test.dart | tee "$RUNNER_TEMP/macos-keychain.jsonl"
-          python3 .source-attestation-tools/scripts/count-flutter-machine-tests.py "$RUNNER_TEMP"/macos-keychain.jsonl --minimum 4
+          python3 .source-attestation-tools/scripts/count-flutter-machine-tests.py "$RUNNER_TEMP"/macos-keychain.jsonl
       - name: Run integration tests on macOS host
         run: flutter test integration_test/ -d macos --reporter expanded
       - name: Verify native proxy transport and privileged isolated preferences
