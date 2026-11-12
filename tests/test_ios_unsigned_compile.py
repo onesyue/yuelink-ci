@@ -5,8 +5,11 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -73,13 +76,7 @@ class IosUnsignedCompileTests(unittest.TestCase):
         self.assertTrue(any("PacketTunnel" in issue for issue in issues))
 
     def test_swift_compile_of_both_targets_passes(self) -> None:
-        log = "\n".join(
-            (
-                "SwiftCompile normal arm64 Compiling A.swift /src/ios/Runner/A.swift",
-                "SwiftCompile normal arm64 Compiling B.swift /src/ios/PacketTunnel/B.swift",
-                "** BUILD SUCCEEDED **",
-            )
-        )
+        log = "SwiftCompile normal arm64 Compiling A.swift /src/ios/Runner/A.swift\nSwiftCompile normal arm64 Compiling B.swift /src/ios/PacketTunnel/B.swift\n** BUILD SUCCEEDED **"
         self.assertEqual(compile_mod.swift_compile_issues(log), [])
 
     def test_device_archive_is_not_a_simulator_binary(self) -> None:
@@ -100,29 +97,61 @@ class IosUnsignedCompileTests(unittest.TestCase):
 
 class FailureDiagnosticsTests(unittest.TestCase):
     def test_linker_cause_survives_generic_clang_error(self) -> None:
-        log = "\n".join(
-            (
-                "Ld PacketTunnel normal arm64",
-                "ld: framework 'MissingFramework' not found",
-                "clang: error: linker command failed with exit code 1",
-            )
-        )
+        log = "Ld PacketTunnel normal arm64\nld: framework 'MissingFramework' not found\nclang: error: linker command failed with exit code 1"
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr):
             compile_mod._emit_failure(log)
         self.assertIn("ld: framework 'MissingFramework' not found", stderr.getvalue())
 
     def test_undefined_symbol_references_are_preserved(self) -> None:
-        log = "\n".join(
-            (
-                "Undefined symbols for architecture arm64:",
-                '  "_missing_native_call", referenced from:',
-                "      _start in bridge.o",
-                "ld: symbol(s) not found for architecture arm64",
-                "clang: error: linker command failed with exit code 1",
-            )
-        )
+        log = 'Undefined symbols for architecture arm64:\n  "_missing_native_call", referenced from:\n      _start in bridge.o\nld: symbol(s) not found for architecture arm64\nclang: error: linker command failed with exit code 1'
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr):
             compile_mod._emit_failure(log)
         self.assertIn("_missing_native_call", stderr.getvalue())
+
+    def test_simulator_identifier_is_redacted_from_context(self) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            compile_mod._emit_failure(
+                f"destination id={PHONE}\nclang: error: link failed"
+            )
+        self.assertNotIn(PHONE, stderr.getvalue())
+        self.assertIn("<redacted-id>", stderr.getvalue())
+
+
+class SimulatorKernelTests(unittest.TestCase):
+    def test_build_installs_into_simulator_search_path_without_overwriting_device(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            frameworks = source / "ios" / "Frameworks"
+            frameworks.mkdir(parents=True)
+            device = frameworks / "libclash.a"
+            device.write_bytes(b"device archive")
+            expected = frameworks / "sim" / "libclash.a"
+
+            def build(argv, **kwargs):
+                output = Path(argv[argv.index("-o") + 1])
+                self.assertTrue(output.parent.is_dir())
+                output.write_bytes(b"simulator archive")
+                output.with_suffix(".h").write_text("// generated header")
+                self.assertEqual(kwargs["env"]["GOOS"], "ios")
+                self.assertIn("-simulator", kwargs["env"]["CGO_CFLAGS"])
+                return subprocess.CompletedProcess(argv, 0)
+
+            probes = [
+                subprocess.CompletedProcess([], 0, "/sdk\n", ""),
+                subprocess.CompletedProcess([], 0, "/clang\n", ""),
+                subprocess.CompletedProcess([], 0, "platform IOSSIMULATOR\n", ""),
+            ]
+            with (
+                patch.object(compile_mod, "_capture", side_effect=probes) as capture,
+                patch.object(compile_mod.subprocess, "run", side_effect=build),
+            ):
+                compile_mod.build_simulator_kernel(source, io.StringIO())
+            self.assertTrue(
+                expected.is_file(), "Xcode's simulator search path has no archive"
+            )
+            self.assertTrue(expected.with_suffix(".h").is_file())
+            self.assertEqual(device.read_bytes(), b"device archive")
+            self.assertEqual(capture.call_args.args[0][-1], str(expected))
