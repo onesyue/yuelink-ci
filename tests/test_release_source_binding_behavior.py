@@ -120,6 +120,9 @@ def source_proof(**overrides: object) -> str:
     payload.update(overrides)
     return json.dumps(payload)
 
+def source_runs(*runs: str) -> str:
+    payloads = [json.loads(run) for run in runs] if runs else [json.loads(source_run())]
+    return json.dumps({"workflow_runs": payloads})
 
 class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -137,7 +140,7 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
         proof: str | None = None,
         attestation_ok: bool = True,
         dispatch_source: str = "",
-        dispatch_run: str = "",
+        runs: str | None = None,
         ref_name: str = "v9.8.7",
     ) -> tuple[subprocess.CompletedProcess[str], str]:
         with tempfile.TemporaryDirectory() as tmp:
@@ -150,8 +153,10 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
                     """\
                     #!/usr/bin/env bash
                     set -euo pipefail
+                    printf '%s\\n' "$*" >> "${FAKE_GH_LOG:-/dev/null}"
                     if [ "$1" = api ]; then
                       case "$2" in
+                        *'/actions/workflows/source-attestation.yml/runs'*) printf '%s' "$FAKE_RUNS_JSON" ;;
                         *'/git/ref/tags/'*) printf '%s' "$FAKE_REF_JSON" ;;
                         *'/git/tags/'*) printf '%s' "$FAKE_TAG_JSON" ;;
                         *'/actions/workflows/source-attestation.yml') printf '%s' "$FAKE_WORKFLOW_JSON" ;;
@@ -185,6 +190,8 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
             sleep.chmod(sleep.stat().st_mode | stat.S_IXUSR)
             output = tmp_path / "github-output"
             output.touch()
+            gh_log = tmp_path / "gh.log"
+            gh_log.touch()
             env = {
                 **os.environ,
                 "PATH": f"{fake_bin}:{os.environ['PATH']}",
@@ -195,8 +202,9 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
                 else "refs/heads/master",
                 "REF_NAME": ref_name if event != "workflow_dispatch" else "master",
                 "TRIGGER_COMMIT": BUILDER,
-                "DISPATCH_SOURCE_COMMIT": dispatch_source,
-                "DISPATCH_ATTESTATION_RUN_ID": dispatch_run,
+                "DISPATCH_SOURCE_SHA": dispatch_source,
+                "FAKE_RUNS_JSON": source_runs() if runs is None else runs,
+                "FAKE_GH_LOG": str(gh_log),
                 "GITHUB_OUTPUT": str(output),
                 "FAKE_REF_JSON": ref_json or valid_ref(),
                 "FAKE_TAG_JSON": tag or tag_json(),
@@ -215,6 +223,7 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
                 env=env,
                 check=False,
             )
+            result.gh_log = gh_log.read_text(encoding="utf-8")
             return result, output.read_text(encoding="utf-8")
 
     def test_verified_public_annotation_selects_exact_source(self) -> None:
@@ -226,16 +235,92 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
         )
         self.assertIn(f"ATTESTED_SOURCE_COMMIT={SOURCE}", result.stdout)
 
-    def test_dispatch_requires_exact_machine_inputs(self) -> None:
+    def test_dispatch_looks_up_the_green_attestation_run(self) -> None:
+        wrong_branch = source_run(
+            id=99999,
+            head_branch="other",
+            created_at="2026-12-01T00:00:00Z",
+        )
+        wrong_builder = source_run(
+            id=88888,
+            head_sha="d" * 40,
+            created_at="2026-12-02T00:00:00Z",
+        )
+        older = source_run(id=11111, created_at="2026-01-01T00:00:00Z")
+        current = source_run(id=12345, created_at="2026-11-12T00:00:00Z")
         result, output = self.run_binding(
-            event="workflow_dispatch", dispatch_source=SOURCE, dispatch_run="9876"
+            event="workflow_dispatch",
+            dispatch_source=SOURCE,
+            runs=source_runs(wrong_branch, wrong_builder, older, current),
         )
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertEqual(output, f"source_commit={SOURCE}\nattestation_run_id=9876\n")
-        bad, _ = self.run_binding(
-            event="workflow_dispatch", dispatch_source="main", dispatch_run="9876"
+        self.assertEqual(
+            output,
+            f"source_commit={SOURCE}\nattestation_run_id=12345\n",
         )
-        self.assertNotEqual(bad.returncode, 0, bad.stdout)
+        self.assertIn("exact public source attestation verified", result.stdout)
+        self.assertIn("attestation verify", result.gh_log)
+        self.assertNotIn("attested_source_commit:", self.workflow)
+        self.assertNotIn("source_attestation_run_id:", self.workflow)
+        self.assertIn("\n      source_sha:\n", self.workflow)
+        self.assertIn("dialgate_candidate_ref:", self.workflow)
+
+    def test_dispatch_rejects_a_sha_before_any_lookup(self) -> None:
+        for bad in ("main", SOURCE.upper(), ""):
+            with self.subTest(bad=bad):
+                result, output = self.run_binding(
+                    event="workflow_dispatch",
+                    dispatch_source=bad,
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertEqual(output, "")
+                self.assertEqual(result.stdout.count("::error::"), 1)
+                self.assertIn("source_sha must be 40 lowercase hex", result.stdout)
+                self.assertEqual(result.gh_log, "")
+
+    def test_dispatch_rejects_a_sha_with_no_green_run(self) -> None:
+        result, output = self.run_binding(
+            event="workflow_dispatch",
+            dispatch_source=SOURCE,
+            runs=json.dumps({"workflow_runs": []}),
+        )
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(output, "")
+        self.assertEqual(result.stdout.count("::error::"), 1)
+        self.assertIn(
+            f"no green Source attestation for {SOURCE} on builder {BUILDER}",
+            result.stdout,
+        )
+        self.assertNotIn("run download", result.gh_log)
+        self.assertNotIn("attestation verify", result.gh_log)
+
+    def test_dispatch_rejects_a_proof_for_another_source(self) -> None:
+        result, output = self.run_binding(
+            event="workflow_dispatch",
+            dispatch_source=SOURCE,
+            proof=source_proof(sourceSha="d" * 40),
+        )
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(output, "")
+        self.assertEqual(result.stdout.count("::error::"), 1)
+        self.assertIn(
+            f"source attestation proof is for {'d' * 40} not {SOURCE}",
+            result.stdout,
+        )
+        self.assertNotIn("exact source/tag/builder", result.stdout)
+        self.assertNotIn("attestation verify", result.gh_log)
+
+    def test_dispatch_rejects_a_non_release_proof_tag(self) -> None:
+        result, output = self.run_binding(
+            event="workflow_dispatch",
+            dispatch_source=SOURCE,
+            proof=source_proof(releaseTag="v9.8.7-pre.1"),
+        )
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(output, "")
+        self.assertEqual(result.stdout.count("::error::"), 1)
+        self.assertIn("release tag is not vX.Y.Z", result.stdout)
+        self.assertNotIn("attestation verify", result.gh_log)
 
     def test_unverified_or_wrong_builder_tag_is_rejected(self) -> None:
         for payload in (

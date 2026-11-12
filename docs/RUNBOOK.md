@@ -26,6 +26,12 @@ commit, exact generated-workflow parity and required sideload
 secrets before creating the signed public tag. Its annotation binds
 `ATTESTED_SOURCE_COMMIT=<40hex>` and `SOURCE_ATTESTATION_RUN_ID=<id>`.
 
+A preview dispatch of `build.yml` is `gh workflow run build.yml -f source_sha="$SOURCE_SHA"`.
+The workflow looks up the newest green Source attestation for that SHA on this
+builder and verifies the proof. Do not pass a run id. A SHA with no matching
+green run fails before preflight with one reason. `only` remains an optional
+platform filter and is not a release.
+
 The builder's [shared verifier](../scripts/verify-source-attestation.sh)
 authenticates the run, exact proof artifact, complete gate closure and
 GitHub artifact attestation before private checkout. `BUILT_SOURCE_COMMIT` must match;
