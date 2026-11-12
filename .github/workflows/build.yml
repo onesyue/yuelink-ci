@@ -207,19 +207,50 @@ jobs:
           pattern: dial-gate-*
           path: dial-reports
       - name: Write the platform table
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ needs.plan.outputs.source_commit }}
+          REQUIRE_SOURCE_COMMIT: ${{ github.event_name != 'pull_request' }}
         shell: bash
         run: |
           python3 - <<'PY'
-          import json, os, sys
+          import json, os, re, sys
           from pathlib import Path
           want = ["windows", "macos", "linux", "android", "ios"]
           protocols = {"vless-reality-tfo", "vless-reality", "vless-ws-tls", "hysteria2"}
           found = {}
+          identities = None
+          expected_source = os.environ.get("EXPECTED_SOURCE_COMMIT", "")
+          if os.environ.get("REQUIRE_SOURCE_COMMIT") != "false" and not re.fullmatch(r"[0-9a-f]{40}", expected_source):
+              sys.exit("missing or invalid planned release source")
           for path in Path("dial-reports").glob("*/gate.json"):
               data = json.loads(path.read_text())
               platform = data.get("platform")
               if platform not in want or path.parent.name != f"dial-gate-{platform}" or platform in found:
                   sys.exit("invalid or duplicate dial-gate platform evidence")
+              for field, expected in (("schema_version", 2), ("rounds", 5), ("samples_per_round", 20), ("warmup", 1)):
+                  if type(data.get(field)) is not int or data[field] != expected:
+                      sys.exit(f"invalid fixed-round metadata for {platform}")
+              identity = []
+              for role in ("baseline", "candidate"):
+                  source = data.get(role)
+                  if not isinstance(source, dict):
+                      sys.exit(f"missing source identity for {platform}")
+                  for field in ("revision", "core_revision"):
+                      value = source.get(field)
+                      if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{40}", value):
+                          sys.exit(f"invalid source identity for {platform}")
+                      identity.append(value)
+              harness = data.get("harness_revision")
+              if harness != data["candidate"]["revision"]:
+                  sys.exit(f"mismatched measurement harness for {platform}")
+              if expected_source and data["candidate"]["revision"] != expected_source:
+                  sys.exit(f"candidate differs from planned source for {platform}")
+              if data.get("go_version") != "go" + os.environ["GO_VERSION"] or data.get("build_tags") != "with_gvisor":
+                  sys.exit(f"mismatched measurement toolchain for {platform}")
+              identity.extend((harness, data["go_version"], data["build_tags"]))
+              if identities is not None and identity != identities:
+                  sys.exit("source identities differ across platforms")
+              identities = identity
               rows = data.get("rows")
               if not isinstance(rows, list) or len(rows) != len(protocols):
                   sys.exit(f"incomplete protocol evidence for {platform}")
@@ -233,8 +264,24 @@ jobs:
                   if type(row.get("pass")) is not bool:
                       sys.exit(f"invalid protocol verdict for {platform}")
                   for field in ("baseline_samples", "candidate_samples"):
-                      if type(row.get(field)) is not int or row[field] < 20:
+                      if type(row.get(field)) is not int or row[field] != 100:
                           sys.exit(f"insufficient dial samples for {platform}")
+                  rounds = row.get("rounds")
+                  if not isinstance(rounds, list) or len(rounds) != 5:
+                      sys.exit(f"incomplete dial rounds for {platform}")
+                  seen = set()
+                  for item in rounds:
+                      if not isinstance(item, dict) or type(item.get("round")) is not int:
+                          sys.exit(f"invalid dial round for {platform}")
+                      index = item["round"]
+                      if index not in range(5) or index in seen:
+                          sys.exit(f"duplicate or invalid dial round for {platform}")
+                      seen.add(index)
+                      for field in ("baseline_samples", "candidate_samples"):
+                          if type(item.get(field)) is not int or item[field] != 20:
+                              sys.exit(f"incomplete dial round samples for {platform}")
+                      if item.get("success_pass") is not True:
+                          sys.exit(f"failed dial round success gate for {platform}")
               found[platform] = data
           lines = ["| platform | protocol | baseline | candidate | baseline p95 ms | candidate p95 ms | pass |",
                    "|---|---|---:|---:|---:|---:|:---:|"]
