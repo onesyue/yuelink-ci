@@ -109,8 +109,8 @@ Linux compatibility floor; it is not a ban on GitHub-hosted runners.
 
    This checks exact tagged-template parity, source version/signature and proof,
    then creates/verifies the public signed tag. It never replaces an existing
-   tag. Manual `build.yml` dispatch requires `attested_source_commit` and
-   `source_attestation_run_id`; `only` is optional, defaults to `all`, and a
+   tag. Manual `build.yml` dispatch takes `-f source_sha=<40hex>` and looks up
+   the green Source attestation run itself. `only` is optional, defaults to `all`, and a
    single-platform test is not a complete release. Do not dispatch as a dry run.
 5. Require the complete platform/artifact set, provenance and successful signed
    in-pipeline promotion/readback. Retain the public run's receipts. Follow
