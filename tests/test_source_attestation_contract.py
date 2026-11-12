@@ -181,6 +181,20 @@ def actions_policy_issues(automation: dict[str, str], readme: str) -> list[str]:
         for action in actions:
             action_count += 1
             if action.startswith("./"):
+                # A same-commit reusable workflow is pinned by this commit.
+                # Anything else local still needs a 40-hex action pin, which
+                # a path without "@" cannot have.
+                local_workflow = re.fullmatch(
+                    r"\./\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\.ya?ml",
+                    action,
+                )
+                if local_workflow and "@" not in action:
+                    target = action[2:]
+                    if target not in automation:
+                        issues.append(
+                            f"{path}: reusable workflow is not in the automation inventory: {action}"
+                        )
+                    continue
                 issues.append(f"{path}: local/dynamic action is outside the policy")
                 continue
             action_path, separator, ref = action.rpartition("@")
@@ -416,29 +430,52 @@ def installer_lane_drift_issues(root: Path) -> list[str]:
     """The attestation lane and the release build lane must install the same
     Flutter through the same installer commit.
 
-    2026-09-14: build.yml (synced from the private repo) moved to the
-    3.47.4-capable installer abd31d22 while source-attestation.yml kept
-    77737f79 with FLUTTER_VERSION already bumped to 3.47.4. Policy CI was
-    green, the attestation run died in 75 ms with
-    "unsupported release tuple ('3.47.4', 'Linux')". This runs on a shallow
-    checkout, so it compares the two lanes rather than reading history.
+    The build lane is build.yml plus every reusable workflow it calls. A
+    missing called workflow fails closed. Repeating one pin is still one pin.
     """
     issues: list[str] = []
     pin_re = re.compile(
         r"onesyue/yuelink-ci/\.github/actions/setup-flutter@([0-9a-f]{40})"
     )
     version_re = re.compile(r"^  FLUTTER_VERSION: '([0-9.]+)'$", re.MULTILINE)
-    lanes: dict[str, tuple[set[str], set[str]]] = {}
-    for name in ("source-attestation.yml", "build.yml"):
-        text = (root / ".github/workflows" / name).read_text(encoding="utf-8")
+    workflow_dir = root / ".github/workflows"
+    attest_path = workflow_dir / "source-attestation.yml"
+    build_path = workflow_dir / "build.yml"
+    if not attest_path.is_file() or not build_path.is_file():
+        return ["attestation or build workflow is missing"]
+    attest_text = attest_path.read_text(encoding="utf-8")
+    caller = build_path.read_text(encoding="utf-8")
+    parts = [caller]
+    seen: set[str] = set()
+    for name in re.findall(
+        r"uses:\s*\./\.github/workflows/([A-Za-z0-9][A-Za-z0-9_.-]*\.ya?ml)",
+        caller,
+    ):
+        if name in seen:
+            continue
+        seen.add(name)
+        sibling = workflow_dir / name
+        if not sibling.is_file():
+            issues.append(f"build.yml calls missing workflow {name}")
+            continue
+        parts.append(sibling.read_text(encoding="utf-8"))
+    build_text = "\n".join(parts)
+
+    def lane(name: str, text: str) -> tuple[set[str], set[str]]:
         pins = set(pin_re.findall(text))
         versions = set(version_re.findall(text))
         if len(pins) != 1:
-            issues.append(f"{name} must use exactly one installer commit, saw {sorted(pins)}")
+            issues.append(
+                f"{name} must use exactly one installer commit, saw {sorted(pins)}"
+            )
         if len(versions) != 1:
-            issues.append(f"{name} must declare exactly one FLUTTER_VERSION, saw {sorted(versions)}")
-        lanes[name] = (pins, versions)
-    attest, build = lanes["source-attestation.yml"], lanes["build.yml"]
+            issues.append(
+                f"{name} must declare exactly one FLUTTER_VERSION, saw {sorted(versions)}"
+            )
+        return pins, versions
+
+    attest = lane("source-attestation.yml", attest_text)
+    build = lane("build.yml", build_text)
     if attest[0] != build[0]:
         issues.append(
             "source-attestation.yml and build.yml pin different installer commits: "
@@ -449,9 +486,11 @@ def installer_lane_drift_issues(root: Path) -> list[str]:
             "source-attestation.yml and build.yml pin different FLUTTER_VERSION: "
             f"{sorted(attest[1])} vs {sorted(build[1])}"
         )
-    installer = (root / ".github/actions/setup-flutter/install_flutter_sdk.py").read_text(
-        encoding="utf-8"
-    )
+    installer_path = root / ".github/actions/setup-flutter/install_flutter_sdk.py"
+    if not installer_path.is_file():
+        issues.append("checked-out installer is missing")
+        return issues
+    installer = installer_path.read_text(encoding="utf-8")
     for version in attest[1] | build[1]:
         for system in ("Linux", "Darwin", "Windows"):
             if f'("{version}", "{system}")' not in installer:
@@ -617,15 +656,37 @@ class SourceAttestationContractTests(unittest.TestCase):
             (fake / ".github/workflows").mkdir(parents=True)
             (fake / ".github/actions/setup-flutter").mkdir(parents=True)
             shutil.copy(WORKFLOW, fake / ".github/workflows/source-attestation.yml")
+            caller_text = (ROOT / ".github/workflows/build.yml").read_text(
+                encoding="utf-8"
+            )
+            called = re.findall(
+                r"uses:\s*\./\.github/workflows/([A-Za-z0-9][A-Za-z0-9_.-]*\.ya?ml)",
+                caller_text,
+            )
+            self.assertTrue(called)
             shutil.copy(
                 ROOT / ".github/workflows/build.yml",
                 fake / ".github/workflows/build.yml",
             )
+            for name in called:
+                shutil.copy(
+                    ROOT / ".github/workflows" / name,
+                    fake / ".github/workflows" / name,
+                )
             shutil.copy(
                 ROOT / ".github/actions/setup-flutter/install_flutter_sdk.py",
                 fake / ".github/actions/setup-flutter/install_flutter_sdk.py",
             )
             self.assertEqual(installer_lane_drift_issues(fake), [])
+            missing = fake / ".github/workflows" / called[0]
+            missing.unlink()
+            self.assertTrue(
+                any(
+                    "missing workflow" in item
+                    for item in installer_lane_drift_issues(fake)
+                )
+            )
+            shutil.copy(ROOT / ".github/workflows" / called[0], missing)
             current = re.search(
                 r"setup-flutter@([0-9a-f]{40})", self.workflow
             )
@@ -701,6 +762,29 @@ class SourceAttestationContractTests(unittest.TestCase):
         )
         issues = actions_policy_issues(automation, self.readme)
         self.assertTrue(any("mutable or malformed action ref" in item for item in issues))
+
+    def test_actions_policy_allows_a_same_commit_reusable_workflow(self) -> None:
+        automation = dict(self.automation)
+        automation[".github/workflows/added-later.yml"] = (
+            "jobs:\n  check:\n    steps:\n"
+            "      - uses: ./.github/workflows/plan.yml\n"
+        )
+        self.assertEqual(actions_policy_issues(automation, self.readme), [])
+
+    def test_actions_policy_rejects_a_missing_or_unpinned_local_use(self) -> None:
+        automation = dict(self.automation)
+        cases = (
+            "      - uses: ./not-a-workflow\n",
+            "      - uses: ./.github/actions/setup-flutter\n",
+            "      - uses: ./.github/workflows/missing.yml\n",
+            "      - uses: ./.github/workflows/plan.yml@v1\n",
+        )
+        for step in cases:
+            with self.subTest(step=step.strip()):
+                automation[".github/workflows/added-later.yml"] = (
+                    "jobs:\n  check:\n    steps:\n" + step
+                )
+                self.assertTrue(actions_policy_issues(automation, self.readme))
 
     def test_sha_pinning_policy_has_dependabot_maintenance(self) -> None:
         dependabot = DEPENDABOT.read_text(encoding="utf-8")

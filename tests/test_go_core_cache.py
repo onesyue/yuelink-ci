@@ -25,6 +25,12 @@ def repository_root() -> Path:
 ROOT = repository_root()
 BUILD = ROOT / ".github/workflows/build.yml"
 
+
+def pipeline() -> str:
+    from scripts.check_public_build import composed_text
+
+    return composed_text(BUILD)
+
 LIBRARY_PATHS = (
     "core/build/android-arm64/libclash.so",
     "core/build/android-arm/libclash.so",
@@ -208,8 +214,10 @@ def contract_issues(workflow: str) -> list[str]:
         install_at = build_script.find(install)
         if fi_at < 0 or install_at < fi_at:
             issues.append("install must stay outside the compile skip")
-    if dial_gate_needs(workflow) != ["needs: [source_binding]"]:
+    if dial_gate_needs(workflow) != ["needs: [plan]"]:
         issues.append("dial gate needs changed")
+    if "value: ${{ jobs.source_binding.outputs.source_commit }}" not in workflow:
+        issues.append("plan does not publish the attested source commit")
     return issues
 
 
@@ -289,10 +297,10 @@ def read_env(path: Path) -> dict[str, str]:
 
 class GoCoreCacheContractTests(unittest.TestCase):
     def test_workflow_contract_holds(self) -> None:
-        self.assertEqual(contract_issues(BUILD.read_text(encoding="utf-8")), [])
+        self.assertEqual(contract_issues(pipeline()), [])
 
     def test_mihomo_exclusion_is_load_bearing(self) -> None:
-        text = BUILD.read_text(encoding="utf-8")
+        text = pipeline()
         broken = text.replace(
             '*"${tab}core/mihomo"|*"${tab}core/mihomo/"*',
             '*"${tab}core/not-the-submodule"',
@@ -305,7 +313,7 @@ class GoCoreCacheContractTests(unittest.TestCase):
         )
 
     def test_cache_hit_skip_is_load_bearing(self) -> None:
-        text = BUILD.read_text(encoding="utf-8")
+        text = pipeline()
         broken = text.replace(
             '[ "${GO_CORE_CACHE_HIT:-}" != "true" ]',
             '[ "${GO_CORE_CACHE_HIT:-}" != "never" ]',
@@ -315,29 +323,29 @@ class GoCoreCacheContractTests(unittest.TestCase):
         self.assertIn("a cache hit does not skip compile", contract_issues(broken))
 
     def test_install_outside_the_skip_is_load_bearing(self) -> None:
-        text = BUILD.read_text(encoding="utf-8")
+        text = pipeline()
         broken = text.replace('          dart setup.dart install -p "$PLATFORM"\n', "", 1)
         self.assertNotEqual(broken, text)
         self.assertIn("install must run exactly once", contract_issues(broken))
 
     def test_dial_gate_needs_are_load_bearing(self) -> None:
-        text = BUILD.read_text(encoding="utf-8")
+        text = pipeline()
         broken = text.replace(
-            "  dial_gate:\n    name: Dial gate (${{ matrix.name }})\n    needs: [source_binding]\n",
-            "  dial_gate:\n    name: Dial gate (${{ matrix.name }})\n    needs: [source_binding, preflight]\n",
+            "  dial_gate:\n    name: Dial gate (${{ matrix.name }})\n    needs: [plan]\n",
+            "  dial_gate:\n    name: Dial gate (${{ matrix.name }})\n    needs: [plan, preflight]\n",
             1,
         )
         self.assertNotEqual(broken, text)
         self.assertIn("dial gate needs changed", contract_issues(broken))
 
     def test_core_sha_in_the_key_is_load_bearing(self) -> None:
-        text = BUILD.read_text(encoding="utf-8")
+        text = pipeline()
         broken = text.replace("${{ env.CORE_SHA }}", "${{ env.NOT_THE_CORE }}", 1)
         self.assertNotEqual(broken, text)
         self.assertIn("cache key missing ${{ env.CORE_SHA }}", contract_issues(broken))
 
     def test_scripts_parse(self) -> None:
-        workflow = BUILD.read_text(encoding="utf-8")
+        workflow = pipeline()
         for name in ("Record Go core cache identity", "Build & install Go core"):
             result = subprocess.run(
                 ["bash", "-n"],
@@ -350,7 +358,7 @@ class GoCoreCacheContractTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_identity_separates_mihomo_from_yuelink_sources(self) -> None:
-        workflow = BUILD.read_text(encoding="utf-8")
+        workflow = pipeline()
         script = step_script(workflow, "Record Go core cache identity")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -404,7 +412,7 @@ class GoCoreCacheContractTests(unittest.TestCase):
             )
 
     def test_identity_rejects_a_non_hex_or_dirty_tree(self) -> None:
-        workflow = BUILD.read_text(encoding="utf-8")
+        workflow = pipeline()
         script = step_script(workflow, "Record Go core cache identity")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -468,7 +476,7 @@ class GoCoreCacheContractTests(unittest.TestCase):
             self.assertIn("untracked", untracked.stdout + untracked.stderr)
 
     def test_hit_skips_compile_and_install_always_runs(self) -> None:
-        workflow = BUILD.read_text(encoding="utf-8")
+        workflow = pipeline()
         script = step_script(workflow, "Build & install Go core")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -552,7 +560,7 @@ class GoCoreCacheContractTests(unittest.TestCase):
             self.skipTest("builder sources live in the yuelink checkout")
         setup_text = setup.read_text(encoding="utf-8")
         install_text = (ROOT / "setup_install.dart").read_text(encoding="utf-8")
-        workflow = BUILD.read_text(encoding="utf-8")
+        workflow = pipeline()
         for library in LIBRARY_PATHS:
             relative = library.split("/", 2)[2]
             self.assertIn(library, workflow)

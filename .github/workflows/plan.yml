@@ -1,0 +1,271 @@
+name: Plan YueLink source
+
+# Called by build.yml. github.* is the caller run, not a new event.
+# Workflow env is repeated because a caller env map is not inherited.
+on:
+  workflow_call:
+    inputs:
+      only:
+        description: workflow_dispatch platform filter; empty selects every platform
+        required: false
+        type: string
+        default: ""
+      source_sha:
+        description: workflow_dispatch attested source; empty on a tag push
+        required: false
+        type: string
+        default: ""
+    outputs:
+      source_commit:
+        description: attested private source
+        value: ${{ jobs.source_binding.outputs.source_commit }}
+      attestation_run_id:
+        description: green source-attestation run
+        value: ${{ jobs.source_binding.outputs.attestation_run_id }}
+      matrix:
+        description: JSON build matrix
+        value: ${{ jobs.prepare.outputs.matrix }}
+
+permissions:
+  contents: read
+
+env:
+  # Private template fallback only; public runs use their exact builder SHA.
+  COVERAGE_TOOLS_SHA: '07856de8be832ceed6e4daeff7bf840c2269d8dc'
+  # Flutter 3.47.8 / Dart 3.13.7 (2026-10-23): BoringSSL distrusts the
+  # compromised eMudhra intermediates (GHSA-frr6-h895-5pxp) and Android 14+
+  # reads the updatable Conscrypt root store. Embedder renderer files are
+  # unchanged from 3.47.7. Exact archives are verified by setup-flutter.
+  FLUTTER_VERSION: '3.47.8'
+  # Go 1.27.1 (2026-09-01): 跨 minor 从 1.26.8 升上来，与 yue-node/Xray-core
+  # fork 的发布工具链对齐。拿到 1.27 的小对象分配优化（<80B 分配路径约 -30%，
+  # 分配密集程序整体约 1%）；Green Tea GC 在 1.26 就已默认、不是本次新增。
+  #
+  # 跨 minor 此前是一道**人工门**（"升之前先核 metacubex/gvisor 的 linkname 假设"），
+  # 因为 gvisor fork 在 amd64 上按写死的偏移直接改 runtime.sched.nmspinning，
+  # 失配不报编译错误、只在运行期把调度器计数器写坏。2026-09-20 起该门由
+  # core/gvisor_runtime_abi_test.go 自动执行：它用当前工具链真实编译出的 DWARF
+  # 布局，对上 gvisor fork 里写死的 NMSPINNING_OFFSET 与 WaitReason 字面量。
+  # 升级时实测：nmspinning 偏移在 linux/windows/darwin ×amd64 下 1.26.8 与 1.27.1
+  # 均为 116、schedt 大小同为 6872；三个 WaitReason 常量两版一致；
+  # 对照 1.25.0=100 / 1.24.0=92 证明该判据确实会随版本变动。
+  # Keep the release builder and govulncheck on this exact patch release;
+  # a floating 1.27 selector can silently rebuild the same tag against a
+  # different standard library.
+  # 2026-10-21: Go 1.27.3 addresses GO-2026-6809; retain the shipped-toolchain ABI guard.
+  # 2026-11-11: Go 1.27.4 addresses GO-2026-6859 (net/http MaxBytesReader race).
+  GO_VERSION: '1.27.4'
+  # Production builds consume the reviewed module graph exactly. `core/go.mod`
+  # and go.sum are tidy against the pinned mihomo submodule; dependency drift
+  # must fail the build instead of being resolved implicitly on a runner.
+  GOFLAGS: -mod=readonly
+  # Opt JS actions (actions/attest*, etc.) into Node.js 24 now, ahead of the
+  # 2026-06-16 forced default — silences the recurring Node 20 deprecation
+  # warning. Safe to drop once Node 24 is the runner default.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  source_binding:
+    name: Bind exact attested source
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+    outputs:
+      source_commit: ${{ steps.bind.outputs.source_commit }}
+      attestation_run_id: ${{ steps.bind.outputs.attestation_run_id }}
+    steps:
+      - name: Checkout exact source-attestation verifier
+        if: github.repository == 'onesyue/yuelink-ci'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.sha }}
+          path: .source-binding-tools
+          persist-credentials: false
+
+      - name: Resolve immutable source binding
+        id: bind
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          TRIGGER_COMMIT: ${{ github.sha }}
+          DISPATCH_SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_ATTESTATION_VERIFIER: ${{ github.workspace }}/.source-binding-tools/scripts/verify-source-attestation.sh
+        run: |
+          set -euo pipefail
+          verify_public_attestation=0
+          verify_tag="$REF_NAME"
+          if [[ "$REF" == refs/tags/* ]] &&
+             [[ ! "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::only stable vX.Y.Z release tags are supported; prerelease is retired"
+            exit 1
+          fi
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            source_commit="$DISPATCH_SOURCE_SHA"
+            # Reject a non-SHA before any Actions read. Preview ref_name is the
+            # branch, so the verifier is called with the proof's vX.Y.Z releaseTag.
+            [[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "::error::source_sha must be 40 lowercase hex"
+              exit 1
+            }
+            attestation_title="Source attestation $source_commit"
+            runs_json="$(
+              GH_PROMPT_DISABLED=1 gh api \
+                "repos/$REPOSITORY/actions/workflows/source-attestation.yml/runs?event=workflow_dispatch&status=success&per_page=100"
+            )"
+            attestation_run_id="$(jq -r \
+              --arg title "$attestation_title" \
+              --arg builder "$TRIGGER_COMMIT" '
+                (.workflow_runs // [])
+                | map(select(
+                    .display_title == $title and
+                    .head_sha == $builder and
+                    .head_branch == "master" and
+                    .conclusion == "success"
+                  ))
+                | sort_by(.created_at)
+                | last
+                | .id // empty
+              ' <<<"$runs_json")"
+            if [[ ! "$attestation_run_id" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::no green Source attestation for $source_commit on builder $TRIGGER_COMMIT"
+              exit 1
+            fi
+            proof_dir="$(mktemp -d "${TMPDIR:-/tmp}/yuelink-dispatch-proof.XXXXXX")"
+            GH_PROMPT_DISABLED=1 gh run download "$attestation_run_id" \
+              -R "$REPOSITORY" \
+              --name "yuelink-source-attestation-$source_commit" \
+              --dir "$proof_dir"
+            proof_file="$proof_dir/source-attestation.json"
+            if ! { [ -f "$proof_file" ] && [ ! -L "$proof_file" ]; }; then
+              echo "::error::source attestation proof for $source_commit is missing"
+              exit 1
+            fi
+            proof_source="$(jq -er '.sourceSha' "$proof_file")"
+            if [ "$proof_source" != "$source_commit" ]; then
+              echo "::error::source attestation proof is for $proof_source not $source_commit"
+              exit 1
+            fi
+            verify_tag="$(jq -er '.releaseTag' "$proof_file")"
+            [[ "$verify_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "::error::source attestation proof release tag is not vX.Y.Z"
+              exit 1
+            }
+            verify_public_attestation=1
+          elif [[ "$REF" == refs/tags/* ]] &&
+               [ "$REPOSITORY" = onesyue/yuelink-ci ]; then
+            ref_json="$(gh api "repos/$REPOSITORY/git/ref/tags/$REF_NAME")"
+            tag_object_sha="$(jq -er '.object.sha' <<<"$ref_json")"
+            if ! { [ "$(jq -er '.object.type' <<<"$ref_json")" = tag ] &&
+                   [[ "$tag_object_sha" =~ ^[0-9a-f]{40}$ ]]; }; then
+              echo "::error::public release ref must be an annotated tag"
+              exit 1
+            fi
+            tag_json=''
+            for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+              tag_json="$(gh api "repos/$REPOSITORY/git/tags/$tag_object_sha")"
+              if jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
+                  .tag == $tag and .object.type == "commit" and
+                  .object.sha == $builder and .verification.verified == true and
+                  .verification.reason == "valid"
+                ' <<<"$tag_json" >/dev/null; then
+                break
+              fi
+              # Only an explicit pending verification may consume the wait budget.
+              jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
+                .tag == $tag and .object.type == "commit" and
+                .object.sha == $builder and .verification.verified == false and
+                (.verification.reason == "gpgverify_unavailable" or .verification.reason == "gpgverify_error")
+              ' <<<"$tag_json" >/dev/null || {
+                echo "::error::public tag content or signature rejected"
+                exit 1
+              }
+              [ "$attempt" -eq 12 ] || sleep 5
+            done
+            jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
+              .tag == $tag and .object.type == "commit" and
+              .object.sha == $builder and .verification.verified == true and
+              .verification.reason == "valid"
+            ' <<<"$tag_json" >/dev/null || {
+              echo "::error::public tag is not exact builder + verified/valid"
+              exit 1
+            }
+            tag_message="$(jq -er '.message' <<<"$tag_json")"
+            if ! { [ "$(grep -Ec '^ATTESTED_SOURCE_COMMIT=[0-9a-f]{40}$' <<<"$tag_message")" -eq 1 ] &&
+                   [ "$(grep -Ec '^SOURCE_ATTESTATION_RUN_ID=[1-9][0-9]*$' <<<"$tag_message")" -eq 1 ]; }; then
+              echo "::error::public signed tag lacks one closed source binding"
+              exit 1
+            fi
+            source_commit="$(sed -nE 's/^ATTESTED_SOURCE_COMMIT=([0-9a-f]{40})$/\1/p' <<<"$tag_message")"
+            attestation_run_id="$(sed -nE 's/^SOURCE_ATTESTATION_RUN_ID=([1-9][0-9]*)$/\1/p' <<<"$tag_message")"
+            verify_public_attestation=1
+          elif [[ "$REF" == refs/tags/* ]] &&
+               [ "$REPOSITORY" = onesyue/yuelink ]; then
+            # The private workflow is retained only as a parity template. Its
+            # own tag is not an authority for the public release build.
+            source_commit="$TRIGGER_COMMIT"
+            attestation_run_id=private-template-only
+          else
+            echo "::error::unsupported source-binding event"
+            exit 1
+          fi
+          [[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::attested source commit must be exact lowercase SHA"
+            exit 1
+          }
+          if [ "$REPOSITORY" = onesyue/yuelink-ci ]; then
+            [[ "$attestation_run_id" =~ ^[1-9][0-9]*$ ]] || {
+              echo "::error::source attestation run id is missing or malformed"
+              exit 1
+            }
+            if [ "$verify_public_attestation" -eq 1 ]; then
+              if ! { [ -f "$SOURCE_ATTESTATION_VERIFIER" ] &&
+                     [ ! -L "$SOURCE_ATTESTATION_VERIFIER" ]; }; then
+                echo "::error::exact builder source-attestation verifier is missing or unsafe"
+                exit 1
+              fi
+              bash "$SOURCE_ATTESTATION_VERIFIER" \
+                "$verify_tag" "$source_commit" "$TRIGGER_COMMIT" "$attestation_run_id"
+            fi
+          fi
+          printf 'source_commit=%s\nattestation_run_id=%s\n' \
+            "$source_commit" "$attestation_run_id" >> "$GITHUB_OUTPUT"
+          echo "ATTESTED_SOURCE_COMMIT=$source_commit"
+
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Single matrix build — one row per target platform.
+  # Every row: setup go+flutter → build core → install core → flutter build
+  #            → package → upload artifact named yuelink-<platform>.
+  # ───────────────────────────────────────────────────────────────────────────
+  # 动态矩阵:按 workflow_dispatch 的 only 输入裁剪要构建的平台。job 级 if 无法用
+  # matrix 上下文(GitHub 限制),故用一个轻量 prepare job 算出矩阵,build 用
+  # fromJSON 消费。tag/push 发版时 only 为空 → 全平台。
+  prepare:
+    name: Prepare matrix
+    runs-on: ubuntu-24.04
+    needs: source_binding
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          set -euo pipefail
+          ALL='[{"platform":"android","os":"ubuntu-24.04"},{"platform":"ios","os":"macos-26"},{"platform":"macos","os":"macos-26"},{"platform":"windows","os":"windows-latest"},{"platform":"linux","os":"ubuntu-24.04"}]'
+          if [ -z "${ONLY:-}" ] || [ "$ONLY" = "all" ]; then
+            sel="$ALL"
+          else
+            sel=$(printf '%s' "$ALL" | jq -c --arg p "$ONLY" '[.[]|select(.platform==$p)]')
+          fi
+          printf 'matrix={"include":%s}\n' "$sel" >> "$GITHUB_OUTPUT"
+          echo "选中平台: ${ONLY:-all}"
+

@@ -1,0 +1,791 @@
+name: Publish YueLink release
+
+# Called by build.yml. github.* is the caller run, not a new event.
+# Workflow env is repeated because a caller env map is not inherited.
+on:
+  workflow_call:
+    inputs:
+      source_commit:
+        description: attested private source
+        required: true
+        type: string
+      attestation_run_id:
+        description: green source-attestation run
+        required: true
+        type: string
+      tag_kind:
+        description: preflight classification
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  # Private template fallback only; public runs use their exact builder SHA.
+  COVERAGE_TOOLS_SHA: '07856de8be832ceed6e4daeff7bf840c2269d8dc'
+  # Flutter 3.47.8 / Dart 3.13.7 (2026-10-23): BoringSSL distrusts the
+  # compromised eMudhra intermediates (GHSA-frr6-h895-5pxp) and Android 14+
+  # reads the updatable Conscrypt root store. Embedder renderer files are
+  # unchanged from 3.47.7. Exact archives are verified by setup-flutter.
+  FLUTTER_VERSION: '3.47.8'
+  # Go 1.27.1 (2026-09-01): 跨 minor 从 1.26.8 升上来，与 yue-node/Xray-core
+  # fork 的发布工具链对齐。拿到 1.27 的小对象分配优化（<80B 分配路径约 -30%，
+  # 分配密集程序整体约 1%）；Green Tea GC 在 1.26 就已默认、不是本次新增。
+  #
+  # 跨 minor 此前是一道**人工门**（"升之前先核 metacubex/gvisor 的 linkname 假设"），
+  # 因为 gvisor fork 在 amd64 上按写死的偏移直接改 runtime.sched.nmspinning，
+  # 失配不报编译错误、只在运行期把调度器计数器写坏。2026-09-20 起该门由
+  # core/gvisor_runtime_abi_test.go 自动执行：它用当前工具链真实编译出的 DWARF
+  # 布局，对上 gvisor fork 里写死的 NMSPINNING_OFFSET 与 WaitReason 字面量。
+  # 升级时实测：nmspinning 偏移在 linux/windows/darwin ×amd64 下 1.26.8 与 1.27.1
+  # 均为 116、schedt 大小同为 6872；三个 WaitReason 常量两版一致；
+  # 对照 1.25.0=100 / 1.24.0=92 证明该判据确实会随版本变动。
+  # Keep the release builder and govulncheck on this exact patch release;
+  # a floating 1.27 selector can silently rebuild the same tag against a
+  # different standard library.
+  # 2026-10-21: Go 1.27.3 addresses GO-2026-6809; retain the shipped-toolchain ABI guard.
+  # 2026-11-11: Go 1.27.4 addresses GO-2026-6859 (net/http MaxBytesReader race).
+  GO_VERSION: '1.27.4'
+  # Production builds consume the reviewed module graph exactly. `core/go.mod`
+  # and go.sum are tidy against the pinned mihomo submodule; dependency drift
+  # must fail the build instead of being resolved implicitly on a runner.
+  GOFLAGS: -mod=readonly
+  # Opt JS actions (actions/attest*, etc.) into Node.js 24 now, ahead of the
+  # 2026-06-16 forced default — silences the recurring Node 20 deprecation
+  # warning. Safe to drop once Node 24 is the runner default.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Release: download all yuelink-* artifacts, hash, publish, refresh manifest
+  # ───────────────────────────────────────────────────────────────────────────
+  release:
+    name: Assemble R2 candidate
+    runs-on: ubuntu-24.04
+    # 2026-09-23 (L9): the updater signing seed and the R2 credentials that can
+    # move the bucket-root update.json live only in `yuelink-release`: `v*`
+    # tags only, one required reviewer. This is the single human click per
+    # release — builds and per-platform R2 uploads stay unattended; assembling the candidate and moving the root
+    # wait for approval. Inert until the owner moves the secrets (see
+    # docs/archive/2026-09-23-ci-credential-migration.md in the workspace root).
+    environment: yuelink-release
+    permissions:
+      # Native LGPL source attachments are published on this exact signed tag.
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ inputs.source_commit }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Verify exact attested source checkout
+        id: release_source
+        shell: bash
+        env:
+          ATTESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          set -euo pipefail
+          BUILT_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          [ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ] || {
+            echo "::error::candidate source drift: attested=$ATTESTED_SOURCE_COMMIT built=$BUILT_SOURCE_COMMIT"
+            exit 1
+          }
+          printf 'BUILT_SOURCE_COMMIT=%s\n' "$BUILT_SOURCE_COMMIT" >> "$GITHUB_ENV"
+          printf 'built_source_commit=%s\n' "$BUILT_SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "ATTESTED_SOURCE_COMMIT=$ATTESTED_SOURCE_COMMIT"
+          echo "BUILT_SOURCE_COMMIT=$BUILT_SOURCE_COMMIT"
+
+      - name: Checkout exact policy builder
+        if: inputs.tag_kind == 'stable'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.workflow_sha }}
+          path: .release-builder
+          persist-credentials: false
+
+      - name: Set up Flutter for release-candidate verification
+        if: inputs.tag_kind == 'stable'
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          # Cache ON — reviewed 2026-08-31 decision, see the preflight
+          # setup-flutter step. This install was 116 s of the assemble tail.
+          cache: true
+
+      - name: Resolve locked verification dependencies
+        if: inputs.tag_kind == 'stable'
+        run: flutter pub get --enforce-lockfile
+      - name: Generate translations
+        if: inputs.tag_kind == 'stable'
+        run: dart run slang
+
+      # 2026-06-01: 只从 R2 下 .sha256(KB 级), 不下 ~5GB 二进制 —— 二进制 build job
+      # 已传 R2, release job 只需 sha256 拼 manifest。省 R2 下载带宽(免费档 1GB/天,
+      # 下 5GB 一发版就爆顶, 就是本次 'Download Bandwidth Cap 100%' 的根因)。
+      - name: Download sha256 sidecars from R2 (not the binaries)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_APP_KEY }}
+          R2_ENDPOINT: https://1e192a89cfaab399d211bb1dfe77a5cd.r2.cloudflarestorage.com
+          R2_ACCOUNT_ID: 1e192a89cfaab399d211bb1dfe77a5cd
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
+          AWS_DEFAULT_REGION: auto
+          # R2 + aws-cli v2(runner 自带新版)默认发 CRC32 checksum 头, R2 对部分
+          # 操作会拒 → when_required 只在必要时算/校验, 规避不兼容。
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          BUCKET: yuelink-dist
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          VERSION="${TAG#v}"
+          aws s3 sync "s3://$BUCKET/$TAG/" dist/ --endpoint-url "$R2_ENDPOINT" --no-progress \
+            --exclude "*" \
+            --include "YueLink-${VERSION}-android-*.apk.sha256" \
+            --include "YueLink-${VERSION}-ios.ipa.sha256" \
+            --include "YueLink-${VERSION}-macos-universal.dmg.sha256" \
+            --include "YueLink-${VERSION}-windows-amd64-setup.exe.sha256" \
+            --include "YueLink-${VERSION}-windows-amd64-portable.zip.sha256" \
+            --include "YueLink-${VERSION}-linux-amd64.AppImage.sha256" \
+            --include "YueLink-${VERSION}-*-RELEASE.json" \
+            --include "YueLink-${VERSION}-*-RELEASE.json.sha256" \
+            --include "YueLink-${VERSION}-*-INSTALL-NOTICE.txt" \
+            --include "YueLink-${VERSION}-*-INSTALL-NOTICE.txt.sha256"
+          echo "downloaded current-tag release evidence:"; ls -1 dist/
+
+      - name: Validate current-tag sideload artifacts
+        id: sideload
+        run: |
+          set -euo pipefail
+          source_version="$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' pubspec.yaml)"
+          version="${GITHUB_REF_NAME#v}"
+          [ -n "$source_version" ] && [ -n "$version" ]
+          case "$version" in
+            "$source_version"|"$source_version"-pre|"$source_version"-pre.*) ;;
+            *) echo "::error::tag version $version does not match pubspec $source_version"; exit 1 ;;
+          esac
+          source_commit="$(git rev-parse HEAD)"
+          bash scripts/ci/validate_sideload_release.sh \
+            --version "$version" \
+            --tag "$GITHUB_REF_NAME" \
+            --source-commit "$source_commit" \
+            --dist dist
+          complete="$(jq -r '.complete' "dist/YueLink-${version}-RELEASE-STATUS.json")"
+          available="$(jq '[.platforms[] | select(.available)] | length' "dist/YueLink-${version}-RELEASE-STATUS.json")"
+          echo "complete=$complete" >> "$GITHUB_OUTPUT"
+          echo "available=$available" >> "$GITHUB_OUTPUT"
+          if [ "$complete" = true ]; then
+            echo "RELEASE_COMPLETE=1" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_COMPLETE=0" >> "$GITHUB_ENV"
+            echo "SKIP_MANIFEST=1" >> "$GITHUB_ENV"
+            echo "::warning::partial sideload release ($available/5 platforms); automatic updater candidate is disabled"
+          fi
+
+      - name: List candidate evidence
+        run: ls -lh dist/
+
+      # ── SBOM generation removed (2026-05-10) ──────────────────────────
+      # We used to generate per-binary CycloneDX SBOMs and upload them
+      # alongside the binaries — N artifacts × `.sbom.cdx.json` doubled
+      # the published object count for marginal user value. Three
+      # users in a row asked for it to be cleaned up. The Sigstore
+      # provenance attestation below (gh attestation verify) covers
+      # the supply-chain story; SBOM as an *uploaded* asset added
+      # noise without a downstream consumer.
+      #
+      # If a future audit needs a SBOM, regenerate locally with
+      # `syft <binary> -o cyclonedx-json` against the public release
+      # binary — the result is reproducible from the attested artifact.
+
+      - name: Generate .sha256 sidecars + consolidated SHA256SUMS
+        run: |
+          cd dist
+          # Per-binary sidecars: kept because the updater-manifest step
+          # downstream reads `dist/$file.sha256` to embed hashes in
+          # update.json. The build jobs have already published the canonical
+          # binary sidecars to R2; this job reconstructs the aggregate without
+          # downloading roughly 1 GB of binaries.
+          for f in *; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              *.sha256|*-SHA256SUMS) ;;
+              *) sha256sum "$f" | awk '{print $1}' > "$f.sha256" ;;
+            esac
+          done
+          # Consolidated checksum file in standard `sha256sum -c` format,
+          # published under the immutable R2 version prefix.
+          # Users verify everything with `sha256sum -c YueLink-*-SHA256SUMS`.
+          # Standard pattern matched by mihomo / sing-box / Hashicorp /
+          # Linux kernel releases.
+          VERSION="${GITHUB_REF_NAME#v}"
+          SUMS_FILE="YueLink-${VERSION}-SHA256SUMS"
+          : > "$SUMS_FILE"
+          # 2026-06-01: 二进制不在本地(只下了 .sha256 省带宽), 从 .sha256 sidecar 拼
+          # 标准 `sha256sum -c` 格式的 SHA256SUMS(`<hash>  <binary>`)。
+          for s in YueLink-*.sha256; do
+            [ -f "$s" ] || continue
+            case "$s" in
+              *-RELEASE-STATUS*.sha256) continue ;;
+            esac
+            bin="${s%.sha256}"
+            printf '%s  %s\n' "$(tr -d '[:space:]' < "$s")" "$bin" >> "$SUMS_FILE"
+          done
+          echo "=== Generated $SUMS_FILE ==="
+          cat "$SUMS_FILE"
+
+      - name: Generate release notes
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          TAG="${GITHUB_REF_NAME}"
+          NOTES_FILE=""
+          # Defensive legacy classification; stable-only source_binding makes
+          # the prerelease branch unreachable in a public release run.
+          TAG_KIND="$(bash scripts/ci/release_tag.sh kind "$TAG")"
+          if [ "$TAG_KIND" = "prerelease" ]; then
+            VERSION="${TAG#v}"
+            TITLE="YueLink v${VERSION} Pre-release"
+            [ -f "docs/releases/${TAG}.md" ] && NOTES_FILE="docs/releases/${TAG}.md"
+          else
+            TITLE="YueLink v${VERSION}"
+            [ -f "docs/releases/v${VERSION}.md" ] && NOTES_FILE="docs/releases/v${VERSION}.md"
+          fi
+
+          # Resolve previous tag for the Full Changelog link (skip the current
+          # one and any `*-pre` variant so stable releases compare to the
+          # prior stable tag instead of a prerelease).
+          PREV_TAG=$(git tag --sort=-creatordate \
+            | grep -E '^v[0-9]' \
+            | grep -Fxv "$TAG" \
+            | grep -Ev '(^pre$|-pre(\.[0-9]+)?$)' \
+            | sed -n '1p')
+
+          # English twin of NOTES_FILE. A curated Chinese release without its
+          # twin is a release error: otherwise every English install silently
+          # receives Chinese notes through the client's compatibility fallback.
+          NOTES_FILE_EN=""
+          if [ -n "$NOTES_FILE" ]; then
+            EN_CANDIDATE="${NOTES_FILE%.md}.en.md"
+            [ -f "$EN_CANDIDATE" ] && NOTES_FILE_EN="$EN_CANDIDATE"
+            if [ -z "$NOTES_FILE_EN" ]; then
+              echo "::error::missing English release notes: $EN_CANDIDATE"
+              exit 1
+            fi
+          fi
+
+          if [ -n "$NOTES_FILE" ]; then
+            cp "$NOTES_FILE" release_notes.md
+            # In-app updater notes (manifest `notes`) = curated file minus the
+            # leading "# vX.Y.Z" H1 (the dialog already shows old→new version).
+            # Kept separate from release_notes.md, which gets the English
+            # RELEASE-STATUS block prepended below for the job summary —
+            # v1.2.123 shipped that signing table into every update dialog.
+            awk 'NR==1 && /^# / {next} {print}' "$NOTES_FILE" \
+              | sed '/./,$!d' > release_notes.app.md
+            # Same treatment for the required English twin.
+            awk 'NR==1 && /^# / {next} {print}' "$NOTES_FILE_EN" \
+              | sed '/./,$!d' > release_notes.app.en.md
+          else
+            # Fallback when docs/releases/<tag>.md is missing: emit a minimal
+            # 2026-format body (## Changes + ## Downloads + Full Changelog),
+            # no Build footer, no verbose per-file blurbs. Source of truth
+            # for the format is the curated docs/releases/*.md files.
+            if [ -n "$PREV_TAG" ]; then
+              CHANGES=$(git log --pretty=format:"- %s" "${PREV_TAG}..HEAD" -- | sed -n '1,50p')
+            else
+              CHANGES=$(git log --pretty=format:"- %s" -20)
+            fi
+            {
+              printf '## Changes\n\n'
+              printf '%s\n\n' "$CHANGES"
+              printf '## Downloads\n\n'
+              printf '| 平台 | 文件 | 说明 |\n'
+              printf '|---|---|---|\n'
+              printf "| Windows | \`YueLink-%s-windows-amd64-setup.exe\` | 安装版 |\n" "$VERSION"
+              printf "| Windows | \`YueLink-%s-windows-amd64-portable.zip\` | 便携版 |\n" "$VERSION"
+              printf "| macOS | \`YueLink-%s-macos-universal.dmg\` | Universal（Apple Silicon + Intel） |\n" "$VERSION"
+              printf "| Android | \`YueLink-%s-android-universal.apk\` | 通用 |\n" "$VERSION"
+              printf "| Android | \`YueLink-%s-android-arm64-v8a.apk\` | arm64 |\n" "$VERSION"
+              printf "| Android | \`YueLink-%s-android-armeabi-v7a.apk\` | armv7 |\n" "$VERSION"
+              printf "| Android | \`YueLink-%s-android-x86_64.apk\` | x86_64 |\n" "$VERSION"
+              printf "| iOS | \`YueLink-%s-ios.ipa\` | 侧载，iOS 15+（TrollStore / AltStore / SideStore） |\n" "$VERSION"
+              printf "| Linux | \`YueLink-%s-linux-amd64.AppImage\` | x86_64 |\n" "$VERSION"
+              printf "\n统一校验文件 \`YueLink-%s-SHA256SUMS\`，可用 \`sha256sum -c\` 一次性核对所有产物。\n" "$VERSION"
+              printf '\n## Install notes\n\n'
+              printf '<details>\n<summary>Windows — SmartScreen 蓝色对话框</summary>\n\n'
+              printf 'YueLink 安装包会在配置证书后做 Authenticode 签名；新版本、新证书或下载量较少时，Windows 仍可能弹"已保护你的电脑"。\n'
+              printf '点击对话框里的 **More info / 更多信息** → **Run anyway / 仍要运行** 即可。\n'
+              printf '担心安全可上传 [VirusTotal](https://www.virustotal.com/) 复核。\n\n</details>\n\n'
+              printf '<details>\n<summary>macOS — Gatekeeper "无法验证"</summary>\n\n'
+              printf '**首次安装**：右键 .app → 打开（不是双击）。\n'
+              printf '**升级后再次出现**：app 内 Settings 顶部已自动 detect + 一键 fix（v1.0.22+）。\n\n</details>\n\n'
+              printf '<details>\n<summary>Android — 未知来源 / 出厂限制</summary>\n\n'
+              printf '允许浏览器或文件管理器安装未知来源应用即可。\n'
+              printf '小米/华为/OPPO 用户：进入 app 后 Settings → 连接修复 → 加入电池优化白名单（v1.0.23+ 有详细解释卡）。\n\n</details>\n\n'
+              printf '<details>\n<summary>iOS — 选择 TrollStore / AltStore / SideStore</summary>\n\n'
+              printf 'YueLink 没有 App Store 上架。三种侧载方式：\n\n'
+              printf '* **TrollStore**（推荐，永久签名）：iOS 14.0–16.6.1 / 17.0 用户首选，安装后永不掉签。直接在 TrollStore 里点 + → 选下载好的 ipa。\n'
+              printf '* **AltStore / SideStore**（每 7 天续签）：未越狱用户的标准方案。AltStore 同步签名一次维持 7 天；SideStore 是 fork。\n'
+              printf '* **Sideloadly**：连电脑用 Apple ID 签一次，7 天有效。\n\n'
+              printf '安装后第一次连接会弹"YueLink 想要添加 VPN 配置"——这是必要权限，点允许即可。\n\n</details>\n\n'
+              printf '<details>\n<summary>Linux — Ubuntu 20.04 等老 LTS</summary>\n\n'
+              printf 'v1.0.23+ AppImage 内置 libmpv2，所有支持的 LTS 都能直接运行。\n'
+              printf 'v1.0.22 及之前的 AppImage 需要系统装 libmpv2（Ubuntu 22.04+ / Debian 12+ / Fedora 36+ 自带，20.04 需 PPA）。\n\n</details>\n'
+              # 2026-05-31 硬切:仓库已私有,GitHub compare 链接对用户 404。
+              # 完整变更见随包 CHANGELOG / 官网,不再放 github 比较链接。
+            } > release_notes.md
+            # In-app updater notes fallback: commit subjects only — no
+            # Downloads/Install tables, which belong in operator evidence.
+            printf '%s\n' "$CHANGES" > release_notes.app.app_tmp
+            mv release_notes.app.app_tmp release_notes.app.md
+            # Commit subjects are already written in English in this repo, so
+            # the fallback body is its own English twin. Emitting it keeps the
+            # manifest shape identical on both branches.
+            cp release_notes.app.md release_notes.app.en.md
+          fi
+          echo "RELEASE_TITLE=${TITLE}" >> "$GITHUB_ENV"
+          echo "APP_VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Prepend truthful sideload status to release notes
+        run: |
+          set -euo pipefail
+          status="dist/YueLink-${APP_VERSION}-RELEASE-STATUS.md"
+          test -f "$status"
+          {
+            cat "$status"
+            echo
+            echo '---'
+            echo
+            cat release_notes.md
+          } > release_notes.with-status.md
+          mv release_notes.with-status.md release_notes.md
+          cat release_notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Candidate-evidence guard. Two invariants we want CI to enforce
+       # rather than rediscover via the support inbox:
+       #   1. No per-binary SBOM/JSON detritus in the R2 prefix —
+       #      the SBOM gen step was deleted but a future contributor
+       #      could reintroduce it; this catches them.
+       #   2. Source archives (zip/tar.gz of the repo) never become R2
+       #      release objects if anyone drops one in `dist/`.
+      - name: Candidate evidence guard
+        run: |
+          set -euo pipefail
+          cd dist
+          stray_sbom=$(find . -maxdepth 1 -name '*.sbom.cdx.json' -o -name '*.cdx.json' | sed -n '1,5p')
+          if [ -n "$stray_sbom" ]; then
+            echo "::error::per-binary SBOMs found in dist/ — delete them before release upload:"
+            echo "$stray_sbom"
+            exit 1
+          fi
+          stray_src=$(find . -maxdepth 1 \( -name 'yuelink-source*' -o -name 'source.zip' -o -name 'source.tar.gz' \) | sed -n '1,5p')
+          if [ -n "$stray_src" ]; then
+            echo "::error::source archives must not be uploaded as release assets:"
+            echo "$stray_src"
+            exit 1
+          fi
+          echo "candidate evidence guard ok"
+
+      # 2026-05-31 硬切:删除 "Create GitHub Release" — 分发不再经 GitHub。
+      # 二进制 + manifest 在下方 "Publish to R2" 步上传到 yuetong.app CDN origin。
+
+      # ── Build provenance attestation moved to the build job ─────────────
+      # It used to run here, but this release job downloads only the KB-sized
+      # .sha256 sidecars (binaries live in R2), so `subject-path: dist/*`
+      # matched nothing → "Could not find subject" (masked by
+      # continue-on-error → NO attestation was ever produced). Each build
+      # job now attests its own freshly-built binary before the R2 upload,
+      # where the file is still local. Verify post-release with
+      # `gh attestation verify <binary> --owner onesyue`.
+
+      # ── Unsigned updater candidate for the private signing plane ─────────
+      - name: Generate updater manifest candidate
+        env:
+          ATTESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+          YUELINK_UPDATE_ROLLOUT_SALT: ${{ vars.YUELINK_UPDATE_ROLLOUT_SALT }}
+          YUELINK_UPDATE_ROLLOUT_PERCENT: ${{ vars.YUELINK_UPDATE_ROLLOUT_PERCENT }}
+          YUELINK_UPDATE_FORCE_PLATFORMS: ${{ vars.YUELINK_UPDATE_FORCE_PLATFORMS }}
+        run: |
+          set -euo pipefail
+          VERSION="$APP_VERSION"
+          TAG="${GITHUB_REF_NAME}"
+          [ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ] || {
+            echo "::error::candidate source mismatch: attested=$ATTESTED_SOURCE_COMMIT built=$BUILT_SOURCE_COMMIT"
+            exit 1
+          }
+          # There is exactly one channel now: stable/update.json. source_binding
+          # rejects prerelease tags before source/R2 access; keep this second
+          # fail-closed branch so a future upstream gate regression still
+          # cannot create an updater candidate.
+          TAG_KIND="$(bash scripts/ci/release_tag.sh kind "$TAG")"
+          if [ "$TAG_KIND" = "prerelease" ]; then
+            echo "::notice::$TAG is a prerelease tag — skipping manifest publish (no pre channel)"
+            echo "SKIP_MANIFEST=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          if [ "${RELEASE_COMPLETE:-0}" != "1" ]; then
+            echo "::warning::$TAG is a partial direct-sideload release — skipping automatic updater manifest candidate"
+            echo "SKIP_MANIFEST=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          MANIFEST_NAME="update.candidate.json"
+          CHANNEL="stable"
+          # 2026-05-31 硬切:分发走自有 CDN yuetong.app (R2 origin),不再用
+          # GitHub Releases。二进制上传到 R2 的 <tag>/ 前缀下。
+          BASE="https://yuetong.app/${TAG}"
+          # NOT the CDN root: yuetong.app serves R2 objects only — GET /
+          # is a 404, and releaseUrl is the client's terminal fallback
+          # (iOS post-download, manifest-missing platforms). Point it at
+          # the real download page.
+          RELEASE_URL="https://yue.to/download.html"
+          SUMS_FILE="dist/YueLink-${VERSION}-SHA256SUMS"
+          test -s "$SUMS_FILE"
+          SHA256SUMS_SHA256="$(sha256sum "$SUMS_FILE" | awk '{print $1}')"
+          # User-facing notes only (generated alongside release_notes.md).
+          # NEVER read release_notes.md here — by this point it carries the
+          # English RELEASE-STATUS preamble meant for the operator job summary.
+          test -s release_notes.app.md
+          test -s release_notes.app.en.md
+          NOTES=$(head -n 100 release_notes.app.md | jq -Rs .)
+          # English release notes. `update.json` is the ONLY channel that
+          # reaches an installed client (R2-only distribution, no GitHub
+          # Releases), so without this an English-locale user gets Chinese
+          # Markdown in the update dialog on every update.
+          #
+          # Same `head -n 100` truncation as `notes` — deliberately, so the
+          # two halves can't diverge in length and the manifest stays small.
+          NOTES_EN=$(head -n 100 release_notes.app.en.md | jq -Rs .)
+
+          # Exact checked-out Runner floor; no inferred mapping from release
+          # numbers. setup.dart also verifies the packaged native Mach-O floor.
+          MACOS_MINIMUM_SYSTEM_VERSION="$(python3 scripts/ci/macos_minimum_system_version.py)"
+
+          sha() {
+            if [ -f "dist/$1.sha256" ]; then
+              tr -d '[:space:]' < "dist/$1.sha256" || echo ""
+            else
+              echo ""
+            fi
+          }
+          asset() {
+            local key="$1"; local fname="$2"
+            local hash; hash=$(sha "$fname")
+            # 2026-06-01: 二进制在 R2 不在本地, 只校验 .sha256 sidecar 存在(hash 非空)——
+            # sidecar 存在即代表该平台二进制已 build+传 R2。不再 `-f dist/$fname` 本地校验。
+            [ -z "$hash" ] && return
+            jq -n --arg k "$key" --arg u "$BASE/$fname" --arg h "$hash" \
+              --arg minimum "$MACOS_MINIMUM_SYSTEM_VERSION" \
+              '{($k): ({url: $u, sha256: $h} + (if $k == "macos-universal" then {minimumSystemVersion: $minimum} else {} end))}'
+          }
+
+          PLATFORMS="{}"
+          for entry in \
+            "android-arm64-v8a:YueLink-${VERSION}-android-arm64-v8a.apk" \
+            "android-armeabi-v7a:YueLink-${VERSION}-android-armeabi-v7a.apk" \
+            "android-x86_64:YueLink-${VERSION}-android-x86_64.apk" \
+            "android-universal:YueLink-${VERSION}-android-universal.apk" \
+            "ios:YueLink-${VERSION}-ios.ipa" \
+            "macos-universal:YueLink-${VERSION}-macos-universal.dmg" \
+            "windows-amd64-setup:YueLink-${VERSION}-windows-amd64-setup.exe" \
+            "windows-amd64-portable:YueLink-${VERSION}-windows-amd64-portable.zip" \
+            "linux-amd64-appimage:YueLink-${VERSION}-linux-amd64.AppImage" \
+          ; do
+            key="${entry%%:*}"; file="${entry#*:}"
+            new=$(asset "$key" "$file")
+            [ -n "$new" ] && PLATFORMS=$(echo "$PLATFORMS" | jq ". + $new")
+          done
+          [ "$(echo "$PLATFORMS" | jq 'length')" -eq 9 ] || {
+            echo "::error::stable manifest must contain all 9 platform artifacts"
+            exit 1
+          }
+
+          # In the public yuelink-ci mirror GITHUB_SHA belongs to the mirror
+          # tag, while checkout points at the private source tag. Use the
+          # checked-out source commit so both repositories generate the same
+          # reproducible timestamps.
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          PUBLISHED_AT="$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)"
+          EXPIRES_AT="$(date -u -d "@$((SOURCE_DATE_EPOCH + 35 * 86400))" +%Y-%m-%dT%H:%M:%SZ)"
+
+          jq -n \
+            --argjson schemaVersion 1 \
+            --arg keyId "update-manifest-2026-01" \
+            --arg version "$VERSION" \
+            --arg channel "$CHANNEL" \
+            --arg publishedAt "$PUBLISHED_AT" \
+            --arg expiresAt "$EXPIRES_AT" \
+            --arg releaseUrl "$RELEASE_URL" \
+            --argjson notes "$NOTES" \
+            --argjson notesEn "$NOTES_EN" \
+            --arg sourceCommit "$ATTESTED_SOURCE_COMMIT" \
+            --arg sha256SumsSha256 "$SHA256SUMS_SHA256" \
+            --argjson platforms "$PLATFORMS" \
+            '{schemaVersion: $schemaVersion, keyId: $keyId, version: $version, channel: $channel, publishedAt: $publishedAt, expiresAt: $expiresAt, releaseUrl: $releaseUrl, notes: $notes, notesEn: $notesEn, sourceCommit: $sourceCommit, sha256SumsSha256: $sha256SumsSha256, platforms: $platforms}' \
+            > "$MANIFEST_NAME"
+          # Optional cohort. Unset release-environment variables leave the
+          # keys absent (percent 100, global hard). The policy builder checks
+          # percent 0-100 and that forcePlatforms names exist in platforms.
+          # Lowering percent to 0 or removing hard takes effect on the next
+          # client check and does not downgrade an already-updated install.
+          python3 .release-builder/scripts/apply-update-rollout.py \
+            --manifest "$MANIFEST_NAME"
+          echo "MANIFEST_NAME=$MANIFEST_NAME" >> "$GITHUB_ENV"
+          jq . "$MANIFEST_NAME"
+
+      # Updater manifest invariant: every platform URL must point at an
+      # actual installer artifact (apk/ipa/dmg/exe/zip/AppImage) — never
+      # at a JSON/SBOM/SHA256SUMS/source-zip metadata file. The asset()
+      # helper above already filters by sha256-sidecar-existence, so a
+      # malformed entry would only sneak in via a future refactor that
+      # added one of those files to the iteration list. Cheap defensive
+      # check; fails loudly before publishing.
+      - name: Attach reviewed observation policy
+        if: env.SKIP_MANIFEST != '1'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_APP_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_ENDPOINT: https://1e192a89cfaab399d211bb1dfe77a5cd.r2.cloudflarestorage.com
+          BUILDER_COMMIT: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          policy_work="$(mktemp -d)"
+          trap 'rm -rf "$policy_work"' EXIT
+          aws s3api get-object --bucket yuelink-dist --key update.json \
+            --endpoint-url "$R2_ENDPOINT" "$policy_work/previous.json" >/dev/null
+          python3 scripts/ci/candidate_policy.py \
+            --candidate "$MANIFEST_NAME" \
+            --previous-manifest "$policy_work/previous.json" \
+            --output "$policy_work/attached.json"
+          dart run tool/automation/validate_update_candidate.dart \
+            --path "$policy_work/attached.json"
+          mv "$policy_work/attached.json" "$MANIFEST_NAME"
+
+      - name: Manifest URL extension guard
+        if: env.SKIP_MANIFEST != '1'
+        run: |
+          set -euo pipefail
+          MANIFEST="${MANIFEST_NAME}"
+          [ -f "$MANIFEST" ] || { echo "::error::manifest $MANIFEST missing"; exit 1; }
+          # Allow-list of extensions a platform URL may end with.
+          ok=$(jq -r '.platforms | to_entries[] | "\(.key)\t\(.value.url)"' "$MANIFEST" \
+            | while IFS=$'\t' read -r key url; do
+                case "$url" in
+                  *.apk|*.ipa|*.dmg|*.exe|*.zip|*.AppImage) echo "OK  $key  $url" ;;
+                  *) echo "BAD $key  $url"; exit 1 ;;
+                esac
+              done) || { echo "::error::manifest URL guard failed:"; echo "$ok"; exit 1; }
+          echo "$ok"
+
+      - name: Validate unsigned stable manifest candidate
+        if: env.SKIP_MANIFEST != '1'
+        env:
+          ATTESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          set -euo pipefail
+          jq -e '
+            .schemaVersion == 1 and
+            .keyId == "update-manifest-2026-01" and
+            .channel == "stable" and
+            .sourceCommit == env.ATTESTED_SOURCE_COMMIT and
+            (.sha256SumsSha256 | test("^[0-9a-f]{64}$")) and
+            (has("sig") | not) and
+            (.platforms | length) == 9 and
+            (.platforms["macos-universal"].minimumSystemVersion | test("^[0-9]+(\\.[0-9]+){0,2}$")) and
+            all(.platforms[]; .sha256 | test("^[0-9a-f]{64}$"))
+          ' "$MANIFEST_NAME" >/dev/null
+          echo "unsigned candidate complete; private signer owns trust"
+
+      # ── Publish immutable candidate to Cloudflare R2 ─────────────────────
+      # 2026-05-31 硬切:分发全部走 R2,不再用 GitHub Releases / updater tag。
+      # 用 R2 的 S3 兼容端点 + aws-cli(runner 自带)。二进制传到 <tag>/ 前缀,
+      # Public CI never receives the updater private key and never writes the
+      # bucket-root update.json. The private sign-release-manifest workflow
+      # promotes this candidate only after signing and archive verification.
+      - name: Publish to R2 (yuetong.app CDN origin)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_APP_KEY }}
+          R2_ENDPOINT: https://1e192a89cfaab399d211bb1dfe77a5cd.r2.cloudflarestorage.com
+          R2_ACCOUNT_ID: 1e192a89cfaab399d211bb1dfe77a5cd
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
+          AWS_DEFAULT_REGION: auto
+          # R2 + aws-cli v2(runner 自带新版)默认发 CRC32 checksum 头, R2 对部分
+          # 操作会拒 → when_required 只在必要时算/校验, 规避不兼容。
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          BUCKET: yuelink-dist
+          TAG: ${{ github.ref_name }}
+          ATTESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+            echo "::error::R2_KEY_ID/R2_APP_KEY secrets 未配置 — 无法发布到 R2"; exit 1
+          fi
+          # Build jobs already published every installer immutably. Archive the
+          # consolidated checksums and unsigned candidate under this immutable
+          # tag; clients never consume update.candidate.json.
+          if [ "${SKIP_MANIFEST:-0}" != "1" ]; then
+            cp "$MANIFEST_NAME" "dist/$MANIFEST_NAME"
+          fi
+          # Aggregate status can legitimately progress from a partial set to
+          # a complete set on a later retry of the same immutable tag. Archive
+          # each observed set under a deterministic name; never freeze a stale
+          # partial result at a canonical immutable key.
+          status="dist/YueLink-${APP_VERSION}-RELEASE-STATUS.json"
+          status_key="$(jq -r '[.platforms[] | select(.available) | .platform] | join("-")' "$status")"
+          [ -n "$status_key" ]
+          for extension in json md; do
+            current="dist/YueLink-${APP_VERSION}-RELEASE-STATUS.${extension}"
+            archived="dist/YueLink-${APP_VERSION}-RELEASE-STATUS-${status_key}.${extension}"
+            mv "$current" "$archived"
+            rm -f "${current}.sha256"
+          done
+          if [ "${RELEASE_COMPLETE:-0}" != "1" ]; then
+            # A partial checksum aggregate would also become stale as more
+            # platforms converge. Per-artifact sidecars remain available.
+            rm -f "dist/YueLink-${APP_VERSION}-SHA256SUMS" \
+              "dist/YueLink-${APP_VERSION}-SHA256SUMS.sha256"
+          fi
+          bash scripts/ci/publish_immutable_r2.sh
+          # A deliberately skipped candidate (for example an incomplete stable
+          # matrix) never moves the root; complete candidates wait for the
+          # private signing plane.
+          if [ "${SKIP_MANIFEST:-0}" = "1" ]; then
+            echo "✓ 已发布当前可用安装包到 R2 ($BUCKET/$TAG/) — 未生成 candidate/root"
+          else
+            echo "✓ 已发布不可变 $TAG/$MANIFEST_NAME + 安装包"
+            candidate_sha256="$(sha256sum "$MANIFEST_NAME" | awk '{print $1}')"
+            source_commit="$(git rev-parse HEAD)"
+            if ! { [ "$source_commit" = "$BUILT_SOURCE_COMMIT" ] &&
+                   [ "$source_commit" = "$ATTESTED_SOURCE_COMMIT" ]; }; then
+              echo "::error::summary source mismatch: attested=$ATTESTED_SOURCE_COMMIT built=$BUILT_SOURCE_COMMIT actual=$source_commit"
+              exit 1
+            fi
+            {
+              echo "## Candidate published; in-pipeline promotion follows"
+              echo
+              echo "Public CI produced \`$TAG/$MANIFEST_NAME\`; the signed root moves in the last step of this job."
+              echo "- ATTESTED_SOURCE_COMMIT: \`$ATTESTED_SOURCE_COMMIT\`"
+              echo "- BUILT_SOURCE_COMMIT: \`$BUILT_SOURCE_COMMIT\`"
+              echo "- Candidate SHA-256: \`$candidate_sha256\`"
+              echo "Pass both exact values to the protected local/private signing"
+              echo "plane only after the artifact verification step also succeeds."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Publish and read back corresponding native sources
+        if: env.SKIP_MANIFEST != '1' && inputs.tag_kind == 'stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/YueLink-native-sources-${GITHUB_REF_NAME}.tar.gz"
+          receipt="$RUNNER_TEMP/yuelink-native-source-publication.json"
+          python3 scripts/native/source_offer.py \
+            --download-cache "$RUNNER_TEMP/native-source-cache" --output "$archive"
+          python3 scripts/native/publish_source_offer.py \
+            --tag "$GITHUB_REF_NAME" --source "$ATTESTED_SOURCE_COMMIT" \
+            --archive "$archive" --receipt "$receipt"
+          echo "NATIVE_MEDIA_SOURCE_RECEIPT=$receipt" >> "$GITHUB_ENV"
+          {
+            echo '### Corresponding native sources verified'
+            echo '```json'
+            cat "$receipt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify immutable candidate and all release artifacts
+        if: env.SKIP_MANIFEST != '1'
+        run: |
+          set -euo pipefail
+          report="$(mktemp)"
+          trap 'rm -f "$report"' EXIT
+          for attempt in 1 2 3 4 5 6 7 8; do
+            if dart run scripts/verify_release_artifacts.dart \
+                 --version "$APP_VERSION" --candidate --json >"$report"; then
+              cat "$report"
+              echo "release candidate verification passed on attempt $attempt"
+              exit 0
+            else
+              status=$?
+            fi
+            cat "$report"
+            # The verifier's JSON distinguishes binary 404 from integrity failures.
+            # Missing/incorrect sidecars and manifests are ambiguous: fail closed.
+            if [ "$status" -ne 1 ] || ! jq -e '
+              type == "array" and length > 0 and
+              all(.[]; type == "object" and (.ok | type) == "boolean" and
+                (.check | type) == "string" and (.detail | type) == "string") and
+              any(.[]; .ok == false) and
+              all(.[]; .ok == true or
+                ((.check | startswith("binary:")) and
+                 (.detail | test("^HTTP 404, content-length=-?[0-9]+$"))))
+            ' "$report" >/dev/null; then
+              echo "::error::candidate content/integrity verification failed"
+              exit 1
+            fi
+            if [ "$attempt" -eq 8 ]; then
+              break
+            fi
+            echo "::notice::CDN binary not yet visible (attempt $attempt/8)"
+            sleep 15
+          done
+          echo "::error::candidate verification failed after CDN propagation window"
+          exit 1
+      # In-pipeline promotion (2026-09-03). Build green ⇒ the signed root
+      # update.json moves to this version, here, with no operator and no
+      # second machine. The previous "protected plane" promoters (private
+      # sign-release-manifest workflow / bastion sealed signer / workstation
+      # wrapper) stay as fallback but are no longer on the release path: they
+      # were billing-frozen, never had a successful live run, or ran 40x slower
+      # to R2 and burned two version numbers (v1.3.34, v1.3.36) with
+      # half-finished immutable bindings. Owner accepted the trade-off of the
+      # signing seed living in this public repo's secrets; every check the
+      # protected promoter performed is reused inside the script.
+      - name: Sign root manifest and promote (in-pipeline)
+        if: env.SKIP_MANIFEST != '1' && inputs.tag_kind == 'stable'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_APP_KEY }}
+          R2_ENDPOINT: https://1e192a89cfaab399d211bb1dfe77a5cd.r2.cloudflarestorage.com
+          R2_ACCOUNT_ID: 1e192a89cfaab399d211bb1dfe77a5cd
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          BUCKET: yuelink-dist
+          TAG: ${{ github.ref_name }}
+          UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64: ${{ secrets.UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64 }}
+          ATTESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+          SOURCE_ATTESTATION_RUN_ID: ${{ inputs.attestation_run_id }}
+          BUILDER_COMMIT: ${{ github.workflow_sha }}
+          BUILD_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [ -z "${UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64:-}" ]; then
+            echo "::error::UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64 secret is not configured; root manifest was NOT promoted (fallback: scripts/ci/release-promote-local.sh on bastion)"
+            exit 1
+          fi
+          python3 - "$NATIVE_MEDIA_SOURCE_RECEIPT" "$TAG" "$ATTESTED_SOURCE_COMMIT" <<'PYRECEIPT'
+          import json, sys
+          from pathlib import Path
+          receipt = json.loads(Path(sys.argv[1]).read_text())
+          if not (receipt['tag'] == sys.argv[2] and receipt['source_commit'] == sys.argv[3]
+                  and receipt['repository'] == 'onesyue/yuelink-ci'
+                  and receipt['downloaded_archive_and_sidecar_verified'] is True):
+              raise SystemExit('Native corresponding sources have not been published and verified')
+          PYRECEIPT
+          bash scripts/ci/promote_in_pipeline.sh "$APP_VERSION"
+

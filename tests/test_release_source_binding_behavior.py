@@ -125,7 +125,10 @@ def source_runs(*runs: str) -> str:
     payloads = [json.loads(run) for run in runs] if runs else [json.loads(source_run())]
     return json.dumps({"workflow_runs": payloads})
 
-_EXACT_SOURCE_REF = "ref: ${{ needs.source_binding.outputs.source_commit }}"
+_EXACT_SOURCE_REF = "ref: ${{ inputs.source_commit }}"
+_CALLER_SOURCE = "${{ needs.plan.outputs.source_commit }}"
+_PLAN_SOURCE = "value: ${{ jobs.source_binding.outputs.source_commit }}"
+_BINDING_STEP_SOURCE = "${{ steps.bind.outputs.source_commit }}"
 _SOURCE_EQUALITY = '[ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ]'
 _SOURCE_DEPLOY_KEY = "ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}"
 _COVERAGE_SOURCE_CHECKOUTS = (
@@ -170,6 +173,12 @@ def public_source_binding_issues(workflow: str) -> list[str]:
                 )
     if not bound:
         issues.append("no public source checkout is bound to the attested commit")
+    passes = re.findall(r"(?m)^[ ]+source_commit: (\S.+)$", workflow)
+    allowed = {_CALLER_SOURCE, _BINDING_STEP_SOURCE}
+    if _CALLER_SOURCE not in passes or any(item not in allowed for item in passes):
+        issues.append("a source_commit input is not the attested plan output")
+    if _PLAN_SOURCE not in workflow:
+        issues.append("plan does not publish the attested source commit")
     for name in _COVERAGE_SOURCE_CHECKOUTS:
         if name not in bound:
             issues.append(f"missing bound checkout: {name}")
@@ -177,7 +186,9 @@ def public_source_binding_issues(workflow: str) -> list[str]:
 
 class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.workflow = WORKFLOW.read_text(encoding="utf-8")
+        from scripts.check_public_build import composed_text
+
+        self.workflow = composed_text(WORKFLOW)
         self.script = binding_script(self.workflow)
 
     def run_binding(
@@ -494,6 +505,18 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
                     )
                 )
         self.assertGreaterEqual(seen, 1)
+        unwired = workflow.replace(
+            f"source_commit: {_CALLER_SOURCE}",
+            "source_commit: ${{ github.sha }}",
+            1,
+        )
+        self.assertNotEqual(unwired, workflow)
+        self.assertTrue(
+            any(
+                "attested plan output" in issue
+                for issue in public_source_binding_issues(unwired)
+            )
+        )
         for name in _COVERAGE_SOURCE_CHECKOUTS:
             mutated = workflow.replace(
                 f"      - name: {name}\n", "      - name: unbound checkout\n", 1
@@ -506,10 +529,12 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
         end = self.workflow.index("      - name: Attest build provenance", start)
         identity = self.workflow[start:end]
         self.assertIn(
-            "ATTESTED_SOURCE_COMMIT: "
-            "${{ needs.source_binding.outputs.source_commit }}",
+            "ATTESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}",
             identity,
         )
+        self.assertNotIn("needs.source_binding.outputs", identity)
+        self.assertIn(_PLAN_SOURCE, self.workflow)
+        self.assertIn(f"source_commit: {_CALLER_SOURCE}", self.workflow)
         self.assertIn(
             '[ "$source_commit" = "$ATTESTED_SOURCE_COMMIT" ]',
             identity,

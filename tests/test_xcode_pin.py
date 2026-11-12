@@ -65,7 +65,9 @@ class XcodePinTests(unittest.TestCase):
             return result, exported, expected, cache_created
 
     def test_apple_release_build_uses_xcode_26_6(self) -> None:
-        workflow = BUILD.read_text(encoding="utf-8")
+        from scripts.check_public_build import composed_text
+
+        workflow = composed_text(BUILD)
         assert workflow.count('"os":"macos-26"') == 2
         assert '"os":"macos-latest"' not in workflow
         assert "if: matrix.platform == 'ios' || matrix.platform == 'macos'" in workflow
@@ -80,7 +82,9 @@ class XcodePinTests(unittest.TestCase):
         self.assertTrue(cache_created)
 
     def test_apple_release_refuses_missing_or_wrong_xcode_before_export(self) -> None:
-        workflow = BUILD.read_text(encoding="utf-8")
+        from scripts.check_public_build import composed_text
+
+        workflow = composed_text(BUILD)
         for installed, version in ((False, "Xcode 26.6"), (True, "Xcode 26.5")):
             with self.subTest(installed=installed, version=version):
                 result, exported, _expected, cache_created = self.run_apple_step(

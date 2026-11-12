@@ -49,7 +49,9 @@ sleep() { echo "$1" >> "$STATE/sleeps"; }
             )
 
     def candidate(self, payloads, status=1):
-        workflow = (ROOT / '.github/workflows/build.yml').read_text()
+        from scripts.check_public_build import composed_text
+
+        workflow = composed_text(ROOT / '.github/workflows/build.yml')
         start = workflow.index('          set -euo pipefail', workflow.index(
             '- name: Verify immutable candidate and all release artifacts'))
         end = workflow.index('      # In-pipeline promotion', start)
@@ -65,7 +67,9 @@ dart() {
     def tag(self, payloads, workflow=False):
         source = (ROOT / 'release.sh').read_text()
         if workflow:
-            source = (ROOT / '.github/workflows/build.yml').read_text()
+            from scripts.check_public_build import composed_text
+
+            source = composed_text(ROOT / '.github/workflows/build.yml')
             start = source.index("            tag_json=''\n")
             end = source.index('            tag_message=', start)
             script = textwrap.dedent(source[start:end])
@@ -160,17 +164,26 @@ gh() {
             self.assertEqual((calls, sleeps), (expected_calls, expected_sleeps))
 
     def test_sync_overlay_reconstructs_workflow(self):
-        # Reverse then reapply the overlay in a temporary file; never edit the checkout.
+        # The retry classification now lives in the called workflows.
+        # Reverse then reapply the overlay in a temporary directory.
         with tempfile.TemporaryDirectory() as directory:
-            target = Path(directory) / 'build.yml'
-            expected = (ROOT / '.github/workflows/build.yml').read_bytes()
-            target.write_bytes(expected)
+            root = Path(directory)
+            names = ('plan.yml', 'publish.yml')
+            for name in names:
+                (root / name).write_bytes(
+                    (ROOT / '.github/workflows' / name).read_bytes())
             patch = (ROOT / 'scripts/public-release-retry.patch').read_bytes()
             for direction in ('--reverse', '--forward'):
-                subprocess.run(['patch', '--batch', direction, str(target)], input=patch,
-                               capture_output=True, check=True)
-            self.assertEqual(target.read_bytes(), expected)
-            self.assertIn('gpgverify_unavailable', (ROOT / 'scripts/check_public_build.py').read_text())
+                subprocess.run(
+                    ['patch', '--batch', direction, '-p0'],
+                    input=patch, cwd=root, capture_output=True, check=True)
+            for name in names:
+                self.assertEqual(
+                    (root / name).read_bytes(),
+                    (ROOT / '.github/workflows' / name).read_bytes())
+            self.assertIn(
+                'gpgverify_unavailable',
+                (ROOT / 'scripts/check_public_build.py').read_text())
 
 
 if __name__ == '__main__':

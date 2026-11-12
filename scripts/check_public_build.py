@@ -2,8 +2,9 @@
 """Self-check for the canonical public build workflow.
 
 The private repository no longer carries a product workflow, so this file is
-not a projection of one. Write mode is refused by sync-build.sh. A missing
-marker or a private checkout without the deploy key fails closed.
+not a projection of one. Write mode is refused by sync-build.sh. build.yml
+calls plan, validate, build-matrix and publish. A missing called workflow,
+a missing marker, or a private checkout without the deploy key fails closed.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import sys
 from pathlib import Path
 
 MIN_PRIVATE_CHECKOUTS = 7
+CALLED = ("plan.yml", "validate.yml", "build-matrix.yml", "publish.yml")
 INSTALLER = re.compile(
     r"onesyue/yuelink-ci/\.github/actions/setup-flutter@[0-9a-f]{40}"
 )
@@ -32,7 +34,15 @@ REQUIRED = (
     "repository: onesyue/yuelink-ci",
     "FLUTTER_VERSION:",
     "GO_VERSION:",
+    "needs.plan.result == 'success'",
+    "needs.validate.result == 'success'",
+    "needs.dial_gate.result == 'success'",
+    "needs.dial_gate_summary.result == 'success'",
+    "value: ${{ jobs.source_binding.outputs.source_commit }}",
+    "value: ${{ jobs.preflight.outputs.tag_kind }}",
+    "secrets: inherit",
 )
+DIAL_PLATFORMS = ("windows", "macos", "linux", "android", "ios")
 
 
 def build_job_needs(text: str) -> list[str]:
@@ -49,13 +59,46 @@ def build_job_needs(text: str) -> list[str]:
         ]
     return []
 
+
+def job_body(text: str, name: str) -> str:
+    prefix = f"  {name}:\n"
+    for job in _JOB_HEAD.split(text):
+        if job.startswith(prefix):
+            return job
+    return ""
+
+
+def composed_text(path: Path) -> str:
+    """Concatenate the orchestrator and the workflows it calls.
+
+    A missing sibling raises. Callers that only have a string use issues().
+    """
+    parts = [path.read_text(encoding="utf-8")]
+    for name in CALLED:
+        sibling = path.parent / name
+        if not sibling.is_file():
+            raise FileNotFoundError(sibling)
+        parts.append(sibling.read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
+
 def issues(text: str) -> list[str]:
     found: list[str] = []
+    if not text.strip():
+        return ["public build workflow is empty"]
     for marker in REQUIRED:
         if marker not in text:
-            found.append(f"public build.yml lost {marker!r}")
+            found.append(f"public build workflow lost {marker!r}")
+    for name in CALLED:
+        uses = f"uses: ./.github/workflows/{name}"
+        if uses not in text:
+            found.append(f"build.yml does not call {name}")
+            continue
+        window = text[text.find(uses) : text.find(uses) + 500]
+        if "secrets: inherit" not in window:
+            found.append(f"{name} call does not inherit secrets")
     if "ubuntu-latest" in text:
-        found.append("public build.yml uses the floating ubuntu-latest label")
+        found.append("public build workflow uses the floating ubuntu-latest label")
     lines = text.splitlines()
     private = [
         index
@@ -64,7 +107,7 @@ def issues(text: str) -> list[str]:
     ]
     if len(private) < MIN_PRIVATE_CHECKOUTS:
         found.append(
-            f"private source checkouts fell below the floor "
+            "private source checkouts fell below the floor "
             f"({len(private)} < {MIN_PRIVATE_CHECKOUTS})"
         )
     for index in private:
@@ -87,13 +130,19 @@ def issues(text: str) -> list[str]:
             f"{sorted(envs)} must match setup-flutter {sorted(installers)}"
         )
     for name in ("FLUTTER_VERSION", "GO_VERSION"):
-        values = set(
-            re.findall(rf"(?m)^\s*{name}:\s*'([0-9.]+)'\s*$", text)
-        )
+        values = set(re.findall(rf"(?m)^\s*{name}:\s*'([0-9.]+)'\s*$", text))
         if len(values) != 1:
             found.append(f"{name} must be one pinned value, found {sorted(values)}")
-    if "preflight" not in build_job_needs(text):
-        found.append("build job must need preflight")
+    if "validate" not in build_job_needs(text):
+        found.append("build job must need validate")
+    if not re.search(r"(?m)^  preflight:\s*$", text):
+        found.append("reusable workflows lost the preflight job")
+    publish = job_body(text, "publish")
+    if "needs.build.result" in publish:
+        found.append("publish must not require the build job to succeed")
+    for platform in DIAL_PLATFORMS:
+        if not re.search(rf"(?m)^[ ]+- name: {platform}\s*$", text):
+            found.append(f"dial gate lost {platform}")
     android = re.search(
         r"uses:\s*android-actions/setup-android@\S+.*?(?=\n      - )",
         text,
@@ -126,12 +175,17 @@ def main(argv: list[str]) -> int:
     if not path.is_file():
         print(f"::error::missing public workflow {path}", file=sys.stderr)
         return 1
-    found = issues(path.read_text(encoding="utf-8"))
+    missing = [name for name in CALLED if not (path.parent / name).is_file()]
+    if missing:
+        for name in missing:
+            print(f"::error::missing reusable workflow {name}", file=sys.stderr)
+        return 1
+    found = issues(composed_text(path))
     if found:
         for item in found:
             print(f"::error::{item}", file=sys.stderr)
         return 1
-    print("public build.yml self-check passed")
+    print("public build workflow self-check passed")
     return 0
 
 

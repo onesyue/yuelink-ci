@@ -1,0 +1,7 @@
+# Shrink-only anti-freeze baseline.
+# One offender per other line. Delete a line only when that offender is gone.
+# Adding a line fails once this file exists on the merge-base.
+#
+# On 2026-11-13 the yuelink-ci test sources contained 64-hex literals in four
+# files. None of those digests is the sha256 of a tracked repository file, so
+# they are external pins and are not listed here.

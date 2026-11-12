@@ -39,7 +39,9 @@ def build_job_needs(workflow: str) -> list[str]:
 
 class PublicReleaseWorkflowContractTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.build = BUILD.read_text(encoding="utf-8")
+        from scripts.check_public_build import composed_text
+
+        self.build = composed_text(BUILD)
         self.attestation = ATTESTATION.read_text(encoding="utf-8")
 
     def test_release_markers_remain_on_the_public_workflow(self) -> None:
@@ -47,10 +49,10 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
             "name: Assemble R2 candidate",
             "Publish to R2 (yuetong.app CDN origin)",
             "Record exact sideload identity",
-            "ATTESTED_SOURCE_COMMIT: ${{ needs.source_binding.outputs.source_commit }}",
+            "ATTESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}",
             '[ "$source_commit" = "$ATTESTED_SOURCE_COMMIT" ]',
             "Validate current-tag sideload artifacts",
-            "needs.preflight.result == 'success'",
+            "needs.validate.result == 'success'",
             "stable manifest must contain all 9 platform artifacts",
             "repository: onesyue/yuelink-ci",
             'bash .public-builder/sync-build.sh --check "$GITHUB_WORKSPACE"',
@@ -58,16 +60,21 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
             "RELEASE-STATUS-${status_key}",
             "A partial checksum aggregate would also become stale",
             "name: Sign root manifest and promote (in-pipeline)",
-            "if: env.SKIP_MANIFEST != '1' && needs.preflight.outputs.tag_kind == 'stable'",
+            "if: env.SKIP_MANIFEST != '1' && inputs.tag_kind == 'stable'",
             'bash scripts/ci/promote_in_pipeline.sh "$APP_VERSION"',
             "root manifest was NOT promoted",
-            "SOURCE_ATTESTATION_RUN_ID: ${{ needs.source_binding.outputs.attestation_run_id }}",
+            "SOURCE_ATTESTATION_RUN_ID: ${{ inputs.attestation_run_id }}",
             "BUILDER_COMMIT: ${{ github.workflow_sha }}",
             "BUILD_RUN_ID: ${{ github.run_id }}",
             "CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}",
             "Candidate SHA-256:",
             "dart run tool/windows_durability_probe.dart",
             "YUELINK_FLUTTER_INSTALLER:",
+            "value: ${{ jobs.source_binding.outputs.source_commit }}",
+            "value: ${{ jobs.preflight.outputs.tag_kind }}",
+            "source_commit: ${{ needs.plan.outputs.source_commit }}",
+            "tag_kind: ${{ needs.validate.outputs.tag_kind }}",
+            "secrets: inherit",
         ]
         for marker in required:
             with self.subTest(marker=marker):
@@ -86,21 +93,25 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
         android = self.build.split("      # ANDROID", 1)[1].split("      # iOS —", 1)[0]
         self.assertIn("Verify APK signature is the pinned release key", android)
 
-    def test_dropping_preflight_from_build_needs_is_rejected(self) -> None:
+    def test_dropping_validate_from_build_needs_is_rejected(self) -> None:
         from scripts.check_public_build import issues
 
         needs = build_job_needs(self.build)
-        self.assertIn("preflight", needs)
+        self.assertIn("validate", needs)
         self.assertEqual(issues(self.build), [])
-        head, tail = self.build.split("\n  build:\n", 1)
-        mutated_tail = tail.replace(
-            "needs: [source_binding, prepare, preflight, coverage_join]",
-            "needs: [source_binding, prepare, coverage_join]",
+        mutated = self.build.replace(
+            "needs: [plan, validate]",
+            "needs: [plan]",
             1,
         )
-        mutated = head + "\n  build:\n" + mutated_tail
-        self.assertNotIn("preflight", build_job_needs(mutated))
+        self.assertNotEqual(mutated, self.build)
+        self.assertNotIn("validate", build_job_needs(mutated))
         self.assertTrue(issues(mutated))
+
+    def test_orchestrator_alone_is_not_a_pass(self) -> None:
+        from scripts.check_public_build import issues
+
+        self.assertTrue(issues(BUILD.read_text(encoding="utf-8")))
 
     def test_flutter_builds_keep_isolated_symbols(self) -> None:
         commands = re.findall(
@@ -130,13 +141,12 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
         )
 
     def test_flutter_installer_env_matches_the_uses_pin(self) -> None:
-        for path in (BUILD, ATTESTATION):
-            text = path.read_text(encoding="utf-8")
+        for label, text in (("build", self.build), ("source-attestation.yml", self.attestation)):
             uses = set(INSTALLER.findall(text))
             envs = set(
                 re.findall(r"(?m)^[ ]*YUELINK_FLUTTER_INSTALLER:\s*(\S+)\s*$", text)
             )
-            with self.subTest(path=path.name):
+            with self.subTest(path=label):
                 self.assertEqual(uses, envs)
                 self.assertEqual(len(uses), 1)
 
@@ -185,7 +195,9 @@ class PublicWorkflowShellObservationTests(unittest.TestCase):
             )
 
     def test_apk_signer_first_hash_drains_full_output_and_keeps_failures(self) -> None:
-        source = BUILD.read_text(encoding="utf-8")
+        from scripts.check_public_build import composed_text
+
+        source = composed_text(BUILD)
         assignments = re.findall(r'(?ms)^            got=\$\("\$APKSIGNER".*?\)\n', source)
         self.assertEqual(len(assignments), 1)
         script = (
@@ -203,9 +215,11 @@ class PublicWorkflowShellObservationTests(unittest.TestCase):
         self.assertNotEqual(self.run_shell(script, data, status=23).returncode, 0)
 
     def test_bundle_first_match_consumes_listing(self) -> None:
+        from scripts.check_public_build import composed_text
+
         matches = re.findall(
             r"(?m)^          BUNDLE_DIR=\$\(find build/linux .*\)$",
-            BUILD.read_text(encoding="utf-8"),
+            composed_text(BUILD),
         )
         self.assertEqual(len(matches), 1)
         script = (

@@ -1,0 +1,430 @@
+name: Validate YueLink source
+
+# Called by build.yml. github.* is the caller run, not a new event.
+# Workflow env is repeated because a caller env map is not inherited.
+on:
+  workflow_call:
+    inputs:
+      source_commit:
+        description: attested private source
+        required: true
+        type: string
+      attestation_run_id:
+        description: green source-attestation run
+        required: true
+        type: string
+    outputs:
+      tag_kind:
+        description: preflight classification
+        value: ${{ jobs.preflight.outputs.tag_kind }}
+
+permissions:
+  contents: read
+
+env:
+  # Private template fallback only; public runs use their exact builder SHA.
+  COVERAGE_TOOLS_SHA: '07856de8be832ceed6e4daeff7bf840c2269d8dc'
+  # Flutter 3.47.8 / Dart 3.13.7 (2026-10-23): BoringSSL distrusts the
+  # compromised eMudhra intermediates (GHSA-frr6-h895-5pxp) and Android 14+
+  # reads the updatable Conscrypt root store. Embedder renderer files are
+  # unchanged from 3.47.7. Exact archives are verified by setup-flutter.
+  FLUTTER_VERSION: '3.47.8'
+  # Go 1.27.1 (2026-09-01): 跨 minor 从 1.26.8 升上来，与 yue-node/Xray-core
+  # fork 的发布工具链对齐。拿到 1.27 的小对象分配优化（<80B 分配路径约 -30%，
+  # 分配密集程序整体约 1%）；Green Tea GC 在 1.26 就已默认、不是本次新增。
+  #
+  # 跨 minor 此前是一道**人工门**（"升之前先核 metacubex/gvisor 的 linkname 假设"），
+  # 因为 gvisor fork 在 amd64 上按写死的偏移直接改 runtime.sched.nmspinning，
+  # 失配不报编译错误、只在运行期把调度器计数器写坏。2026-09-20 起该门由
+  # core/gvisor_runtime_abi_test.go 自动执行：它用当前工具链真实编译出的 DWARF
+  # 布局，对上 gvisor fork 里写死的 NMSPINNING_OFFSET 与 WaitReason 字面量。
+  # 升级时实测：nmspinning 偏移在 linux/windows/darwin ×amd64 下 1.26.8 与 1.27.1
+  # 均为 116、schedt 大小同为 6872；三个 WaitReason 常量两版一致；
+  # 对照 1.25.0=100 / 1.24.0=92 证明该判据确实会随版本变动。
+  # Keep the release builder and govulncheck on this exact patch release;
+  # a floating 1.27 selector can silently rebuild the same tag against a
+  # different standard library.
+  # 2026-10-21: Go 1.27.3 addresses GO-2026-6809; retain the shipped-toolchain ABI guard.
+  # 2026-11-11: Go 1.27.4 addresses GO-2026-6859 (net/http MaxBytesReader race).
+  GO_VERSION: '1.27.4'
+  # Production builds consume the reviewed module graph exactly. `core/go.mod`
+  # and go.sum are tidy against the pinned mihomo submodule; dependency drift
+  # must fail the build instead of being resolved implicitly on a runner.
+  GOFLAGS: -mod=readonly
+  # Opt JS actions (actions/attest*, etc.) into Node.js 24 now, ahead of the
+  # 2026-06-16 forced default — silences the recurring Node 20 deprecation
+  # warning. Safe to drop once Node 24 is the runner default.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+
+  preflight:
+    name: Release preflight
+    runs-on: ubuntu-24.04
+    # 2026-09-23 (L9): signing / R2 credentials live in the `yuelink-build`
+    # environment, whose deployment policy admits only `v*` tags and the
+    # `master` dispatch branch. Any other ref — a pushed side branch, a
+    # hand-added workflow run — can no longer read them. Environment secrets
+    # shadow same-named repository secrets, so this line is inert until the
+    # owner copies them in, and the cut-over is deleting the repo-level copy.
+    environment: yuelink-build
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+    outputs:
+      tag_kind: ${{ steps.classify.outputs.kind }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ inputs.source_commit }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Verify exact attested source checkout
+        shell: bash
+        env:
+          ATTESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          set -euo pipefail
+          BUILT_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          [ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ] || {
+            echo "::error::preflight source drift: attested=$ATTESTED_SOURCE_COMMIT built=$BUILT_SOURCE_COMMIT"
+            exit 1
+          }
+          echo "BUILT_SOURCE_COMMIT=$BUILT_SOURCE_COMMIT"
+
+      - name: Verify Gradle wrapper supply chain
+        run: |
+          python3 scripts/ci/verify_gradle_wrapper_supply_chain.py
+          python3 scripts/ci/test_gradle_wrapper_supply_chain.py
+
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          # 2026-08-31 reviewed decision — verified-artifact caches are ON in
+          # this trust boundary (was: blanket `cache: false`, ~10 machine-min
+          # of redundant SDK installs per release, ~5 min on the critical
+          # path). The prior comment said "a cache hit is not part of the
+          # reviewed source tree"; the answer is that every cache we restore
+          # is bound to reviewed content and fails closed:
+          #   * Flutter SDK: the pinned installer stores a receipt carrying
+          #     the exact archive SHA-256 it verified at download; on a cache
+          #     hit it re-checks the receipt AND re-probes the SDK's reported
+          #     version/channel (verify_runtime). Receipt mismatch → fresh
+          #     verified download.
+          #   * Go module and compiler caches are separate actions/cache
+          #     entries on the build job (this preflight job does not compile
+          #     Go). setup-go's own cache stays off. A miss still builds.
+          #     go.sum and `-mod=readonly` still verify restored modules.
+          #   * pub cache: `pub get --enforce-lockfile` verifies the content
+          #     hashes recorded in the reviewed pubspec.lock.
+          # Write access to the restored scope is limited to trusted refs
+          # (master / tags / dispatch on this repo); fork-PR cache scopes are
+          # isolated by GitHub and cannot poison ours. Object-level GOCACHE
+          # trusts that scoping — the same trust already extended to the
+          # buildx gha cache in yueto-ci.
+          cache: true
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Set up Java for native ownership tests
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Classify release tag once
+        id: classify
+        env:
+          REF: ${{ github.ref }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$REF" == refs/tags/* ]]; then
+            kind="$(bash scripts/ci/release_tag.sh kind "$TAG")"
+          else
+            kind="nonrelease"
+          fi
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout non-reused coverage tools
+        if: github.repository != 'onesyue/yuelink-ci' || !startsWith(github.ref, 'refs/tags/v')
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.repository == 'onesyue/yuelink-ci' && github.sha || env.COVERAGE_TOOLS_SHA }}
+          path: coverage/canonical-tools
+          persist-credentials: false
+
+      - name: Verify non-reused coverage tools
+        if: github.repository != 'onesyue/yuelink-ci' || !startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          EXPECTED_COVERAGE_TOOLS_SHA: ${{ github.repository == 'onesyue/yuelink-ci' && github.sha || env.COVERAGE_TOOLS_SHA }}
+          YUELINK_CI_TOOLS_DIR: ${{ github.workspace }}/coverage/canonical-tools/scripts
+        run: |
+          set -Eeuo pipefail
+          tools_root="$(pwd -P)/coverage/canonical-tools"
+          [[ ! -L coverage && ! -L "$tools_root" && ! -L "$tools_root/scripts" ]]
+          [[ "$YUELINK_CI_TOOLS_DIR" = "$tools_root/scripts" ]]
+          [[ "$EXPECTED_COVERAGE_TOOLS_SHA" =~ ^[0-9a-f]{40}$ ]]
+          actual_tools_sha="$(git -C "$tools_root" rev-parse HEAD)"
+          [[ "$actual_tools_sha" = "$EXPECTED_COVERAGE_TOOLS_SHA" ]] || {
+            echo '::error::coverage tools differ from the exact builder'
+            exit 1
+          }
+          tools_status="$(git -C "$tools_root" status --porcelain)"
+          [[ -z "$tools_status" ]] || {
+            echo '::error::coverage tools checkout is dirty'
+            exit 1
+          }
+          if ! command -v lcov >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y lcov
+          fi
+
+      - name: Place coverage outside preflight when the source allows it
+        id: coverage_place
+        run: |
+          set -euo pipefail
+          if grep -q 'COVERAGE_EXTERNAL' scripts/ci/release_preflight.sh; then
+            echo "external=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "external=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run in-workflow release gates
+        env:
+          COVERAGE_EXTERNAL: ${{ steps.coverage_place.outputs.external }}
+          GH_TOKEN: ${{ github.token }}
+          ATTESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+          SOURCE_ATTESTATION_RUN_ID: ${{ inputs.attestation_run_id }}
+          REUSE_SOURCE_GATES: ${{ github.repository == 'onesyue/yuelink-ci' && startsWith(github.ref, 'refs/tags/v') && 'true' || 'false' }}
+          YUELINK_CI_TOOLS_DIR: ${{ github.workspace }}/coverage/canonical-tools/scripts
+          RELEASE_TAG: ${{ github.ref_name }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          R2_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          R2_APP_KEY: ${{ secrets.R2_APP_KEY }}
+          CLOUDFLARE_R2_CONFIG_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
+          YUELINK_FLUTTER_INSTALLER: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49
+        run: bash scripts/ci/release_preflight.sh
+
+      # Preserve timeout attempts, half reports and classifications for diagnosis.
+      # Upload only the listed test-event/LCOV evidence patterns, never other files.
+      - name: Retain timed-out coverage group evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-timeout-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            coverage/source-gate/*.initial.jsonl
+            coverage/source-gate/*.initial.info
+            coverage/source-gate/*.half*.jsonl
+            coverage/source-gate/*.timeout.json
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Verify live immutable version-prefix bucket lock
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          BUCKET: yuelink-dist
+          TAG: ${{ github.ref_name }}
+          R2_ACCOUNT_ID: 1e192a89cfaab399d211bb1dfe77a5cd
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
+        run: bash scripts/ci/verify_r2_bucket_lock.sh
+
+      # Public mirror only: prove this workflow revision still satisfies the
+      # canonical self-check. Run after release_preflight because the nested
+      # checkout is intentionally untracked in the private source worktree
+      # (the preflight dirty-tree gate must inspect source before that
+      # diagnostic checkout exists).
+      - name: Checkout exact public builder revision
+        if: github.repository == 'onesyue/yuelink-ci'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.sha }}
+          path: .public-builder
+          persist-credentials: false
+
+      - name: Verify the public build workflow
+        if: github.repository == 'onesyue/yuelink-ci'
+        run: bash .public-builder/sync-build.sh --check "$GITHUB_WORKSPACE"
+
+
+
+  coverage_shard:
+    name: Coverage shard ${{ matrix.shard }}
+    if: github.event_name != 'pull_request' && !(github.repository == 'onesyue/yuelink-ci' && startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-24.04
+    environment: yuelink-build
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ['0', '1', '2', '3']
+    steps:
+      - name: Checkout attested source for one coverage shard
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ inputs.source_commit }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Verify exact attested source checkout
+        shell: bash
+        env:
+          ATTESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          set -euo pipefail
+          BUILT_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          [ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ] || {
+            echo "::error::coverage source drift: attested=$ATTESTED_SOURCE_COMMIT built=$BUILT_SOURCE_COMMIT"
+            exit 1
+          }
+
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Checkout coverage tools
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.repository == 'onesyue/yuelink-ci' && github.sha || env.COVERAGE_TOOLS_SHA }}
+          path: coverage/canonical-tools
+          persist-credentials: false
+
+      - name: Install lcov
+        run: |
+          if ! command -v lcov >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y lcov
+          fi
+
+      - name: Run one coverage shard
+        env:
+          COVERAGE_JOB_SHARD: ${{ matrix.shard }}/4
+          YUELINK_CI_TOOLS_DIR: ${{ github.workspace }}/coverage/canonical-tools/scripts
+        run: |
+          set -euo pipefail
+          if ! grep -q 'COVERAGE_EXTERNAL' scripts/ci/release_preflight.sh; then
+            echo "source preflight still owns coverage"
+            exit 0
+          fi
+          bash scripts/ci/run_flutter_coverage.sh
+
+      - name: Upload coverage shard
+        if: hashFiles('coverage/source-gate/shard.json') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: |
+            coverage/source-gate/shard.json
+            coverage/lcov.info
+          if-no-files-found: error
+          retention-days: 3
+
+
+  coverage_join:
+    name: Stitch coverage shards
+    if: github.event_name != 'pull_request' && !cancelled() && needs.preflight.result == 'success' && (needs.coverage_shard.result == 'success' || needs.coverage_shard.result == 'skipped')
+    runs-on: ubuntu-24.04
+    needs: [preflight, coverage_shard]
+    environment: yuelink-build
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout attested source for the coverage join
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ inputs.source_commit }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Verify exact attested source checkout
+        shell: bash
+        env:
+          ATTESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          set -euo pipefail
+          BUILT_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          [ "$BUILT_SOURCE_COMMIT" = "$ATTESTED_SOURCE_COMMIT" ] || {
+            echo "::error::coverage source drift: attested=$ATTESTED_SOURCE_COMMIT built=$BUILT_SOURCE_COMMIT"
+            exit 1
+          }
+
+      - uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Checkout coverage tools
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.repository == 'onesyue/yuelink-ci' && github.sha || env.COVERAGE_TOOLS_SHA }}
+          path: coverage/canonical-tools
+          persist-credentials: false
+
+      - name: Download coverage shards
+        if: needs.coverage_shard.result == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: coverage-shard-*
+          path: coverage-shards
+
+      - name: Stitch shards or accept the in-process suite
+        env:
+          YUELINK_CI_TOOLS_DIR: ${{ github.workspace }}/coverage/canonical-tools/scripts
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          manifests=(coverage-shards/*/shard.json)
+          if [ ${#manifests[@]} -eq 0 ]; then
+            if [ "${GITHUB_REPOSITORY}" = onesyue/yuelink-ci ] && [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+              echo "tag reuses the attested suite"
+              exit 0
+            fi
+            if ! grep -q 'COVERAGE_EXTERNAL' scripts/ci/release_preflight.sh; then
+              echo "source preflight still owns coverage"
+              exit 0
+            fi
+            echo "::error::coverage shards produced no manifest"
+            exit 1
+          fi
+          if ! command -v lcov >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y lcov
+          fi
+          python3 "$YUELINK_CI_TOOLS_DIR/stitch-coverage-shards.py" coverage-shards
+          dart run tool/automation/coverage_ratchet.dart --check
+

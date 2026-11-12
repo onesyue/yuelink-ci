@@ -26,6 +26,12 @@ def _step_body(workflow: str, name: str) -> str:
     return marker + (rest[: match.start()] if match else rest)
 
 
+def _release_pipeline() -> str:
+    from scripts.check_public_build import composed_text
+
+    return composed_text(ROOT / ".github/workflows/build.yml")
+
+
 def _setup_flutter_issues(workflow: str) -> list[str]:
     """Every setup-flutter use is a pinned SHA with the reviewed cache flag.
 
@@ -348,9 +354,7 @@ class PinnedFlutterActionTests(unittest.TestCase):
 
 class LinkPlatformCacheTests(unittest.TestCase):
     def test_generated_workflow_splits_go_cache_and_bounds_apt(self) -> None:
-        workflow = (ROOT / ".github" / "workflows" / "build.yml").read_text(
-            encoding="utf-8"
-        )
+        workflow = _release_pipeline()
         starts = [
             match.start()
             for match in re.finditer(r"- uses: actions/setup-go@", workflow)
@@ -365,7 +369,8 @@ class LinkPlatformCacheTests(unittest.TestCase):
             assert "cache-dependency-path" not in block
         java = workflow.index("- name: Set up Java for native ownership tests")
         restore = workflow.index("- name: Restore Go module cache\n")
-        assert java < starts[1] < restore
+        between = [start for start in starts if java < start < restore]
+        assert len(between) == 1
 
         for name in (
             "Restore Go module cache",
@@ -448,9 +453,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
         assert _setup_flutter_issues(workflow) == []
 
     def test_each_setup_flutter_pin_is_mutation_sensitive(self) -> None:
-        workflow = (ROOT / ".github" / "workflows" / "build.yml").read_text(
-            encoding="utf-8"
-        )
+        workflow = _release_pipeline()
         matches = list(
             re.finditer(
                 r"onesyue/yuelink-ci/\.github/actions/setup-flutter@[0-9a-f]{40}",
@@ -481,7 +484,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
             )
         assert checked_uses >= 1
     def test_dependency_cache_actions_keys_and_restore_prefixes(self) -> None:
-        workflow = (ROOT / ".github/workflows/build.yml").read_text()
+        workflow = _release_pipeline()
         self._assert_cache_identity(workflow)
 
     def _assert_cache_identity(self, workflow: str) -> None:
@@ -534,7 +537,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
                 assert re.fullmatch(r"actions/cache(?:/restore|/save)?@[0-9a-f]{40}", ref)
 
     def test_cache_paths_cannot_restore_release_or_attestation_outputs(self) -> None:
-        workflow = (ROOT / ".github/workflows/build.yml").read_text()
+        workflow = _release_pipeline()
         self._assert_cache_boundary(workflow)
 
     def _assert_cache_boundary(self, workflow: str) -> None:
@@ -578,7 +581,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
         assert core.count("cache-hit") == 1
 
     def test_cache_contract_rejects_anonymous_output_restore_and_broad_fallback(self) -> None:
-        workflow = (ROOT / ".github/workflows/build.yml").read_text()
+        workflow = _release_pipeline()
         unsafe = (
             workflow
             + "\n      - uses: actions/cache@"
@@ -594,7 +597,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
             self._assert_cache_identity(unsafe)
 
     def test_cache_identity_rejects_mutable_actions_and_missing_identity(self) -> None:
-        workflow = (ROOT / ".github/workflows/build.yml").read_text()
+        workflow = _release_pipeline()
         sdk = json.loads(
             (ROOT / "tests/fixtures/flutter-coverage-groups-20261028.json").read_text()
         )["live_sdk"]
@@ -614,7 +617,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
                 self._assert_cache_identity(unsafe)
 
     def test_apt_shell_maps_kill_and_retries_without_errexit(self) -> None:
-        workflow = (ROOT / ".github/workflows/build.yml").read_text()
+        workflow = _release_pipeline()
         linux = _step_body(workflow, "Install Linux build dependencies")
         function = textwrap.dedent(linux.split("run: |\n", 1)[1].split("          apt_bounded update", 1)[0])
         # Execute the actual function with command stand-ins; no sudo/network.

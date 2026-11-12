@@ -21,7 +21,9 @@ REQUIRED_ENV = {
 
 class PublisherEnvironmentContractTest(unittest.TestCase):
     def test_every_mirrored_publisher_call_has_full_environment(self) -> None:
-        workflow = WORKFLOW.read_text()
+        from scripts.check_public_build import composed_text
+
+        workflow = composed_text(WORKFLOW)
         calls: list[tuple[str, set[str]]] = []
         for call_match in re.finditer(re.escape(CALL), workflow):
             prefix = workflow[: call_match.start()]

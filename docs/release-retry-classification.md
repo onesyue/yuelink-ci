@@ -8,7 +8,7 @@ R12 先核对内容，再仅允许 verified=false 且 reason 为 gpgverify_unava
 
 状态定义依据：https://docs.github.com/en/rest/git/tags 。两个 gpgverify 状态表示验签服务不可用/通信错误，不代表签名已通过。
 
-工作流变更由 scripts/public-release-retry.patch 作为公共构建器策略维护；sync-build.sh 在原有私源镜像转换后以零 fuzz 应用，模板冲突必须显式解决。未修改其他仓库。后续私源吸收相同策略时需同步移除此 overlay，避免重复应用。
+工作流变更由 scripts/public-release-retry.patch 保留为可逆的分类记录：标签循环在 plan.yml，候选包循环在 publish.yml。sync-build.sh 不再把私有模板打上这个 overlay。
 
 新增 tests/test_release_retry_classification.py 执行真实 shell 循环，替换外部 API、Dart 与 sleep；现有 test_release_remote_tag_behavior.py 更新无效签名的拒绝状态断言。本机按调度要求未运行测试或构建，验收状态为 deferred，由 box 执行：
 

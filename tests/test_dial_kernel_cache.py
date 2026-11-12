@@ -35,8 +35,10 @@ def dial_kernel_cache_issues(workflow):
     items = []
     if needs:
         items = [item.strip() for item in needs.group(1).split(',') if item.strip()]
-    if 'source_binding' not in items:
-        issues.append('dial_gate does not need source_binding')
+    if items != ['plan']:
+        issues.append('dial_gate does not need the plan that binds source')
+    if 'value: ${{ jobs.source_binding.outputs.source_commit }}' not in workflow:
+        issues.append('plan does not publish the attested source commit')
     ios = step_named(job, 'Dial inside the iOS simulator')
     if 'run: bash candidate/core/dialgate/ci/run.sh ios\n' not in ios:
         issues.append('iOS dial command is missing')
@@ -66,7 +68,9 @@ def dial_kernel_cache_issues(workflow):
 
 class DialKernelCacheTests(unittest.TestCase):
     def test_ios_dial_survives_a_missing_kernel_cache(self):
-        workflow = WORKFLOW.read_text(encoding='utf-8')
+        from scripts.check_public_build import composed_text
+
+        workflow = composed_text(WORKFLOW)
         self.assertEqual(dial_kernel_cache_issues(workflow), [])
         job = dial_job(workflow)
         without_ios = workflow.replace(

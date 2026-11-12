@@ -1,6 +1,6 @@
---- build.yml
-+++ build.yml
-@@ -153,6 +153,15 @@
+--- plan.yml
++++ plan.yml
+@@ -178,6 +178,15 @@
                  ' <<<"$tag_json" >/dev/null; then
                  break
                fi
@@ -16,7 +16,9 @@
                [ "$attempt" -eq 12 ] || sleep 5
              done
              jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
-@@ -2431,13 +2440,36 @@
+--- publish.yml
++++ publish.yml
+@@ -710,13 +710,36 @@
          if: env.SKIP_MANIFEST != '1'
          run: |
            set -euo pipefail
