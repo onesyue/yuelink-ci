@@ -143,10 +143,11 @@ class ForcePolicyTest(unittest.TestCase):
         path.write_text(json.dumps(value))
         return path
 
-    def test_committed_policy_is_valid(self) -> None:
-        policy = APPLY.load_force_policy(ROOT / "policy/update-force.json")
-        self.assertEqual(policy["force"], "hard")
-        self.assertIn(policy["forceReason"], {"security", "incompatible"})
+    def test_no_committed_force_policy(self) -> None:
+        # Owner rule 2026-11-13: releases are never forced on any platform.
+        # A forced release needs a reviewed policy file added back explicitly.
+        self.assertFalse((ROOT / "policy/update-force.json").exists())
+        self.assertIsNone(APPLY.load_force_policy(ROOT / "policy/update-force.json"))
 
     def test_missing_policy_changes_nothing(self) -> None:
         manifest = self.manifest("1.3.176")
