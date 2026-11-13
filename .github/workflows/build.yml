@@ -184,7 +184,7 @@ jobs:
       (github.event_name == 'pull_request' || needs.plan.result == 'success')
     uses: ./.github/workflows/dial-gate.yml
     with:
-      candidate_ref: ${{ github.event.inputs.dialgate_candidate_ref || (github.event_name == 'pull_request' && 'master') || needs.plan.outputs.source_commit }}
+      candidate_ref: ${{ github.event.inputs.dialgate_candidate_ref || (github.event_name == 'pull_request' && '41dc7b09c1a68dc84e3201bcd2d890e51a1d6e87') || needs.plan.outputs.source_commit }}
       run_pr_checks: ${{ github.event_name == 'pull_request' }}
     secrets:
       SRC_DEPLOY_KEY: ${{ secrets.SRC_DEPLOY_KEY }}
@@ -220,6 +220,10 @@ jobs:
               platform = data.get("platform")
               if platform not in want or path.parent.name != f"dial-gate-{platform}" or platform in found:
                   sys.exit("invalid or duplicate dial-gate platform evidence")
+              for role, revision in (("baseline", "3937d3807609974e82daee1421cadb6003298613"), ("candidate", "41dc7b09c1a68dc84e3201bcd2d890e51a1d6e87")):
+                  raw = json.loads((path.parent / f"{role}.json").read_text())
+                  if raw.get("revision") != revision or raw.get("role") != role or raw.get("platform") != platform:
+                      sys.exit(f"invalid {role} source identity for {platform}")
               rows = data.get("rows")
               if not isinstance(rows, list) or len(rows) != len(protocols):
                   sys.exit(f"incomplete protocol evidence for {platform}")
