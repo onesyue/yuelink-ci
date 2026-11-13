@@ -14,6 +14,7 @@ is a failure, not a pass.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import subprocess
 import sys
@@ -49,15 +50,38 @@ def _skipped(rel: str) -> bool:
 
 def test_sources(root: Path) -> list[Path]:
     found: list[Path] = []
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        rel = _rel(path, root)
-        if _skipped(rel):
-            continue
-        name = path.name
-        if (name.startswith("test_") and name.endswith(".py")) or name.endswith("_test.dart"):
-            found.append(path)
+
+    def walk_error(error: OSError) -> None:
+        raise RuntimeError(f"cannot scan test directory: {error.filename}") from error
+
+    for directory, dirs, files in os.walk(root, onerror=walk_error):
+        parent = Path(directory)
+        # Prune dependency/cache trees and nested checkouts before traversing.
+        # Git worktrees use a .git file; ordinary clones use a .git directory.
+        dirs[:] = [
+            name
+            for name in dirs
+            if name not in {".git", ".lane", "node_modules", "vendor"}
+            and not _skipped(_rel(parent / name, root) + "/")
+            and not (parent / name / ".git").exists()
+        ]
+        for name in files:
+            path = parent / name
+            if _skipped(_rel(path, root)) or not path.is_file():
+                continue
+            if (
+                name.startswith(("test_", "test-")) and name.endswith(".py")
+            ) or name.endswith(
+                (
+                    "_test.dart",
+                    "_test.go",
+                    ".test.ts",
+                    ".spec.ts",
+                    ".test.tsx",
+                    ".spec.tsx",
+                )
+            ):
+                found.append(path)
     return sorted(found)
 
 
@@ -132,7 +156,11 @@ def scan(root: Path) -> set[str]:
     hashes, listings = repo_index(root)
     hits: set[str] = set()
     for path in sources:
-        hits.update(text_hits(_rel(path, root), path.read_text(encoding="utf-8"), hashes, listings))
+        hits.update(
+            text_hits(
+                _rel(path, root), path.read_text(encoding="utf-8"), hashes, listings
+            )
+        )
     return hits
 
 
@@ -185,8 +213,7 @@ def ancestor_baseline(root: Path) -> set[str] | None:
     if exists.returncode != 0:
         detail = exists.stderr
         introduced = (
-            "does not exist" in detail
-            or "exists on disk, but not in" in detail
+            "does not exist" in detail or "exists on disk, but not in" in detail
         )
         if introduced:
             return None
