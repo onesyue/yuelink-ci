@@ -21,7 +21,7 @@ name: Build YueLink
 # or bypass a sibling workflow.
 
 # The plan, validate, build and publish stages are reusable workflows in
-# this directory. Dial jobs stay here: five platforms, strict summary.
+# this directory. Dial jobs stay here: four dial platforms, strict summary.
 # A called workflow sees this run's github context. secrets: inherit keeps
 # the existing secret boundary. Do not dispatch a preview from this split.
 on:
@@ -172,8 +172,7 @@ jobs:
   # ───────────────────────────────────────────────────────────────────────────
 
   # Real dial gate. Loopback sing-box only. The release job will not promote
-  # unless every platform passes. iOS runs the kernel with simctl spawn and
-  # does not start NetworkExtension. Task 33's layout check and Windows TFO
+  # unless all four required dial platforms pass. Task 33's layout check and Windows TFO
   # echo test run at the start of this job; there is no second gate.
   dial_gate:
     name: Dial gate
@@ -219,7 +218,7 @@ jobs:
           python3 - <<'PY'
           import json, os, re, sys
           from pathlib import Path
-          want = ["windows", "macos", "linux", "android", "ios"]
+          want = ["windows", "macos", "linux", "android"]
           protocols = {"vless-reality-tfo", "vless-reality", "vless-ws-tls", "hysteria2"}
           found = {}
           identities = None
@@ -230,6 +229,8 @@ jobs:
           if os.environ.get("REQUIRE_SOURCE_COMMIT") != "false" and not re.fullmatch(r"[0-9a-f]{40}", expected_source):
               sys.exit("missing or invalid planned release source")
           for path in Path("dial-reports").glob("*/gate.json"):
+              if path.parent.name == "dial-gate-ios":
+                  continue  # Optional legacy iOS evidence cannot block the four-platform gate.
               data = json.loads(path.read_text())
               platform = data.get("platform")
               if platform not in want or path.parent.name != f"dial-gate-{platform}" or platform in found:
@@ -330,7 +331,7 @@ jobs:
           if path:
               with open(path, "a", encoding="utf-8") as fh:
                   fh.write("### Real dial gate\n\n")
-                  fh.write("iOS is the kernel inside the simulator. NetworkExtension is not started.\n\n")
+                  fh.write("iOS dial is excluded by owner decision t1028u; no iOS dial pass is claimed. Unsigned iOS compilation remains a separate check.\n\n")
                   fh.write(table)
           if not ok:
               sys.exit(1)

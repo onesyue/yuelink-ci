@@ -115,14 +115,14 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
         caller = BUILD.read_text(encoding="utf-8")
         composed = composed_workflow(BUILD)
         self.assertEqual(issues(composed), [])
-        self.assertNotIn("\n          - name: ios\n", caller)
-        self.assertIn("\n          - name: ios\n", composed)
+        self.assertNotIn("\n          - name: android\n", caller)
+        self.assertIn("\n          - name: android\n", composed)
         mutated = composed.replace(
-            "\n          - name: ios\n",
-            "\n          - name: ios-removed\n",
+            "\n          - name: android\n",
+            "\n          - name: android-removed\n",
             1,
         )
-        self.assertTrue(any("lost ios" in item for item in issues(mutated)))
+        self.assertTrue(any("lost android" in item for item in issues(mutated)))
 
     def test_orchestrator_alone_is_not_a_pass(self) -> None:
         from scripts.check_public_build import issues

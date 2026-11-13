@@ -2,13 +2,16 @@ diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
 index 7c5468e..801931f 100644
 --- a/.github/workflows/build.yml
 +++ b/.github/workflows/build.yml
-@@ -2759,10 +2759,29 @@ jobs:
+@@ -2759,10 +2759,31 @@ jobs:
            import json, os, sys
            from pathlib import Path
-           want = ["windows", "macos", "linux", "android", "ios"]
+-          want = ["windows", "macos", "linux", "android", "ios"]
++          want = ["windows", "macos", "linux", "android"]
 +          protocols = {"vless-reality-tfo", "vless-reality", "vless-ws-tls", "hysteria2"}
            found = {}
            for path in Path("dial-reports").glob("*/gate.json"):
++              if path.parent.name == "dial-gate-ios":
++                  continue
                data = json.loads(path.read_text())
 -              found[data["platform"]] = data
 +              platform = data.get("platform")

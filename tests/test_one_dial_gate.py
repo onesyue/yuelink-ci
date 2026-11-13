@@ -75,11 +75,17 @@ def one_dial_issues(build: str, dial: str, sync: str, ios: str) -> list[str]:
         issues.append("release no longer blocks on the dial summary")
     if TABLE not in build:
         issues.append("dial table shape changed")
-    for name in ("windows", "macos", "linux", "android", "ios"):
+    for name in ("windows", "macos", "linux", "android"):
         if f"\n          - name: {name}\n" not in dial:
             issues.append(f"missing platform {name}")
+    if "\n          - name: ios\n" in dial:
+        issues.append("iOS dial must not block the gate")
     if "ios_unsigned_compile:" not in dial:
         issues.append("unsigned iOS compilation is missing")
+    if "ios_unsigned_compile:" in dial:
+        unsigned = dial.split("  ios_unsigned_compile:", 1)[1]
+        if "if: always() && inputs.run_pr_checks && needs.dial_gate.result != 'cancelled'" not in unsigned:
+            issues.append("unsigned iOS compilation must retain its required PR check")
     if "linux_auth_storage:" not in dial:
         issues.append("auth and storage verification is missing")
     if dial.count("ssh-key:") < 4:
@@ -92,7 +98,7 @@ def one_dial_issues(build: str, dial: str, sync: str, ios: str) -> list[str]:
 
 
 class OneDialGateTests(unittest.TestCase):
-    def test_live_files_keep_five_platforms_and_the_release_block(self) -> None:
+    def test_live_files_keep_four_platforms_and_the_release_block(self) -> None:
         issues = one_dial_issues(
             BUILD.read_text(encoding="utf-8"),
             DIAL.read_text(encoding="utf-8"),

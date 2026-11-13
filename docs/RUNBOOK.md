@@ -178,3 +178,7 @@ Consolidated from README.md at base `dda16708a19405d0822a1862fc2ecb6b5a2ec519`,
 [source attestation](../.github/workflows/source-attestation.yml),
 [manifest watchdog](../.github/workflows/manifest-health.yml) and
 [key-recovery workflow](../.github/workflows/backup-critical-workstation-keys.yml).
+
+## Required dial evidence
+
+The dial gate requires Android, macOS, Linux and Windows reports, with four protocols and five rounds of 20 samples per protocol. The strict Dial gate table must pass. Owner decision t1028u (2026-11-13) excludes iOS dial from this gate; absence of an iOS report is not an iOS pass. Auth/storage verification and unsigned iOS compilation remain required PR checks. Public release platform builds and artifact completeness requirements are unchanged.

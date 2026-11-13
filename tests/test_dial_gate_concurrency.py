@@ -2,8 +2,7 @@
 
 GitHub keeps one running job and one pending job for a group, and cancels
 the older pending job when another run queues. A constant group name therefore
-cancels a dial leg that has not started. The two macOS legs of one run still
-share a group so iOS waits for the single macos-26 runner. Every other
+cancels a dial leg that has not started. The macOS leg has a run-scoped group. Every other
 platform keeps a separate group, and every group name includes this run.
 """
 
@@ -97,11 +96,11 @@ def validate_dial_gate_concurrency(workflow: str) -> None:
     macos_template = _format_template(macos, "macos-26 group", None)
     if "macos-26-dial" not in macos_template:
         raise DialConcurrencyError(
-            "macos and ios must share a macos-26-dial group"
+            "macos must use its run-scoped macos-26-dial group"
         )
     if "{2}" in macos_template:
         raise DialConcurrencyError(
-            "macos and ios must share one group inside the run"
+            "macos must use one group inside the run"
         )
     other_template = _format_template(right, "other-platform group", "matrix.name")
     if "{2}" not in other_template:
@@ -109,9 +108,9 @@ def validate_dial_gate_concurrency(workflow: str) -> None:
             "other platforms must stay on separate groups"
         )
     macos_rows = re.findall(r"(?m)^            os: macos-26$", job)
-    if len(macos_rows) < 2:
+    if len(macos_rows) != 1:
         raise DialConcurrencyError(
-            f"expected at least two macos-26 dial legs, found {len(macos_rows)}"
+            f"expected one macos-26 dial leg, found {len(macos_rows)}"
         )
 
 
@@ -212,11 +211,11 @@ class DialGateConcurrencyTests(unittest.TestCase):
         with self.assertRaises(DialConcurrencyError):
             validate_dial_gate_concurrency(mutated)
 
-    def test_one_macos_leg_is_rejected(self) -> None:
+    def test_missing_macos_leg_is_rejected(self) -> None:
         needle = "            os: macos-26\n"
-        self.assertEqual(self.workflow.count(needle), 2)
+        self.assertEqual(self.workflow.count(needle), 1)
         mutated = self.workflow.replace(needle, "            os: macos-14\n", 1)
-        self.assertEqual(mutated.count(needle), 1)
+        self.assertEqual(mutated.count(needle), 0)
         with self.assertRaises(DialConcurrencyError):
             validate_dial_gate_concurrency(mutated)
 

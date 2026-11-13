@@ -43,7 +43,7 @@ REQUIRED = (
     "value: ${{ jobs.preflight.outputs.tag_kind }}",
     "secrets: inherit",
 )
-DIAL_PLATFORMS = ("windows", "macos", "linux", "android", "ios")
+DIAL_PLATFORMS = ("windows", "macos", "linux", "android")
 
 
 def build_job_needs(text: str) -> list[str]:

@@ -1,4 +1,4 @@
-"""The public dial job may restore a kernel, and it still runs the iOS dial."""
+"""The public dial job may restore a kernel, and it still runs the host dial."""
 
 import re
 import unittest
@@ -23,7 +23,7 @@ def dial_step_job(workflow):
     for job in _JOB.split(workflow):
         if (
             job.startswith('  dial_gate:\n')
-            and 'Dial inside the iOS simulator' in job
+            and 'Dial on the runner' in job
         ):
             return job
     return ''
@@ -37,7 +37,7 @@ def step_named(job, name):
 
 
 def dial_kernel_cache_issues(workflow):
-    """The kernel cache is optional. The iOS dial command still runs."""
+    """The kernel cache is optional. The host dial command still runs."""
     issues = []
     job = dial_step_job(workflow)
     if not job:
@@ -54,11 +54,11 @@ def dial_kernel_cache_issues(workflow):
             issues.append('dial_gate does not pass the attested source commit')
     if 'value: ${{ jobs.source_binding.outputs.source_commit }}' not in workflow:
         issues.append('plan does not publish the attested source commit')
-    ios = step_named(job, 'Dial inside the iOS simulator')
-    if 'run: bash candidate/core/dialgate/ci/run.sh ios\n' not in ios:
-        issues.append('iOS dial command is missing')
-    if 'cache-hit' in ios:
-        issues.append('iOS dial is conditional on the kernel cache')
+    host = step_named(job, 'Dial on the runner')
+    if 'run: bash candidate/core/dialgate/ci/run.sh host\n' not in host:
+        issues.append('host dial command is missing')
+    if 'cache-hit' in host:
+        issues.append('host dial is conditional on the kernel cache')
     key_step = step_named(job, 'Dial kernel cache key')
     if 'set +e\n' not in key_step or 'run.sh cache-key' not in key_step:
         issues.append('a missing cache-key command fails the dial job')
@@ -101,7 +101,7 @@ def caller_source_issues(workflow):
 
 
 class DialKernelCacheTests(unittest.TestCase):
-    def test_ios_dial_survives_a_missing_kernel_cache(self):
+    def test_host_dial_survives_a_missing_kernel_cache(self):
         from scripts.check_public_build import composed_workflow
 
         caller = BUILD.read_text(encoding='utf-8')
@@ -126,11 +126,11 @@ class DialKernelCacheTests(unittest.TestCase):
             'dial_gate does not pass the attested source commit',
             caller_source_issues(without_ref))
         job = dial_step_job(workflow)
-        without_ios = workflow.replace(
-            'run: bash candidate/core/dialgate/ci/run.sh ios\n',
+        without_host = workflow.replace(
+            'run: bash candidate/core/dialgate/ci/run.sh host\n',
             'run: echo skipped\n', 1)
         self.assertIn(
-            'iOS dial command is missing', dial_kernel_cache_issues(without_ios))
+            'host dial command is missing', dial_kernel_cache_issues(without_host))
         without_open = workflow.replace(
             job, job.replace('          set +e\n', '', 1), 1)
         self.assertIn(

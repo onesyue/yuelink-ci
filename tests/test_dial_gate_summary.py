@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PLATFORMS = ("windows", "macos", "linux", "android", "ios")
+PLATFORMS = ("windows", "macos", "linux", "android")
 PROTOCOLS = ("vless-reality-tfo", "vless-reality", "vless-ws-tls", "hysteria2")
 
 
@@ -77,7 +77,7 @@ class DialGateSummaryTests(unittest.TestCase):
             for name, report in reports.items():
                 path = root / "dial-reports" / ("dial-gate-" + name)
                 path.mkdir(parents=True)
-                (path / "gate.json").write_text(json.dumps(report))
+                (path / "gate.json").write_text(report if isinstance(report, str) else json.dumps(report))
             return subprocess.run(
                 [sys.executable, "-c", script],
                 cwd=root,
@@ -94,14 +94,45 @@ class DialGateSummaryTests(unittest.TestCase):
                 check=False,
             )
 
-    def test_complete_twenty_protocol_rows_pass(self) -> None:
+    def test_complete_sixteen_protocol_rows_without_ios_pass(self) -> None:
         reports = self.reports()
         # The historical Windows TFO baseline is legitimately all failures.
         row = reports["windows"]["rows"][0]
         row.update(baseline_ok=0, baseline_success_rate=0, baseline_p95_ms=None)
         result = self.run_summary(reports)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.count("| pass |"), 21)  # header plus 20 rows
+        self.assertEqual(result.stdout.count("| pass |"), 17)  # header plus 16 rows
+
+    def test_every_required_platform_missing_or_failed_is_rejected(self) -> None:
+        for platform in PLATFORMS:
+            for failure in ("missing", "failed"):
+                with self.subTest(platform=platform, failure=failure):
+                    reports = self.reports()
+                    if failure == "missing":
+                        del reports[platform]
+                    else:
+                        reports[platform]["pass"] = False
+                    self.assertNotEqual(self.run_summary(reports).returncode, 0)
+
+    def test_legacy_ios_cannot_block_or_be_reported_as_a_pass(self) -> None:
+        for ios in (None, {"platform": "ios", "pass": True},
+                    {"platform": "ios", "pass": False}, "{malformed JSON"):
+            with self.subTest(ios=ios):
+                reports = self.reports()
+                if ios is not None:
+                    reports["ios"] = ios
+                result = self.run_summary(reports)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn("| ios |", result.stdout)
+                self.assertEqual(result.stdout.count("| pass |"), 17)
+
+    def test_only_canonical_ios_directory_is_ignored(self) -> None:
+        reports = self.reports()
+        reports["optional-ios"] = {"platform": "ios", "pass": False}
+        self.assertNotEqual(self.run_summary(reports).returncode, 0)
+        reports = self.reports()
+        reports["linux"] = {"platform": "ios", "pass": True}
+        self.assertNotEqual(self.run_summary(reports).returncode, 0)
 
     def test_incomplete_or_malformed_evidence_fails(self) -> None:
         cases = []
@@ -110,7 +141,7 @@ class DialGateSummaryTests(unittest.TestCase):
             reports["linux"]["rows"] = rows
             cases.append(("missing protocols", reports))
         reports = self.reports()
-        del reports["ios"]
+        del reports["android"]
         cases.append(("missing platform", reports))
         reports = self.reports()
         reports["linux"]["rows"][1] = copy.deepcopy(reports["linux"]["rows"][0])
