@@ -126,16 +126,22 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      - name: Checkout dial-gate baseline v1.3.174
+      - name: Checkout frozen proven stable baseline v1.3.176
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: v1.3.174
+          ref: 3937d3807609974e82daee1421cadb6003298613
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           path: baseline
           fetch-depth: 1
           submodules: recursive
           persist-credentials: false
+
+      - name: Verify temporary control checkout identities
+        shell: bash
+        run: |
+          test "$(git -C candidate rev-parse HEAD)" = "3ea202e241dadf0038c4b07e9ecc4855a84b9b01"
+          test "$(git -C baseline rev-parse HEAD)" = "3937d3807609974e82daee1421cadb6003298613"
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
