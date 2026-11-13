@@ -197,7 +197,7 @@ jobs:
         id: dial_kernel_cache
         if: steps.dial_kernel.outputs.key != ''
         continue-on-error: true
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: dial-out/kernel-cache
           key: yue-dialkernel-v1-${{ matrix.name }}-${{ runner.os }}-${{ runner.arch }}-${{ env.GO_VERSION }}-${{ steps.dial_kernel.outputs.key }}-xcode-26.6
@@ -259,6 +259,14 @@ jobs:
             dial-out/sing-box.log
             dial-out/android-support.log
             dial-out/android-sing-box.log
+
+      - name: Save dial kernels on master
+        if: github.ref == 'refs/heads/master' && steps.dial_kernel.outputs.key != '' && steps.dial_kernel_cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: dial-out/kernel-cache
+          key: ${{ steps.dial_kernel_cache.outputs.cache-primary-key }}
 
   linux_auth_storage:
     name: Auth and storage Linux verification

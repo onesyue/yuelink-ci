@@ -516,10 +516,24 @@ class LinkPlatformCacheTests(unittest.TestCase):
         ]
         dial = [block for block in caches if "yue-dialkernel-v1-" in block]
         output_caches = [block for block in caches if "yue-gocore-v1-" in block]
+        media = [block for block in caches if "yue-linux-media-v1-" in block]
+        dial_saves = [block for block in caches if block.startswith("name: Save dial kernels on master\n")]
+        assert len(media) == 1 and len(dial_saves) == 1
+        for block in media:
+            assert "${{ env.LINUX_MEDIA_INPUTS_SHA }}" in block
+            assert "${{ runner.os }}" in block and "${{ runner.arch }}" in block
+            assert "restore-keys" not in block
+            assert "path: ${{ runner.temp }}/linux-media/prefix\n" in block
+        for block in dial_saves:
+            assert "if: github.ref == 'refs/heads/master' && " in block
+            assert "key: ${{ steps.dial_kernel_cache.outputs.cache-primary-key }}\n" in block
+            assert "restore-keys" not in block
+            assert "path: dial-out/kernel-cache\n" in block
         dependency_caches = [
             block
             for block in caches
             if "yue-dialkernel-v1-" not in block and "yue-gocore-v1-" not in block
+            and block not in media and block not in dial_saves
         ]
         assert dial and output_caches and dependency_caches
         assert len(dependency_caches) == 9
@@ -553,6 +567,22 @@ class LinkPlatformCacheTests(unittest.TestCase):
             for ref in re.findall(r"uses:\s*(actions/cache[^\s#]*)", source):
                 assert re.fullmatch(r"actions/cache(?:/restore|/save)?@[0-9a-f]{40}", ref)
 
+    def test_native_media_identity_and_master_dial_save_reject_drift(self) -> None:
+        workflow = _release_pipeline()
+        if "yue-dialkernel-v1-" not in workflow:
+            workflow += "\n" + (ROOT / ".github/workflows/dial-gate.yml").read_text()
+        self._assert_cache_identity(workflow)
+        for before, after in (
+            ("${{ env.LINUX_MEDIA_INPUTS_SHA }}", "unbound"),
+            ("path: ${{ runner.temp }}/linux-media/prefix", "path: dist"),
+            ("key: ${{ steps.dial_kernel_cache.outputs.cache-primary-key }}", "key: unrelated"),
+            ("if: github.ref == 'refs/heads/master' && steps.dial_kernel.outputs.key", "if: steps.dial_kernel.outputs.key"),
+        ):
+            mutated = workflow.replace(before, after)
+            self.assertNotEqual(mutated, workflow)
+            with self.assertRaises(AssertionError):
+                self._assert_cache_identity(mutated)
+
     def test_cache_paths_cannot_restore_release_or_attestation_outputs(self) -> None:
         workflow = _release_pipeline()
         self._assert_cache_boundary(workflow)
@@ -565,6 +595,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
             r"~\AppData\Local\go-build", "~/.pub-cache", r"~\AppData\Local\Pub\Cache",
             "~/.gradle/caches", "~/.gradle/wrapper",
             "core/build", "service/build",
+            "${{ runner.temp }}/linux-media/prefix",
         }
         blocks = re.split(r"(?m)^      - ", workflow)
         seen = set()

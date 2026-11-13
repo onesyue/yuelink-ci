@@ -283,18 +283,47 @@ jobs:
             echo "CMAKE_INCLUDE_PATH=/usr/include"
           } >> "$GITHUB_ENV"
 
+      - name: Record Linux media identity
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ImageVersion"
+          for input in scripts/linux_media/build.py scripts/native/source_offer.py third_party/linux_media/sources.lock.json third_party/apple_media/sources.lock.json third_party/apple_media/ffmpeg-configure.txt; do
+            test -s "$input"
+          done
+          # Include tracked recipes/patches and the absolute install prefix:
+          # pkg-config files embed that prefix and cannot move between runners.
+          identity=$({
+            printf '%s\n' "$ImageVersion" "$RUNNER_TEMP/linux-media/prefix"
+            git ls-files -s -- scripts/linux_media scripts/native/source_offer.py third_party/linux_media third_party/apple_media/sources.lock.json third_party/apple_media/ffmpeg-configure.txt
+          } | git hash-object --stdin)
+          echo "LINUX_MEDIA_INPUTS_SHA=$identity" >> "$GITHUB_ENV"
+
+      - name: Restore Linux native media
+        id: linux_media_cache
+        if: matrix.platform == 'linux'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/linux-media/prefix
+          key: yue-linux-media-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.LINUX_MEDIA_INPUTS_SHA }}-meson1.9.1-cmake3.31.10-ninja1.13.0
+
       - name: Build source-locked Linux native media
         if: matrix.platform == 'linux'
         shell: bash
         env:
+          MEDIA_CACHE_HIT: ${{ steps.linux_media_cache.outputs.cache-hit }}
           # Read the reviewed prior source offers without anonymous API limits.
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          python3 -m venv "$RUNNER_TEMP/media-tools"
-          "$RUNNER_TEMP/media-tools/bin/pip" install 'meson==1.9.1' 'cmake==3.31.10' 'ninja==1.13.0'
-          export PATH="$RUNNER_TEMP/media-tools/bin:$PATH"
-          python3 scripts/linux_media/build.py --work "$RUNNER_TEMP/linux-media" --jobs 4
+          if [ "$MEDIA_CACHE_HIT" != true ]; then
+            python3 -m venv "$RUNNER_TEMP/media-tools"
+            "$RUNNER_TEMP/media-tools/bin/pip" install 'meson==1.9.1' 'cmake==3.31.10' 'ninja==1.13.0'
+            export PATH="$RUNNER_TEMP/media-tools/bin:$PATH"
+            python3 scripts/linux_media/build.py --work "$RUNNER_TEMP/linux-media" --jobs 4
+          fi
+          test -s "$RUNNER_TEMP/linux-media/prefix/lib/libmpv.so"
           media_prefix="$RUNNER_TEMP/linux-media/prefix"
           {
             echo "YUELINK_MEDIA_PREFIX=$media_prefix"

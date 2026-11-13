@@ -34,6 +34,8 @@ CACHES = {
     "gocache": "Restore Go compiler cache",
     "pub": "Restore pub cache (lockfile-verified",
 }
+PLATFORM_CACHES = {"gradle": ("android", "Restore Gradle dependency caches"),
+                   "linux_media": ("linux", "Restore Linux native media")}
 IDENTITY_STEP = "Record Go core cache identity"
 SOURCE_TITLE = re.compile(r"Source attestation ([0-9a-f]{40})")
 EXPR = re.compile(r"\$\{\{\s*(.*?)\s*\}\}")
@@ -105,11 +107,11 @@ def evaluate(text: str, ctx: dict[str, str], workspace: Path) -> str:
 def condition(expr: str | None, ctx: dict[str, str]) -> bool:
     if expr is None:
         return True
-    match = re.fullmatch(r"runner\.os (==|!=) '(\w+)'", expr.strip())
+    match = re.fullmatch(r"(runner\.os|matrix\.platform) (==|!=) '(\w+)'", expr.strip())
     if not match:
         raise PlanError(f"unsupported cache step condition: {expr}")
-    equal = ctx["runner.os"] == match.group(2)
-    return equal if match.group(1) == "==" else not equal
+    equal = ctx[match.group(1)] == match.group(3)
+    return equal if match.group(2) == "==" else not equal
 
 
 def env_pin(text: str, name: str) -> str:
@@ -154,13 +156,13 @@ def source_sha(title: str, explicit: str) -> str:
     return match.group(1)
 
 
-def identity_script(text: str) -> str:
-    named = [block for name, block in steps(text) if name == IDENTITY_STEP]
+def identity_script(text: str, step_name: str = IDENTITY_STEP) -> str:
+    named = [block for name, block in steps(text) if name == step_name]
     if len(named) != 1:
-        raise PlanError(f"{IDENTITY_STEP} appears {len(named)} times")
+        raise PlanError(f"{step_name} appears {len(named)} times")
     body = named[0].split("run: |\n", 1)
     if len(body) != 2:
-        raise PlanError(f"{IDENTITY_STEP} has no run block")
+        raise PlanError(f"{step_name} has no run block")
     lines = []
     for line in body[1].splitlines():
         if line.startswith("          "):
@@ -185,7 +187,10 @@ def recorded_identity(environ: dict[str, str]) -> dict[str, str]:
 def cache_plan(text: str, ctx: dict[str, str], workspace: Path) -> dict[str, dict[str, str]]:
     plan = {}
     all_steps = steps(text)
-    for logical, prefix in CACHES.items():
+    caches = dict(CACHES)
+    caches.update({name: prefix for name, (platform, prefix) in PLATFORM_CACHES.items()
+                   if platform == ctx["matrix.platform"]})
+    for logical, prefix in caches.items():
         chosen = [block for name, block in all_steps
                   if name.startswith(prefix) and condition(field(block, "if"), ctx)]
         if len(chosen) != 1:
@@ -226,6 +231,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--title", default="")
     p.add_argument("--source-sha", default="")
     sub.add_parser("identity-script", help="print build-matrix.yml's Go core identity script")
+    recipe = sub.add_parser("step-script", help="print a canonical warm-up recipe")
+    recipe.add_argument("name", choices=("Install Linux build dependencies",
+                        "Record Linux media identity", "Build source-locked Linux native media"))
     k = sub.add_parser("keys", help="evaluate build-matrix cache paths/keys for this runner")
     k.add_argument("--platform", required=True)
     k.add_argument("--workspace", type=Path, default=Path.cwd())
@@ -239,8 +247,8 @@ def main(argv: list[str] | None = None) -> int:
             values.update(toolchain(text))
             write_outputs(values)
             return 0
-        if args.command == "identity-script":
-            sys.stdout.write(identity_script(text))
+        if args.command in ("identity-script", "step-script"):
+            sys.stdout.write(identity_script(text, args.name if args.command == "step-script" else IDENTITY_STEP))
             return 0
         workspace = args.workspace.resolve()
         identity = recorded_identity(dict(os.environ))
@@ -248,10 +256,14 @@ def main(argv: list[str] | None = None) -> int:
             "matrix.platform": args.platform,
             "runner.os": os.environ["RUNNER_OS"],
             "runner.arch": os.environ["RUNNER_ARCH"],
+            "runner.temp": os.environ["RUNNER_TEMP"],
+            "env.LINUX_MEDIA_INPUTS_SHA": os.environ.get("LINUX_MEDIA_INPUTS_SHA", ""),
             "github.sha": os.environ["GITHUB_SHA"],
             "env.GO_VERSION": env_pin(text, "GO_VERSION"),
             **{f"env.{name}": value for name, value in identity.items()},
         }
+        if args.platform == "linux" and not re.fullmatch(r"[0-9a-f]{40}", ctx["env.LINUX_MEDIA_INPUTS_SHA"]):
+            raise PlanError("run the canonical Linux media identity script first")
         plan = cache_plan(text, ctx, workspace)
         values = dict(identity)
         for logical, entry in plan.items():

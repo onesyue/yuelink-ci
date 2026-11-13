@@ -1,5 +1,5 @@
-name: Warm release core caches
-run-name: Warm release core caches after attestation ${{ github.event.workflow_run.id }}
+name: Warm release caches
+run-name: Warm release caches after attestation ${{ github.event.workflow_run.id }}
 
 # Cache-only work on master. Tag caches cannot be restored by the next tag;
 # these trusted, source-bound master caches can. Never publishes or signs.
@@ -46,10 +46,11 @@ jobs:
           python3 scripts/release_cache_plan.py plan --title "$ATTESTATION_TITLE"
 
   warm:
-    name: Warm core (${{ matrix.platform }})
+    if: github.ref == 'refs/heads/master'
+    name: Warm caches (${{ matrix.platform }})
     needs: [plan]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -67,6 +68,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           path: .cache-tools
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Select canonical Xcode for Apple core
         if: runner.os == 'macOS'
@@ -87,6 +89,13 @@ jobs:
           # The exact script text of build-matrix.yml, not a copy of it.
           python3 .cache-tools/scripts/release_cache_plan.py identity-script > "$RUNNER_TEMP/core-identity.sh"
           bash "$RUNNER_TEMP/core-identity.sh"
+      - name: Record canonical Linux media identity
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .cache-tools/scripts/release_cache_plan.py step-script 'Record Linux media identity' > "$RUNNER_TEMP/media-identity.sh"
+          bash "$RUNNER_TEMP/media-identity.sh"
       - name: Evaluate canonical release cache keys
         id: cache_plan
         shell: bash
@@ -101,6 +110,20 @@ jobs:
         with:
           path: ${{ steps.cache_plan.outputs.gocore_path }}
           key: ${{ steps.cache_plan.outputs.gocore_key }}
+      - name: Restore Gradle dependencies from master
+        id: gradle
+        if: matrix.platform == 'android'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.gradle_path }}
+          key: ${{ steps.cache_plan.outputs.gradle_key }}
+      - name: Restore Linux media from master
+        id: linux_media_cache
+        if: matrix.platform == 'linux'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.linux_media_path }}
+          key: ${{ steps.cache_plan.outputs.linux_media_key }}
       - name: Set up Go
         if: steps.core.outputs.cache-hit != 'true'
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -108,24 +131,25 @@ jobs:
           go-version: ${{ needs.plan.outputs.go_version }}
           cache: false
       - name: Set up Flutter
-        if: steps.core.outputs.cache-hit != 'true'
+        id: flutter
+        if: steps.core.outputs.cache-hit != 'true' || (matrix.platform == 'android' && steps.gradle.outputs.cache-hit != 'true')
         uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
         with:
           flutter-version: ${{ needs.plan.outputs.flutter_version }}
           cache: true
       - name: Restore shared pub dependencies
-        if: steps.core.outputs.cache-hit != 'true'
+        if: steps.core.outputs.cache-hit != 'true' || (matrix.platform == 'android' && steps.gradle.outputs.cache-hit != 'true')
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.cache_plan.outputs.pub_path }}
           key: ${{ steps.cache_plan.outputs.pub_key }}
       - name: Setup Android NDK tools
-        if: matrix.platform == 'android' && steps.core.outputs.cache-hit != 'true'
+        if: matrix.platform == 'android' && (steps.core.outputs.cache-hit != 'true' || steps.gradle.outputs.cache-hit != 'true')
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools
       - name: Install canonical NDK
-        if: matrix.platform == 'android' && steps.core.outputs.cache-hit != 'true'
+        if: matrix.platform == 'android' && (steps.core.outputs.cache-hit != 'true' || steps.gradle.outputs.cache-hit != 'true')
         shell: bash
         env:
           NDK: ${{ needs.plan.outputs.ndk }}
@@ -151,8 +175,55 @@ jobs:
             test "$CORE_ARCH_SCOPE" = all
             dart setup.dart build -p "$PLATFORM"
           fi
+      - name: Set up Java for dependency resolution
+        if: matrix.platform == 'android' && steps.gradle.outputs.cache-hit != 'true'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Resolve Android dependencies without signing or packaging
+        if: matrix.platform == 'android' && steps.gradle.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          FLUTTER_ROOT: ${{ steps.flutter.outputs.flutter-root }}
+        run: |
+          set -euo pipefail
+          flutter pub get --enforce-lockfile
+          dart run slang
+          printf 'flutter.sdk=%s\nsdk.dir=%s\n' "$FLUTTER_ROOT" "$ANDROID_SDK_ROOT" > android/local.properties
+          cd android
+          ./gradlew --no-daemon --init-script "$GITHUB_WORKSPACE/.cache-tools/scripts/warm_gradle.init.gradle" :app:warmDependencyCache
+      - name: Save Gradle dependencies in master scope
+        if: github.ref == 'refs/heads/master' && matrix.platform == 'android' && steps.gradle.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.gradle_path }}
+          key: ${{ steps.cache_plan.outputs.gradle_key }}
+      - name: Install canonical Linux dependencies for media warm-up
+        if: matrix.platform == 'linux' && steps.linux_media_cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .cache-tools/scripts/release_cache_plan.py step-script 'Install Linux build dependencies' > "$RUNNER_TEMP/media-deps.sh"
+          bash "$RUNNER_TEMP/media-deps.sh"
+      - name: Build canonical Linux media for master cache
+        if: matrix.platform == 'linux' && steps.linux_media_cache.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MEDIA_CACHE_HIT: ${{ steps.linux_media_cache.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          python3 .cache-tools/scripts/release_cache_plan.py step-script 'Build source-locked Linux native media' > "$RUNNER_TEMP/media-build.sh"
+          bash "$RUNNER_TEMP/media-build.sh"
+      - name: Save Linux media in master scope
+        if: github.ref == 'refs/heads/master' && matrix.platform == 'linux' && steps.linux_media_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.linux_media_path }}
+          key: ${{ steps.cache_plan.outputs.linux_media_key }}
       - name: Save compiled core in master scope
-        if: steps.core.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/master' && steps.core.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.cache_plan.outputs.gocore_path }}

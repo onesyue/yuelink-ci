@@ -74,8 +74,8 @@ def dial_kernel_cache_issues(workflow):
         issues.append('dial kernel cache key is not bound to the identity and Go')
     if "if: steps.dial_kernel.outputs.key != ''" not in cache:
         issues.append('dial kernel cache runs without a key')
-    pins = set(re.findall(r'uses: actions/cache@([0-9a-f]{40})', workflow))
-    step_pins = set(re.findall(r'uses: actions/cache@([0-9a-f]{40})', cache))
+    pins = set(re.findall(r'uses: actions/cache/restore@([0-9a-f]{40})', workflow))
+    step_pins = set(re.findall(r'uses: actions/cache/restore@([0-9a-f]{40})', cache))
     if len(step_pins) != 1 or not step_pins <= pins:
         issues.append('dial kernel cache does not use the workflow actions/cache pin')
     return issues

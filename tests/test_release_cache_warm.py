@@ -37,6 +37,8 @@ def context(platform: str, runner_os: str, arch: str) -> dict[str, str]:
         "matrix.platform": platform,
         "runner.os": runner_os,
         "runner.arch": arch,
+        "runner.temp": "/tmp/runner",
+        "env.LINUX_MEDIA_INPUTS_SHA": "d" * 40,
         "github.sha": "c" * 40,
         "env.GO_VERSION": plan.env_pin(BUILD_MATRIX, "GO_VERSION"),
         "env.CORE_SHA": SHA,
@@ -80,6 +82,41 @@ class WarmUpDerivesTheBuildIdentity(unittest.TestCase):
                 self.assertIn(plan.hash_files(Path(tmp, "pubspec.lock")), keys["pub"]["key"])
                 sep = "\\" if runner_os == "Windows" else "/"
                 self.assertIn(f"go{sep}pkg{sep}mod", keys["gomod"]["path"])
+
+
+    def test_platform_cache_keys_paths_match_canonical_build_and_warm_steps(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            for platform in ("android", "linux", "ios", "macos", "windows"):
+                keys = plan.cache_plan(BUILD_MATRIX, context(platform, "Linux", "X64"), Path(tmp))
+                for logical, (target, prefix) in plan.PLATFORM_CACHES.items():
+                    self.assertEqual(logical in keys, platform == target)
+                    if platform != target:
+                        continue
+                    block = next(b for n, b in plan.steps(BUILD_MATRIX) if n == prefix)
+                    for field in ("key", "path"):
+                        self.assertEqual(keys[logical][field], plan.evaluate(
+                            plan.field(block, field), context(platform, "Linux", "X64"), Path(tmp)))
+                        expression = "${{ steps.cache_plan.outputs." + logical + "_" + field + " }}"
+                        self.assertEqual(WARM.count(expression), 2)  # restore + save
+            changed = BUILD_MATRIX.replace("yue-linux-media-v1", "yue-linux-media-v2")
+            self.assertNotEqual(plan.cache_plan(changed, context("linux", "Linux", "X64"), Path(tmp)),
+                                plan.cache_plan(BUILD_MATRIX, context("linux", "Linux", "X64"), Path(tmp)))
+            for prefix in ("Restore Gradle dependency caches", "Restore Linux native media"):
+                platform = "android" if "Gradle" in prefix else "linux"
+                for changed in (BUILD_MATRIX.replace(prefix, "Renamed cache"),
+                                BUILD_MATRIX.replace(prefix, prefix + "\n        if: unexpected()")):
+                    with self.assertRaises(plan.PlanError):
+                        plan.cache_plan(changed, context(platform, "Linux", "X64"), Path(tmp))
+
+    def test_linux_warm_runs_the_canonical_recipes(self) -> None:
+        for name in ("Record Linux media identity", "Install Linux build dependencies",
+                     "Build source-locked Linux native media"):
+            self.assertIn("step-script '" + name + "'", WARM)
+            self.assertTrue(plan.identity_script(BUILD_MATRIX, name).strip())
+        self.assertIn('MEDIA_CACHE_HIT: ${{ steps.linux_media_cache.outputs.cache-hit }}', BUILD_MATRIX)
+        # The binary cache never skips final closure or playback validation.
+        self.assertIn('python3 scripts/linux_media/package.py', BUILD_MATRIX)
+        self.assertIn('linux-packaged-playback', BUILD_MATRIX)
 
     def test_hash_files_matches_github_for_one_file(self) -> None:
         # sha256 over the per-file sha256 digest (actions/runner hashFiles).
@@ -163,6 +200,35 @@ class WarmUpWorkflowBoundary(unittest.TestCase):
         for name in ("setup-go", "checkout"):
             self.assertEqual(set(re.findall(rf"actions/{name}@([0-9a-f]{{40}})", WARM)),
                              set(re.findall(rf"actions/{name}@([0-9a-f]{{40}})", BUILD_MATRIX)))
+
+
+    def test_every_explicit_cache_save_requires_master(self) -> None:
+        dial = (WORKFLOWS / "dial-gate.yml").read_text()
+        count = 0
+        for workflow in (WARM, BUILD_MATRIX, dial):
+            for name, block in plan.steps(workflow):
+                if "uses: actions/cache/save@" in block:
+                    count += 1
+                    guard = plan.field(block, "if")
+                    self.assertTrue(guard.startswith("github.ref == 'refs/heads/master' && "), name)
+                    self.assertNotIn("||", guard)
+                    for nonmaster in ("refs/pull/1/merge", "refs/tags/v1.3.178", "refs/heads/feature"):
+                        mutated = guard.replace("refs/heads/master", nonmaster)
+                        self.assertFalse(mutated.startswith("github.ref == 'refs/heads/master' && "))
+        self.assertEqual(count, 5)
+        self.assertNotRegex(dial, r"uses: actions/cache@")
+        self.assertIn("key: ${{ steps.dial_kernel_cache.outputs.cache-primary-key }}", dial)
+
+    def test_gradle_warms_even_when_core_was_cached(self) -> None:
+        for name in ("Set up Flutter", "Restore shared pub dependencies"):
+            block = next(b for n, b in plan.steps(WARM) if n == name)
+            self.assertIn("steps.gradle.outputs.cache-hit != 'true'", plan.field(block, "if"))
+        init = (ROOT / "scripts/warm_gradle.init.gradle").read_text()
+        self.assertIn("tasks.register('warmDependencyCache')", init)
+        self.assertIn("'releaseCompileClasspath', 'releaseRuntimeClasspath'", init)
+        self.assertIn('configuration.resolve()', init)
+        self.assertNotIn('assemble', init)
+        self.assertNotIn('KEYSTORE', WARM)
 
     def test_compile_commands_match_the_build(self) -> None:
         for command in ('dart setup.dart build -p "$PLATFORM" -a amd64', 'dart setup.dart build -p "$PLATFORM"'):
