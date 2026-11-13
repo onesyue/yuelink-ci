@@ -118,12 +118,16 @@ jobs:
             attestation_title="Source attestation $source_commit"
             runs_json="$(
               GH_PROMPT_DISABLED=1 gh api \
-                "repos/$REPOSITORY/actions/workflows/source-attestation.yml/runs?event=workflow_dispatch&status=success&per_page=100"
+                "repos/$REPOSITORY/actions/workflows/source-attestation.yml/runs?event=workflow_dispatch&status=success&per_page=100" \
+                --paginate --slurp
             )"
             attestation_run_id="$(jq -r \
               --arg title "$attestation_title" \
               --arg builder "$TRIGGER_COMMIT" '
-                (.workflow_runs // [])
+                if type != "array" or
+                   any(.[]; (.workflow_runs | type) != "array") then
+                  error("invalid Source attestation run page")
+                else [.[].workflow_runs[]] end
                 | map(select(
                     .display_title == $title and
                     .head_sha == $builder and

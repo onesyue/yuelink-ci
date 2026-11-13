@@ -8,8 +8,8 @@ import subprocess
 import tempfile
 import textwrap
 import unittest
+from collections.abc import Sequence
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/build.yml"
@@ -184,6 +184,10 @@ def public_source_binding_issues(workflow: str) -> list[str]:
             issues.append(f"missing bound checkout: {name}")
     return issues
 
+class BindingResult(subprocess.CompletedProcess[str]):
+    gh_log: str
+
+
 class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
     def setUp(self) -> None:
         from scripts.check_public_build import composed_text
@@ -204,7 +208,9 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
         dispatch_source: str = "",
         runs: str | None = None,
         ref_name: str = "v9.8.7",
-    ) -> tuple[subprocess.CompletedProcess[str], str]:
+        run_pages: Sequence[object] | None = None,
+        runs_api_ok: bool = True,
+    ) -> tuple[BindingResult, str]:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             fake_bin = tmp_path / "bin"
@@ -218,7 +224,17 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
                     printf '%s\\n' "$*" >> "${FAKE_GH_LOG:-/dev/null}"
                     if [ "$1" = api ]; then
                       case "$2" in
-                        *'/actions/workflows/source-attestation.yml/runs'*) printf '%s' "$FAKE_RUNS_JSON" ;;
+                        *'/actions/workflows/source-attestation.yml/runs'*)
+                          [ "$FAKE_RUNS_API_OK" = 1 ] || exit 98
+                          if [[ " $* " == *' --paginate '* ]]; then
+                            if [[ " $* " == *' --slurp '* ]]; then
+                              printf '%s' "$FAKE_RUN_PAGES"
+                            else
+                              printf '%s' "$FAKE_RUN_PAGES" | jq -c '.[]'
+                            fi
+                          else
+                            printf '%s' "$FAKE_RUN_PAGES" | jq -c '.[0]'
+                          fi ;;
                         *'/git/ref/tags/'*) printf '%s' "$FAKE_REF_JSON" ;;
                         *'/git/tags/'*) printf '%s' "$FAKE_TAG_JSON" ;;
                         *'/actions/workflows/source-attestation.yml') printf '%s' "$FAKE_WORKFLOW_JSON" ;;
@@ -265,7 +281,9 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
                 "REF_NAME": ref_name if event != "workflow_dispatch" else "master",
                 "TRIGGER_COMMIT": BUILDER,
                 "DISPATCH_SOURCE_SHA": dispatch_source,
-                "FAKE_RUNS_JSON": source_runs() if runs is None else runs,
+                "FAKE_RUN_PAGES": json.dumps(run_pages) if run_pages is not None else
+                    "[" + (source_runs() if runs is None else runs) + "]",
+                "FAKE_RUNS_API_OK": "1" if runs_api_ok else "0",
                 "FAKE_GH_LOG": str(gh_log),
                 "GITHUB_OUTPUT": str(output),
                 "FAKE_REF_JSON": ref_json or valid_ref(),
@@ -285,8 +303,11 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
                 env=env,
                 check=False,
             )
-            result.gh_log = gh_log.read_text(encoding="utf-8")
-            return result, output.read_text(encoding="utf-8")
+            binding_result = BindingResult(
+                result.args, result.returncode, result.stdout, result.stderr
+            )
+            binding_result.gh_log = gh_log.read_text(encoding="utf-8")
+            return binding_result, output.read_text(encoding="utf-8")
 
     def test_verified_public_annotation_selects_exact_source(self) -> None:
         result, output = self.run_binding()
@@ -326,6 +347,36 @@ class ReleaseSourceBindingBehaviorTests(unittest.TestCase):
         self.assertNotIn("source_attestation_run_id:", self.workflow)
         self.assertIn("\n      source_sha:\n", self.workflow)
         self.assertIn("dialgate_candidate_ref:", self.workflow)
+
+    def test_dispatch_finds_attestation_beyond_first_page(self) -> None:
+        unrelated = json.loads(source_run(display_title="Source attestation " + "d" * 40))
+        result, output = self.run_binding(
+            event="workflow_dispatch", dispatch_source=SOURCE,
+            run_pages=[{"workflow_runs": [unrelated] * 100},
+                       {"workflow_runs": [json.loads(source_run())]}],
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(output, f"source_commit={SOURCE}\nattestation_run_id=12345\n")
+        self.assertIn("attestation verify", result.gh_log)
+
+    def test_dispatch_rejects_incomplete_or_invalid_run_pages(self) -> None:
+        valid = {"workflow_runs": [json.loads(source_run())]}
+        for pages, api_ok in (
+            ([{"workflow_runs": []}, {"workflow_runs": []}], True),
+            ([valid, {"message": "unavailable"}], True),
+            ([valid, {"workflow_runs": None}], True),
+            ([valid, {"workflow_runs": {}}], True),
+            ([valid], False),
+        ):
+            with self.subTest(pages=pages, api_ok=api_ok):
+                result, output = self.run_binding(
+                    event="workflow_dispatch", dispatch_source=SOURCE,
+                    run_pages=pages, runs_api_ok=api_ok,
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertEqual(output, "")
+                self.assertNotIn("run download", result.gh_log)
+                self.assertNotIn("attestation verify", result.gh_log)
 
     def test_dispatch_rejects_a_sha_before_any_lookup(self) -> None:
         for bad in ("main", SOURCE.upper(), ""):
