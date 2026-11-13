@@ -1,6 +1,15 @@
 // Resolve the exact release artifact graph without a release/signing task.
+// Init scripts also run for included builds (Flutter's plugin loader is the
+// included build ':gradle'), which have no ':app'. Register the task only in
+// the top-level Android build so included builds evaluate untouched.
 gradle.projectsEvaluated {
-    def app = gradle.rootProject.project(':app')
+    if (gradle.parent != null) {
+        return
+    }
+    def app = gradle.rootProject.findProject(':app')
+    if (app == null) {
+        throw new GradleException('warmDependencyCache: top-level build has no :app project')
+    }
     app.tasks.register('warmDependencyCache') {
         doLast {
             ['releaseCompileClasspath', 'releaseRuntimeClasspath'].each { name ->

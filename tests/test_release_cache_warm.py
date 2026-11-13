@@ -230,6 +230,15 @@ class WarmUpWorkflowBoundary(unittest.TestCase):
         self.assertNotIn('assemble', init)
         self.assertNotIn('KEYSTORE', WARM)
 
+    def test_gradle_init_skips_included_builds(self) -> None:
+        # 2026-11-13 run 43421827887: the init script ran inside Flutter's
+        # included plugin-loader build ':gradle' and failed on project(':app').
+        init = (ROOT / "scripts/warm_gradle.init.gradle").read_text()
+        self.assertIn('if (gradle.parent != null)', init)
+        self.assertIn("findProject(':app')", init)
+        self.assertNotIn("rootProject.project(':app')", init)
+        self.assertLess(init.index('gradle.parent != null'), init.index("findProject(':app')"))
+
     def test_compile_commands_match_the_build(self) -> None:
         for command in ('dart setup.dart build -p "$PLATFORM" -a amd64', 'dart setup.dart build -p "$PLATFORM"'):
             self.assertIn(command, BUILD_MATRIX)
