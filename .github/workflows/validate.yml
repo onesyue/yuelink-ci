@@ -352,7 +352,9 @@ jobs:
 
   coverage_join:
     name: Stitch coverage shards
-    if: github.event_name != 'pull_request' && !cancelled() && needs.preflight.result == 'success' && (needs.coverage_shard.result == 'success' || needs.coverage_shard.result == 'skipped')
+    # Derive admission from the producer: attested tag runs skip the shards,
+    # so there is nothing to join and no runner or SDK should be allocated.
+    if: github.event_name != 'pull_request' && !cancelled() && needs.preflight.result == 'success' && needs.coverage_shard.result == 'success'
     runs-on: ubuntu-24.04
     needs: [preflight, coverage_shard]
     environment: yuelink-build
@@ -410,10 +412,6 @@ jobs:
           shopt -s nullglob
           manifests=(coverage-shards/*/shard.json)
           if [ ${#manifests[@]} -eq 0 ]; then
-            if [ "${GITHUB_REPOSITORY}" = onesyue/yuelink-ci ] && [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-              echo "tag reuses the attested suite"
-              exit 0
-            fi
             if ! grep -q 'COVERAGE_EXTERNAL' scripts/ci/release_preflight.sh; then
               echo "source preflight still owns coverage"
               exit 0
