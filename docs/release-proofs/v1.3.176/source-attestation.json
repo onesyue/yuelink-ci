@@ -1,0 +1,74 @@
+{
+  "builderRepository": "onesyue/yuelink-ci",
+  "gates": [
+    "source-master-ancestry",
+    "android-release-signing-contract",
+    "unreleased-dart-format",
+    "flutter-analyze",
+    "architecture-imports",
+    "cocoapods-residue",
+    "workflow-policy",
+    "security-scan",
+    "wintun-bundle",
+    "release-metadata",
+    "manifest-schema",
+    "gitleaks-full-history",
+    "govulncheck-core-service",
+    "macos-integration",
+    "windows-durability",
+    "windows-native-core-runtime"
+  ],
+  "releaseTag": "v1.3.176",
+  "reuse": {
+    "flutter": {
+      "gates": [
+        "flutter-analyze"
+      ],
+      "kind": "flutter",
+      "runAttempt": "1",
+      "runId": "43073545775",
+      "schemaVersion": 1,
+      "sourceSha": "3937d3807609974e82daee1421cadb6003298613",
+      "toolchain": {
+        "architecture": "x86_64",
+        "dartSdkVersion": "3.13.7",
+        "engineRevision": "cf636b1dfb818dd6a3ff16e390e93b1a036969c8",
+        "frameworkRevision": "737ba8f885dc774b53b442759999a312c9461e4e",
+        "frameworkVersion": "3.47.8",
+        "installer": "onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49",
+        "lockSha256": "0c97817fc712be467e5d40a117a6939c02428b5d04ab3c30b284e88c8ac42b29",
+        "os": "Linux"
+      },
+      "workflowSha": "b0e08905a1e191b778aa44975ee33d30aa258460"
+    },
+    "schemaVersion": 1,
+    "service": {
+      "gates": [
+        "service-go-race"
+      ],
+      "kind": "service",
+      "runAttempt": "1",
+      "runId": "43073545775",
+      "schemaVersion": 1,
+      "sourceSha": "3937d3807609974e82daee1421cadb6003298613",
+      "toolchain": {
+        "CC": "gcc",
+        "CGO_ENABLED": "1",
+        "GOARCH": "amd64",
+        "GOOS": "linux",
+        "GOVERSION": "go1.27.4",
+        "architecture": "x86_64",
+        "compiler": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+        "lockSha256": "a3e3f7dda781b3068d78dfd71a31dccf3e02700a0fff96664f1e223a0cc9cda1",
+        "os": "Linux"
+      },
+      "workflowSha": "b0e08905a1e191b778aa44975ee33d30aa258460"
+    }
+  },
+  "runAttempt": "1",
+  "runId": "43073545775",
+  "schemaVersion": 2,
+  "sourceRepository": "onesyue/yuelink",
+  "sourceSha": "3937d3807609974e82daee1421cadb6003298613",
+  "workflowSha": "b0e08905a1e191b778aa44975ee33d30aa258460"
+}

@@ -22,7 +22,7 @@ INSTALLER = re.compile(
 _JOB_HEAD = re.compile(r"(?m)^(?=  [A-Za-z0-9_-]+:\s*$)")
 REQUIRED = (
     "PUBLIC CI MIRROR",
-    "gpgverify_unavailable",
+    "resolve-release-tag.sh",
     "vless-reality-tfo",
     "vless-reality",
     "vless-ws-tls",

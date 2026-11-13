@@ -69,9 +69,9 @@ dart() {
         if workflow:
             from scripts.check_public_build import composed_text
 
-            source = composed_text(ROOT / '.github/workflows/build.yml')
-            start = source.index("            tag_json=''\n")
-            end = source.index('            tag_message=', start)
+            source = (ROOT / "scripts/resolve-release-tag.sh").read_text()
+            start = source.index("tag_json=''\n")
+            end = source.index("tag_message=", start)
             script = textwrap.dedent(source[start:end])
         else:
             script = '\n'.join(shell_function(source, name) for name in (
@@ -168,10 +168,10 @@ gh() {
         # Reverse then reapply the overlay in a temporary directory.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            names = ('plan.yml', 'publish.yml')
+            names = ('resolve-release-tag.sh', 'publish.yml')
             for name in names:
                 (root / name).write_bytes(
-                    (ROOT / '.github/workflows' / name).read_bytes())
+                    (ROOT / ('scripts' if name.endswith('.sh') else '.github/workflows') / name).read_bytes())
             patch = (ROOT / 'scripts/public-release-retry.patch').read_bytes()
             for direction in ('--reverse', '--forward'):
                 subprocess.run(
@@ -180,10 +180,10 @@ gh() {
             for name in names:
                 self.assertEqual(
                     (root / name).read_bytes(),
-                    (ROOT / '.github/workflows' / name).read_bytes())
+                    (ROOT / ('scripts' if name.endswith('.sh') else '.github/workflows') / name).read_bytes())
             self.assertIn(
                 'gpgverify_unavailable',
-                (ROOT / 'scripts/check_public_build.py').read_text())
+                (ROOT / 'scripts/resolve-release-tag.sh').read_text())
 
 
 if __name__ == '__main__':

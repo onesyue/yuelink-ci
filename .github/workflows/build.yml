@@ -154,6 +154,8 @@ jobs:
       needs.dial_gate_summary.result == 'success'
     permissions:
       contents: write
+      actions: read
+      attestations: read
     uses: ./.github/workflows/publish.yml
     with:
       source_commit: ${{ needs.plan.outputs.source_commit }}
@@ -179,6 +181,7 @@ jobs:
     permissions:
       contents: read
       actions: write
+      attestations: read
     if: >-
       always() &&
       (github.event_name == 'pull_request' || needs.plan.result == 'success')
@@ -209,6 +212,7 @@ jobs:
       - name: Write the platform table
         env:
           EXPECTED_SOURCE_COMMIT: ${{ needs.plan.outputs.source_commit }}
+          EXPECTED_BASELINE_SOURCE: ${{ needs.dial_gate.outputs.baseline_source }}
           REQUIRE_SOURCE_COMMIT: ${{ github.event_name != 'pull_request' }}
         shell: bash
         run: |
@@ -219,6 +223,9 @@ jobs:
           protocols = {"vless-reality-tfo", "vless-reality", "vless-ws-tls", "hysteria2"}
           found = {}
           identities = None
+          expected_baseline = os.environ.get("EXPECTED_BASELINE_SOURCE", "")
+          if not re.fullmatch(r"[0-9a-f]{40}", expected_baseline):
+              sys.exit("missing or invalid frozen dial baseline")
           expected_source = os.environ.get("EXPECTED_SOURCE_COMMIT", "")
           if os.environ.get("REQUIRE_SOURCE_COMMIT") != "false" and not re.fullmatch(r"[0-9a-f]{40}", expected_source):
               sys.exit("missing or invalid planned release source")
@@ -240,6 +247,8 @@ jobs:
                       if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{40}", value):
                           sys.exit(f"invalid source identity for {platform}")
                       identity.append(value)
+              if data["baseline"]["revision"] != expected_baseline:
+                  sys.exit(f"baseline differs from frozen promoted source for {platform}")
               harness = data.get("harness_revision")
               if harness != data["candidate"]["revision"]:
                   sys.exit(f"mismatched measurement harness for {platform}")

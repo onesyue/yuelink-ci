@@ -61,7 +61,11 @@ class DialGateSummaryTests(unittest.TestCase):
         }
 
     def run_summary(
-        self, reports: dict, expected_source: str = "", require_source: bool = False
+        self,
+        reports: dict,
+        expected_source: str = "",
+        require_source: bool = False,
+        expected_baseline: str = "a" * 40,
     ) -> subprocess.CompletedProcess:
         workflow = (ROOT / ".github/workflows/build.yml").read_text()
         body = workflow.split("- name: Write the platform table\n", 1)[1]
@@ -82,6 +86,7 @@ class DialGateSummaryTests(unittest.TestCase):
                     "GITHUB_STEP_SUMMARY": str(root / "summary"),
                     "GO_VERSION": "1.27.4",
                     "EXPECTED_SOURCE_COMMIT": expected_source,
+                    "EXPECTED_BASELINE_SOURCE": expected_baseline,
                     "REQUIRE_SOURCE_COMMIT": "true" if require_source else "false",
                 },
                 capture_output=True,
@@ -175,3 +180,14 @@ class DialGateSummaryTests(unittest.TestCase):
                 self.assertNotEqual(
                     self.run_summary(self.reports(), expected, True).returncode, 0
                 )
+
+    def test_frozen_baseline_binding_is_required_for_every_event(self) -> None:
+        for require_source in (False, True):
+            for expected in ("", "master", "G" * 40, "e" * 40):
+                with self.subTest(require_source=require_source, expected=expected):
+                    self.assertNotEqual(
+                        self.run_summary(
+                            self.reports(), "c" * 40, require_source, expected
+                        ).returncode,
+                        0,
+                    )

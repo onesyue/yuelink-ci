@@ -74,6 +74,8 @@ jobs:
     permissions:
       # Native LGPL source attachments are published on this exact signed tag.
       contents: write
+      actions: read
+      attestations: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -744,6 +746,17 @@ jobs:
           done
           echo "::error::candidate verification failed after CDN propagation window"
           exit 1
+      - name: Preserve verified source proof before promotion
+        if: env.SKIP_MANIFEST != '1' && inputs.tag_kind == 'stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          BUILDER_COMMIT: ${{ github.workflow_sha }}
+          ATTESTATION_RUN: ${{ inputs.attestation_run_id }}
+        run: >-
+          python3 .release-builder/scripts/preserve-source-proof.py
+          "$RELEASE_TAG" "$SOURCE_COMMIT" "$BUILDER_COMMIT" "$ATTESTATION_RUN" --publish
       # In-pipeline promotion (2026-09-03). Build green ⇒ the signed root
       # update.json moves to this version, here, with no operator and no
       # second machine. The previous "protected plane" promoters (private

@@ -161,50 +161,9 @@ jobs:
             verify_public_attestation=1
           elif [[ "$REF" == refs/tags/* ]] &&
                [ "$REPOSITORY" = onesyue/yuelink-ci ]; then
-            ref_json="$(gh api "repos/$REPOSITORY/git/ref/tags/$REF_NAME")"
-            tag_object_sha="$(jq -er '.object.sha' <<<"$ref_json")"
-            if ! { [ "$(jq -er '.object.type' <<<"$ref_json")" = tag ] &&
-                   [[ "$tag_object_sha" =~ ^[0-9a-f]{40}$ ]]; }; then
-              echo "::error::public release ref must be an annotated tag"
-              exit 1
-            fi
-            tag_json=''
-            for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
-              tag_json="$(gh api "repos/$REPOSITORY/git/tags/$tag_object_sha")"
-              if jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
-                  .tag == $tag and .object.type == "commit" and
-                  .object.sha == $builder and .verification.verified == true and
-                  .verification.reason == "valid"
-                ' <<<"$tag_json" >/dev/null; then
-                break
-              fi
-              # Only an explicit pending verification may consume the wait budget.
-              jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
-                .tag == $tag and .object.type == "commit" and
-                .object.sha == $builder and .verification.verified == false and
-                (.verification.reason == "gpgverify_unavailable" or .verification.reason == "gpgverify_error")
-              ' <<<"$tag_json" >/dev/null || {
-                echo "::error::public tag content or signature rejected"
-                exit 1
-              }
-              [ "$attempt" -eq 12 ] || sleep 5
-            done
-            jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
-              .tag == $tag and .object.type == "commit" and
-              .object.sha == $builder and .verification.verified == true and
-              .verification.reason == "valid"
-            ' <<<"$tag_json" >/dev/null || {
-              echo "::error::public tag is not exact builder + verified/valid"
-              exit 1
-            }
-            tag_message="$(jq -er '.message' <<<"$tag_json")"
-            if ! { [ "$(grep -Ec '^ATTESTED_SOURCE_COMMIT=[0-9a-f]{40}$' <<<"$tag_message")" -eq 1 ] &&
-                   [ "$(grep -Ec '^SOURCE_ATTESTATION_RUN_ID=[1-9][0-9]*$' <<<"$tag_message")" -eq 1 ]; }; then
-              echo "::error::public signed tag lacks one closed source binding"
-              exit 1
-            fi
-            source_commit="$(sed -nE 's/^ATTESTED_SOURCE_COMMIT=([0-9a-f]{40})$/\1/p' <<<"$tag_message")"
-            attestation_run_id="$(sed -nE 's/^SOURCE_ATTESTATION_RUN_ID=([1-9][0-9]*)$/\1/p' <<<"$tag_message")"
+            tag_binding="$(bash "$(dirname "$SOURCE_ATTESTATION_VERIFIER")/resolve-release-tag.sh" "$REF_NAME" "$TRIGGER_COMMIT")"
+            source_commit="$(jq -er '.source' <<<"$tag_binding")"
+            attestation_run_id="$(jq -er '.attestation_run' <<<"$tag_binding")"
             verify_public_attestation=1
           elif [[ "$REF" == refs/tags/* ]] &&
                [ "$REPOSITORY" = onesyue/yuelink ]; then

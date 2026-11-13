@@ -74,3 +74,37 @@ Sources: [source-attestation contract](tests/test_source_attestation_contract.py
 [shared verifier](scripts/verify-source-attestation.sh), [public workflow self-check](sync-build.sh)
 and the operational material consolidated from README.md at base
 `dda16708a19405d0822a1862fc2ecb6b5a2ec519` into [RUNBOOK](docs/RUNBOOK.md).
+
+
+## Dial baseline provenance
+
+The shared dial workflow selects one baseline before its five platform jobs.
+It freezes a UTC cutoff and selects the most recently published stable GitHub
+release at that cutoff. The shared annotated-tag resolver authenticates the
+public tag and its source/builder/attestation binding. The existing source
+attestation verifier checks the exact run, proof and provenance. Selection also
+requires the latest tag Build run's exact successful attempt and an explicitly
+successful `Sign root manifest and promote (in-pipeline)` step. Missing,
+pending, failed, skipped or contradictory evidence blocks the gate; it never
+falls back to an older version. No production URL or host is queried.
+
+`dial-baseline-receipt` retains the selected release, source, builder, tag object,
+attestation attempt, Build attempt, promotion job/step and selection cutoff.
+All five checkouts use the frozen source SHA; the outer platform table requires
+the same baseline SHA. The workflow exports the receipt SHA-256 for audit.
+This proves the latest public pipeline-promoted stable release, **not** the live
+version after a possible manual rollback. Releases after the cutoff belong to a
+later verification run. Historical v1.3.174 measurements remain historical
+comparisons and are not relabelled as latest-stable evidence.
+
+Stable baseline provenance is durable: future publication preserves the original
+verified `source-attestation.json` and its public Sigstore bundle as release
+assets before promotion. The selector requires both assets and validates their
+exact source, builder, run attempt, gates, and signature through the shared
+verifier. A present but partial or invalid asset pair fails closed; it cannot
+fall back to Actions artifacts or an older release. The one-time signed proof
+archive under `docs/release-proofs/v1.3.176/` bridges the existing stable release
+without changing its assets. It is selected by the dynamically resolved tag,
+not a pinned baseline. Releases with neither durable assets nor a migration
+archive still require an available valid Actions artifact. The archive contains
+public provenance bytes only; future releases use automatic durable assets.

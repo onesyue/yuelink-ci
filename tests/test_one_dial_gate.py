@@ -53,11 +53,17 @@ def one_dial_issues(build: str, dial: str, sync: str, ios: str) -> list[str]:
         issues.append("dial gate is not the reusable workflow")
     caller = _caller_job(build)
     granted = _permission_lines(caller)
-    if granted != {"contents: read", "actions: write"}:
-        issues.append("dial caller must grant contents: read and actions: write")
+    if not {"contents: read", "actions: write", "attestations: read"} <= granted:
+        issues.append("dial caller must grant contents: read, actions: write and attestations: read")
+    grants = dict(item.split(": ", 1) for item in granted)
+    ranks = {"none": 0, "read": 1, "write": 2}
     for fragment in dial.split("\n    permissions:\n")[1:]:
         requested = _permission_lines("    permissions:\n" + fragment)
-        extra = requested - granted
+        extra = {
+            item for item in requested
+            if ranks.get(item.split(": ", 1)[1], 99)
+            > ranks.get(grants.get(item.split(": ", 1)[0], "none"), 0)
+        }
         if extra:
             issues.append(
                 "dial workflow requests permissions the caller does not grant: "
@@ -123,3 +129,11 @@ class OneDialGateTests(unittest.TestCase):
             IOS.read_text(encoding="utf-8"),
         )
         self.assertTrue(any("actions: write" in issue for issue in issues))
+
+    def test_missing_attestation_permission_fails(self) -> None:
+        build = BUILD.read_text()
+        caller = _caller_job(build)
+        mutated = caller.replace("      attestations: read\n", "", 1)
+        self.assertNotEqual(mutated, caller)
+        issues = one_dial_issues(build.replace(caller, mutated, 1), DIAL.read_text(), SYNC.read_text(), IOS.read_text())
+        self.assertTrue(any("attestations: read" in issue for issue in issues))

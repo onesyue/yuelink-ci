@@ -164,15 +164,38 @@ SOURCE_COMMIT="${2:?source commit is required}"
 BUILDER_COMMIT="${3:?builder commit is required}"
 RUN_ID="${4:?source-attestation run id is required}"
 EXPORT_PROOF=""
-if (( $# > 4 )); then
-  [ "$#" -eq 6 ] && [ "$5" = --export-proof ] && [[ "$6" = /* ]] || {
-    echo "::error::invalid source proof export arguments" >&2; exit 2;
+EXPORT_VERIFIED_PROOF=""
+PROOF_FILE=""
+BUNDLE_FILE=""
+shift 4
+while (( $# )); do
+  [ "$#" -ge 2 ] && [[ "$2" = /* ]] || {
+    echo "::error::invalid source proof arguments" >&2; exit 2;
   }
-  EXPORT_PROOF="$6"
-  [ ! -e "$EXPORT_PROOF" ] && [ ! -L "$EXPORT_PROOF" ] || {
+  case "$1" in
+    --export-proof) option=EXPORT_PROOF ;;
+    --export-verified-proof) option=EXPORT_VERIFIED_PROOF ;;
+    --proof-file) option=PROOF_FILE ;;
+    --bundle-file) option=BUNDLE_FILE ;;
+    *) echo "::error::unknown source proof option" >&2; exit 2 ;;
+  esac
+  [ -z "${!option}" ] || { echo "::error::duplicate source proof option" >&2; exit 2; }
+  printf -v "$option" '%s' "$2"
+  shift 2
+done
+for output in "$EXPORT_PROOF" "$EXPORT_VERIFIED_PROOF"; do
+  [ -z "$output" ] || { [ ! -e "$output" ] && [ ! -L "$output" ]; } || {
     echo "::error::source proof export must be a new file" >&2; exit 2;
   }
-fi
+done
+for input in "$PROOF_FILE" "$BUNDLE_FILE"; do
+  [ -z "$input" ] || { [ -f "$input" ] && [ ! -L "$input" ]; } || {
+    echo "::error::source proof input must be a regular file" >&2; exit 2;
+  }
+done
+[ -z "$BUNDLE_FILE" ] || [ -n "$PROOF_FILE" ] || {
+  echo "::error::bundle requires explicit proof bytes" >&2; exit 2;
+}
 WORKFLOW_IDENTITY=onesyue/yuelink-ci/.github/workflows/source-attestation.yml
 
 [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] &&
@@ -234,7 +257,11 @@ jq -e \
 }
 RUN_ATTEMPT="$(jq -er '.run_attempt | tostring | select(test("^[1-9][0-9]*$"))' "$run_json")"
 
-download_attestation_proof "$proof_dir"
+if [ -n "$PROOF_FILE" ]; then
+  cp "$PROOF_FILE" "$proof"
+else
+  download_attestation_proof "$proof_dir"
+fi
 [ -f "$proof" ] && [ ! -L "$proof" ] &&
   [ "$(find -P "$proof_dir" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d '[:space:]')" = 1 ] &&
   [ -z "$(find -P "$proof_dir" -mindepth 1 -maxdepth 1 ! -type f -print -quit)" ] || {
@@ -304,15 +331,20 @@ jq -e \
   exit 1
 }
 
-GH_PROMPT_DISABLED=1 gh_read gh attestation verify "$proof" \
-  --repo "$REPOSITORY" \
-  --cert-oidc-issuer https://token.actions.githubusercontent.com \
-  --predicate-type https://slsa.dev/provenance/v1 \
-  --signer-workflow "$WORKFLOW_IDENTITY" \
-  --source-ref refs/heads/master \
-  --source-digest "$BUILDER_COMMIT" \
-  --signer-digest "$BUILDER_COMMIT" \
-  --deny-self-hosted-runners >/dev/null || {
+verification_args=(gh attestation verify "$proof"
+  --repo "$REPOSITORY"
+  --cert-oidc-issuer https://token.actions.githubusercontent.com
+  --predicate-type https://slsa.dev/provenance/v1
+  --signer-workflow "$WORKFLOW_IDENTITY"
+  --source-ref refs/heads/master
+  --source-digest "$BUILDER_COMMIT"
+  --signer-digest "$BUILDER_COMMIT"
+  --deny-self-hosted-runners)
+if [ -n "$BUNDLE_FILE" ]; then
+  cp "$BUNDLE_FILE" "$snapshot/provenance.jsonl"
+  verification_args+=(--bundle "$snapshot/provenance.jsonl")
+fi
+GH_PROMPT_DISABLED=1 gh_read "${verification_args[@]}" >/dev/null || {
   echo "::error::source-attestation proof provenance verification failed" >&2
   exit 1
 }
@@ -322,6 +354,10 @@ if [ -n "$EXPORT_PROOF" ]; then
     echo "::error::legacy source proof cannot authorize gate reuse" >&2; exit 1;
   }
   ( set -o noclobber; cat "$proof" > "$EXPORT_PROOF" )
+fi
+
+if [ -n "$EXPORT_VERIFIED_PROOF" ]; then
+  ( set -o noclobber; cat "$proof" > "$EXPORT_VERIFIED_PROOF" )
 fi
 
 echo "✓ exact public source attestation verified: run=$RUN_ID source=$SOURCE_COMMIT builder=$BUILDER_COMMIT"

@@ -92,6 +92,29 @@ sys.exit(9)
         if export: command += ['--export-proof', str(output)]
         return subprocess.run(command, env=self.env, capture_output=True, text=True, timeout=20)
 
+    def test_explicit_proof_bytes_keep_identity_crypto_and_export_contract(self):
+        proof = self.root / 'proof.json'
+        bundle = self.root / 'bundle.jsonl'
+        bundle.write_text('public bundle')
+        output = self.root / 'durable.json'
+        command = ['bash', str(self.root / 'verify-source-attestation.sh'), TAG,
+                   SOURCE, BUILDER, RUN, '--proof-file', str(proof),
+                   '--bundle-file', str(bundle), '--export-verified-proof', str(output)]
+        result = subprocess.run(command, env=self.env, capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output.read_bytes(), proof.read_bytes())
+        self.assertIn('--bundle', json.loads((self.root/'crypto-args.json').read_text()))
+        output.unlink()
+        self.env['SIGNATURE_FAIL'] = '1'
+        result = subprocess.run(command, env=self.env, capture_output=True, text=True, timeout=20)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(output.exists())
+        del self.env['SIGNATURE_FAIL']
+        command[3] = 'c' * 40
+        result = subprocess.run(command, env=self.env, capture_output=True, text=True, timeout=20)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(output.exists())
+
     def test_exact_v2_proof_is_exported_only_after_signature_validation(self):
         result = self.verify(); self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.root/'export.json').read_bytes(), (self.root/'proof.json').read_bytes())

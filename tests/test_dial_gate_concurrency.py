@@ -119,7 +119,7 @@ def validate_pull_request_dial_ref(caller: str, dial: str) -> None:
     """Pull-request dial checks out current yuelink master.
 
     The candidate expression lives on the build.yml caller. The comparison
-    baseline stays v1.3.174 inside the reusable dial workflow.
+    baseline comes from the once-per-run proven stable selection.
     """
     if "feat/real-dial-gate-20261111" in caller or "feat/real-dial-gate-20261111" in dial:
         raise DialConcurrencyError(
@@ -130,13 +130,14 @@ def validate_pull_request_dial_ref(caller: str, dial: str) -> None:
             "pull-request dial must check out yuelink master"
         )
     job = dial_gate_job(dial)
-    baselines = [
-        ref.strip()
-        for ref in re.findall(r"(?m)^          ref: (.+)$", job)
-        if ref.strip() == "v1.3.174"
-    ]
-    if baselines != ["v1.3.174"]:
-        raise DialConcurrencyError("dial baseline ref changed")
+    baseline = re.search(
+        r"name: Checkout frozen promoted dial baseline\n(.*?)(?=\n      - )",
+        job,
+        re.S,
+    )
+    if baseline is None or "ref: ${{ needs.baseline_binding.outputs.baseline_source }}" not in baseline.group(1):
+        raise DialConcurrencyError("dial baseline is not the frozen promoted source")
+
 
 
 class DialGateConcurrencyTests(unittest.TestCase):
@@ -169,8 +170,11 @@ class DialGateConcurrencyTests(unittest.TestCase):
         with self.assertRaises(DialConcurrencyError):
             validate_pull_request_dial_ref(mutated, self.workflow)
 
-    def test_dial_baseline_pin_is_rejected_when_moved(self) -> None:
-        mutated = self._replace_once("          ref: v1.3.174", "          ref: v1.3.175")
+    def test_dial_baseline_binding_is_rejected_when_replaced_with_a_tag(self) -> None:
+        mutated = self._replace_once(
+            "          ref: ${{ needs.baseline_binding.outputs.baseline_source }}",
+            "          ref: v1.3.174",
+        )
         with self.assertRaises(DialConcurrencyError):
             validate_pull_request_dial_ref(self.caller, mutated)
 

@@ -1,21 +1,21 @@
---- plan.yml
-+++ plan.yml
-@@ -178,6 +178,15 @@
-                 ' <<<"$tag_json" >/dev/null; then
-                 break
-               fi
-+              # Only an explicit pending verification may consume the wait budget.
-+              jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
-+                .tag == $tag and .object.type == "commit" and
-+                .object.sha == $builder and .verification.verified == false and
-+                (.verification.reason == "gpgverify_unavailable" or .verification.reason == "gpgverify_error")
-+              ' <<<"$tag_json" >/dev/null || {
-+                echo "::error::public tag content or signature rejected"
-+                exit 1
-+              }
-               [ "$attempt" -eq 12 ] || sleep 5
-             done
-             jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
+--- resolve-release-tag.sh
++++ resolve-release-tag.sh
+@@ -29,6 +29,15 @@
+     ' <<<"$tag_json" >/dev/null; then
+     break
+   fi
++  # Only an explicit pending verification may consume the wait budget.
++  jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
++    .tag == $tag and .object.type == "commit" and
++    .object.sha == $builder and .verification.verified == false and
++    (.verification.reason == "gpgverify_unavailable" or .verification.reason == "gpgverify_error")
++  ' <<<"$tag_json" >/dev/null || {
++    echo "::error::public tag content or signature rejected"
++    exit 1
++  }
+   [ "$attempt" -eq 12 ] || sleep 5
+ done
+ jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
 --- publish.yml
 +++ publish.yml
 @@ -710,13 +710,36 @@

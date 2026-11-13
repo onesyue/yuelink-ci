@@ -16,6 +16,13 @@ on:
         required: false
         type: boolean
         default: false
+    outputs:
+      baseline_source:
+        description: Exact latest proven public stable source selected once
+        value: ${{ jobs.baseline_binding.outputs.baseline_source }}
+      baseline_receipt_sha256:
+        description: Frozen GitHub promotion evidence digest
+        value: ${{ jobs.baseline_binding.outputs.baseline_receipt_sha256 }}
     secrets:
       SRC_DEPLOY_KEY:
         required: true
@@ -39,7 +46,38 @@ env:
   FLUTTER_VERSION: '3.47.8'
 
 jobs:
+  baseline_binding:
+    name: Bind latest proven stable dial baseline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+    outputs:
+      baseline_source: ${{ steps.baseline.outputs.baseline_source }}
+      baseline_receipt_sha256: ${{ steps.baseline.outputs.baseline_receipt_sha256 }}
+    steps:
+      - name: Checkout exact baseline verifier
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Freeze latest proven public promotion
+        id: baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/select-dial-baseline.py --receipt "$RUNNER_TEMP/dial-baseline/receipt.json"
+      - name: Retain frozen dial baseline receipt
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dial-baseline-receipt
+          path: ${{ runner.temp }}/dial-baseline/receipt.json
+          if-no-files-found: error
+          retention-days: 14
+
   dial_gate:
+    needs: [baseline_binding]
     name: Dial gate (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.timeout_minutes }}
@@ -126,16 +164,25 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      - name: Checkout dial-gate baseline v1.3.174
+      - name: Checkout frozen promoted dial baseline
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink
-          ref: v1.3.174
+          ref: ${{ needs.baseline_binding.outputs.baseline_source }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           path: baseline
           fetch-depth: 1
           submodules: recursive
           persist-credentials: false
+
+      - name: Verify frozen baseline checkout
+        shell: bash
+        env:
+          BASELINE_SOURCE: ${{ needs.baseline_binding.outputs.baseline_source }}
+        run: |
+          set -euo pipefail
+          [[ "$BASELINE_SOURCE" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git -C baseline rev-parse HEAD)" = "$BASELINE_SOURCE"
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:

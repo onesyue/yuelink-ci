@@ -21,6 +21,16 @@ REPOSITORY = "onesyue/yuelink-ci"
 
 def validate(argv: list[str]) -> Path | None:
     """Allow only the exact read families used by the two native consumers."""
+    if (len(argv) == 5 and argv[:2] == ["gh", "api"]
+            and re.fullmatch(r"repos/onesyue/yuelink-ci/releases/assets/[1-9][0-9]*", argv[2])
+            and argv[3:] == ["-H", "Accept: application/octet-stream"]):
+        return None
+    if (argv[:3] == ["gh", "attestation", "verify"]
+            and len(argv) > 2 and argv[-2] == "--bundle"):
+        bundle = Path(argv[-1])
+        if not bundle.is_absolute() or not bundle.is_file() or bundle.is_symlink():
+            raise ValueError("bundle must be an absolute regular file")
+        return validate(argv[:-2])
     if argv[:2] == ["gh", "api"]:
         if (len(argv) not in (3, 5) or not re.fullmatch(
                 r"repos/onesyue/(?:yuelink|yuelink-ci)/[A-Za-z0-9._/?&=%:-]+", argv[2])
