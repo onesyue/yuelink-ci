@@ -26,7 +26,7 @@ class DialGateSummaryTests(unittest.TestCase):
              'baseline_p95_ms': 5, 'candidate_p95_ms': 5}
             for protocol in PROTOCOLS]} for platform in PLATFORMS}
 
-    def run_summary(self, reports: dict) -> subprocess.CompletedProcess:
+    def run_summary(self, reports: dict, invalid_identity: str = "") -> subprocess.CompletedProcess:
         workflow = (ROOT / '.github/workflows/build.yml').read_text()
         body = workflow.split('- name: Write the platform table\n', 1)[1]
         script = textwrap.dedent(body.split("python3 - <<'PY'\n", 1)[1].split('\n          PY', 1)[0])
@@ -36,6 +36,14 @@ class DialGateSummaryTests(unittest.TestCase):
                 path = root / 'dial-reports' / ('dial-gate-' + name)
                 path.mkdir(parents=True)
                 (path / 'gate.json').write_text(json.dumps(report))
+                for role, revision in (("baseline", "3937d3807609974e82daee1421cadb6003298613"),
+                                       ("candidate", "44ab723c55a28a4d2e3372371c9f6fdf5e4b849e")):
+                    raw = {"revision": revision, "role": role, "platform": name}
+                    if name == "ios" and role == "candidate" and invalid_identity:
+                        if invalid_identity == "missing":
+                            continue
+                        raw[invalid_identity] = "wrong"
+                    (path / f"{role}.json").write_text(json.dumps(raw))
             return subprocess.run([sys.executable, '-c', script], cwd=root,
                                   env={**os.environ, 'GITHUB_STEP_SUMMARY': str(root / 'summary')},
                                   capture_output=True, text=True, check=False)
@@ -66,3 +74,8 @@ class DialGateSummaryTests(unittest.TestCase):
         for name, reports in cases:
             with self.subTest(case=name):
                 self.assertNotEqual(self.run_summary(reports).returncode, 0)
+
+    def test_control_rejects_wrong_or_missing_source_identity(self) -> None:
+        for field in ("revision", "role", "platform", "missing"):
+            with self.subTest(field=field):
+                self.assertNotEqual(self.run_summary(self.reports(), field).returncode, 0)
