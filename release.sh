@@ -389,6 +389,7 @@ if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
   bash scripts/ci/release-promote-local.sh <X.Y.Z> <source40hex> <candidate64hex>
   上线验收后:把精确签名根更新到 tests/fixtures/update-manifest-v1.json
   并把旧根保留为 replay regression fixture；不得从 CDN 动态学习地板。
-  最后收敛 yueto 签名发布账本：见 docs/reconcile-yuelink-pin.md，
-  用 scripts/reconcile-yuelink-pin.py 生成验签后的 write-yuelink 参数；release-state 的 yuelink 行须为 OK。"
+  最后只读验收：见 docs/RUNBOOK.md；在已集成原生清单消费者的 yueto 根运行
+  python3 scripts/release-state.py，要求 yuelink 行为 OK；UNKNOWN/DRIFT 均未完成。
+  原生消费者尚未可用时停止验收，不生成或回填手写客户端 pin。"
 fi

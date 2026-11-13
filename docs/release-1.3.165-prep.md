@@ -116,8 +116,11 @@ Linux compatibility floor; it is not a ban on GitHub-hosted runners.
    in-pipeline promotion/readback. Retain the public run's receipts. Follow
    [RUNBOOK](RUNBOOK.md) for acceptance/recovery; immutable tags and archives
    cannot be overwritten, and the signed updater root cannot be downgraded.
-   Ledger reconciliation is a separate authorized owner handoff via
-   [reconcile-yuelink-pin.md](reconcile-yuelink-pin.md), outside this PR.
+   At the time of this preparation, ledger reconciliation was a separate
+   authorized owner handoff. After B10-7 consumer integration, the maintained
+   [RUNBOOK](RUNBOOK.md) uses native read-only client identity acceptance instead;
+   this historical preparation does not authorize a legacy client-pin write or
+   removal of an existing root ledger block.
 
 ## Post-release floor PR only
 

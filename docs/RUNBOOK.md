@@ -111,9 +111,29 @@ prior root as a replay regression. Never learn the floor from the CDN being
 verified. Retained installers remain available for manual recovery; the updater
 root may never decrease.
 
-The final release step is [signed ledger reconciliation](reconcile-yuelink-pin.md).
-Release completion requires the yuelink release-state row to be OK after the
-Mac owner writes, seals and reads back the exact stable version/source/digest.
+Finish with the root repository's native, read-only client identity consumer.
+This handoff requires the B10-7 native consumers and typed integrity-error
+classification to be integrated in the root checkout. If unavailable, acceptance
+is UNKNOWN and remains unfinished; do not replace the missing consumer with a
+handwritten client pin or adopt this caller retirement early.
+
+From the authorized `yueto` root checkout, run `python3 scripts/release-state.py`
+and require the yuelink row to be OK. The consumer authenticates the complete
+signed manifest bundle, freshness/replay floor, source and promotion evidence,
+and the GitHub-verified annotated tag in the private `onesyue/yuelink` source
+repository. A public builder tag, local HEAD, or legacy root client block is not
+source authority. Missing/untrusted evidence remains UNKNOWN; authenticated
+source or candidate-integrity disagreement is DRIFT. Neither is completion.
+For the combined drift check, `bash scripts/release-drift.sh --live` explicitly
+requests native client evidence; its offline mode cannot qualify a client release.
+Preserve the server ledger admission and history checks.
+
+Normal client release acceptance no longer writes or seals a root client pin.
+Removal of a pre-existing legacy block is a separate release-owner migration
+after consumer and caller integration, using the root's native removal and
+signing transaction. This runbook does not perform or authorize that migration,
+and the retired caller must not recreate the block. The reviewed manifest-floor
+fixture and replay regression procedure above remains required.
 
 Every R2 object below `v` is permanently retained by the live enabled indefinite
 bucket-lock rule `yuelink-release-versioned-indefinite` (`prefix=v`). The historical
