@@ -156,7 +156,7 @@ jobs:
       - name: Restore Go module cache
         if: runner.os != 'Windows'
         continue-on-error: true
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/go/pkg/mod
           key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-gomod-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-${{ github.sha }}
@@ -166,7 +166,7 @@ jobs:
       - name: Restore Go module cache (Windows)
         if: runner.os == 'Windows'
         continue-on-error: true
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~\go\pkg\mod
           key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-gomod-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-${{ github.sha }}
@@ -176,7 +176,7 @@ jobs:
       - name: Restore Go compiler cache
         if: runner.os != 'Windows'
         continue-on-error: true
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.os == 'macOS' && '~/Library/Caches/go-build' || '~/.cache/go-build' }}
           key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-gocache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-${{ github.sha }}
@@ -186,7 +186,7 @@ jobs:
       - name: Restore Go compiler cache (Windows)
         if: runner.os == 'Windows'
         continue-on-error: true
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~\AppData\Local\go-build
           key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-gocache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ env.GO_VERSION }}-${{ github.sha }}
@@ -200,14 +200,14 @@ jobs:
 
       - name: Restore pub cache (lockfile-verified)
         if: runner.os != 'Windows'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.pub-cache
           key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
 
       - name: Restore pub cache (lockfile-verified, Windows)
         if: runner.os == 'Windows'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~\AppData\Local\Pub\Cache
           key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-pub-v1-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
@@ -416,7 +416,9 @@ jobs:
       # half fails with `gcc_arm64.S: no such instruction`. Pin to amd64
       # explicitly. Android / iOS / macOS handle their own arch matrices
       # internally (NDK / lipo / static lib).
-      # The cache stores those built libraries. A hit skips compile. install
+      # Tag/PR runs only restore: caches written on a tag are unreachable by
+      # the next tag. warm-release-caches.yml populates these exact identities
+      # on master after green source attestation. A hit skips compile. install
       # always copies them into the Flutter tree, including the macOS lipo.
       # Service helpers and the desktop feed overlay are yuelink sources, so
       # the mihomo commit alone is not the cache identity.
@@ -495,7 +497,7 @@ jobs:
       - name: Restore built Go core
         id: go_core_build
         continue-on-error: true
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             core/build
@@ -576,7 +578,7 @@ jobs:
       - name: Restore Gradle dependency caches
         if: matrix.platform == 'android'
         continue-on-error: true
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.gradle/caches
@@ -1405,7 +1407,7 @@ jobs:
           fi
 
       - name: Save Xcode compilation cache
-        if: steps.xcode_cache_save.outputs.save == 'true'
+        if: github.ref == 'refs/heads/master' && steps.xcode_cache_save.outputs.save == 'true'
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

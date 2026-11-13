@@ -129,8 +129,10 @@ def contract_issues(workflow: str) -> list[str]:
         if required not in identity:
             issues.append(f"identity script lost {required}")
 
-    if "uses: actions/cache/restore@" in cache:
-        issues.append("go core cache must save on a miss, not only restore")
+    # A tag run's cache scope is unreachable from the next tag, so the release
+    # build only restores; warm-release-caches.yml saves on master.
+    if "uses: actions/cache/restore@" not in cache:
+        issues.append("go core cache must only restore in the tag-scoped release build")
     if "continue-on-error: true" not in cache:
         issues.append("a cache outage must still compile")
     if "id: go_core_build" not in cache:
@@ -140,11 +142,11 @@ def contract_issues(workflow: str) -> list[str]:
     pin = ""
     for line in cache.splitlines():
         stripped = line.strip()
-        if stripped.startswith("uses: actions/cache@"):
+        if stripped.startswith("uses: actions/cache/restore@"):
             pin = stripped.split("@", 1)[1].split()[0]
     if len(pin) != 40 or any(char not in "0123456789abcdef" for char in pin):
         issues.append("go core cache action is not pinned to 40 hex")
-    elif workflow.count(f"uses: actions/cache@{pin}") < 2:
+    elif workflow.count(f"uses: actions/cache/restore@{pin}") < 2:
         issues.append("go core cache pin differs from the existing cache pin")
     path_block = cache.split("path: |", 1)[1].split("key:", 1)[0] if "path: |" in cache and "key:" in cache else ""
     for required_path in ("core/build", "service/build"):

@@ -1,0 +1,173 @@
+name: Warm release core caches
+run-name: Warm release core caches after attestation ${{ github.event.workflow_run.id }}
+
+# Cache-only work on master. Tag caches cannot be restored by the next tag;
+# these trusted, source-bound master caches can. Never publishes or signs.
+on:
+  workflow_run:
+    workflows: [Source attestation]
+    types: [completed]
+    branches: [master]
+
+concurrency:
+  group: master-release-core-cache-warmup
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'workflow_dispatch' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      source_sha: ${{ steps.plan.outputs.source_sha }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      go_version: ${{ steps.plan.outputs.go_version }}
+      flutter_version: ${{ steps.plan.outputs.flutter_version }}
+      ndk: ${{ steps.plan.outputs.ndk }}
+      xcode: ${{ steps.plan.outputs.xcode }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Derive source, platform matrix and toolchains from canonical workflows
+        id: plan
+        shell: bash
+        env:
+          ATTESTATION_TITLE: ${{ github.event.workflow_run.display_title }}
+        run: |
+          set -euo pipefail
+          python3 scripts/release_cache_plan.py plan --title "$ATTESTATION_TITLE"
+
+  warm:
+    name: Warm core (${{ matrix.platform }})
+    needs: [plan]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - name: Checkout exact attested source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ needs.plan.outputs.source_sha }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          submodules: recursive
+          persist-credentials: false
+      - name: Checkout canonical cache derivation tools
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          path: .cache-tools
+          persist-credentials: false
+      - name: Select canonical Xcode for Apple core
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          XCODE: ${{ needs.plan.outputs.xcode }}
+        run: |
+          set -euo pipefail
+          developer_dir="/Applications/Xcode_${XCODE}.app/Contents/Developer"
+          test -d "$developer_dir"
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+      - name: Record canonical Go core identity
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          # The exact script text of build-matrix.yml, not a copy of it.
+          python3 .cache-tools/scripts/release_cache_plan.py identity-script > "$RUNNER_TEMP/core-identity.sh"
+          bash "$RUNNER_TEMP/core-identity.sh"
+      - name: Evaluate canonical release cache keys
+        id: cache_plan
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          python3 .cache-tools/scripts/release_cache_plan.py keys --platform "$PLATFORM"
+      - name: Restore compiled core from master
+        id: core
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.gocore_path }}
+          key: ${{ steps.cache_plan.outputs.gocore_key }}
+      - name: Set up Go
+        if: steps.core.outputs.cache-hit != 'true'
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ needs.plan.outputs.go_version }}
+          cache: false
+      - name: Set up Flutter
+        if: steps.core.outputs.cache-hit != 'true'
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
+        with:
+          flutter-version: ${{ needs.plan.outputs.flutter_version }}
+          cache: true
+      - name: Restore shared pub dependencies
+        if: steps.core.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.pub_path }}
+          key: ${{ steps.cache_plan.outputs.pub_key }}
+      - name: Setup Android NDK tools
+        if: matrix.platform == 'android' && steps.core.outputs.cache-hit != 'true'
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: platform-tools
+      - name: Install canonical NDK
+        if: matrix.platform == 'android' && steps.core.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          NDK: ${{ needs.plan.outputs.ndk }}
+        run: |
+          set -euo pipefail
+          sdkmanager "ndk;$NDK"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/$NDK" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/$NDK" >> "$GITHUB_ENV"
+      - name: Build exact native core and service inputs
+        if: steps.core.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          GOFLAGS: -mod=readonly
+          GOTOOLCHAIN: local
+        run: |
+          set -euo pipefail
+          flutter pub get --enforce-lockfile
+          dart run slang
+          if [ "$CORE_ARCH_SCOPE" = amd64 ]; then
+            dart setup.dart build -p "$PLATFORM" -a amd64
+          else
+            test "$CORE_ARCH_SCOPE" = all
+            dart setup.dart build -p "$PLATFORM"
+          fi
+      - name: Save compiled core in master scope
+        if: steps.core.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.gocore_path }}
+          key: ${{ steps.cache_plan.outputs.gocore_key }}
+      - name: Report measured warm-up result
+        if: always()
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          CORE_HIT: ${{ steps.core.outputs.cache-hit }}
+          CORE_KEY: ${{ steps.cache_plan.outputs.gocore_key }}
+          SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            printf '### %s core cache\n\n' "$PLATFORM"
+            printf 'Source: %s\n\nCache hit: %s\n\nResult: %s\n\nKey: %s\n' "$SOURCE_SHA" "${CORE_HIT:-false}" "$JOB_STATUS" "$CORE_KEY"
+          } >> "$GITHUB_STEP_SUMMARY"
