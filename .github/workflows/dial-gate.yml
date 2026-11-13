@@ -67,6 +67,8 @@ jobs:
         id: baseline
         env:
           GH_TOKEN: ${{ github.token }}
+          BASELINE_CALLER_EVENT: ${{ github.event_name }}
+          BASELINE_CALLER_REF: ${{ github.ref }}
         run: python3 scripts/select-dial-baseline.py --receipt "$RUNNER_TEMP/dial-baseline/receipt.json"
       - name: Retain frozen dial baseline receipt
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

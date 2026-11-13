@@ -162,7 +162,16 @@ def exact_run(run: dict, workflow_id: int, binding: dict, cutoff: datetime) -> N
     positive_id(run.get("run_attempt"))
 
 
-def select(api: GitHub, cutoff: datetime) -> dict:
+def select(
+    api: GitHub, cutoff: datetime, *, event_name: str = "", ref: str = ""
+) -> dict:
+    # Only the trusted caller event/ref can exclude its own release. In
+    # particular, PR refs and dispatch inputs cannot skip an unproven stable.
+    excluded_candidate_tag = ""
+    if event_name == "push" and ref.startswith("refs/tags/"):
+        candidate_tag = ref.removeprefix("refs/tags/")
+        if STABLE.fullmatch(candidate_tag):
+            excluded_candidate_tag = candidate_tag
     releases = pages(api, "releases")
     eligible = []
     for release in releases:
@@ -176,6 +185,8 @@ def select(api: GitHub, cutoff: datetime) -> dict:
         if not isinstance(release.get("tag_name"), str) or not STABLE.fullmatch(
             release["tag_name"]
         ):
+            continue
+        if release["tag_name"] == excluded_candidate_tag:
             continue
         if timestamp(release.get("published_at")) <= cutoff:
             eligible.append(release)
@@ -279,6 +290,7 @@ def select(api: GitHub, cutoff: datetime) -> dict:
         "schema_version": 1,
         "scope": "latest-public-pipeline-promoted-stable-release",
         "repository": REPOSITORY,
+        "excluded_candidate_tag": excluded_candidate_tag,
         "selection_cutoff": cutoff.isoformat().replace("+00:00", "Z"),
         "release_id": release["id"],
         "published_at": release["published_at"],
@@ -298,7 +310,12 @@ def main() -> int:
     # Freeze time before any GitHub reads; callers cannot supply a historical cutoff.
     cutoff = datetime.now(timezone.utc).replace(microsecond=0)
     try:
-        receipt = select(GitHub(), cutoff)
+        receipt = select(
+            GitHub(),
+            cutoff,
+            event_name=os.environ.get("BASELINE_CALLER_EVENT", ""),
+            ref=os.environ.get("BASELINE_CALLER_REF", ""),
+        )
         encoded = (json.dumps(receipt, sort_keys=True, indent=2) + "\n").encode()
         args.receipt.parent.mkdir(parents=True, exist_ok=True)
         with args.receipt.open("xb") as output:

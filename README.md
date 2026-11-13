@@ -108,3 +108,10 @@ without changing its assets. It is selected by the dynamically resolved tag,
 not a pinned baseline. Releases with neither durable assets nor a migration
 archive still require an available valid Actions artifact. The archive contains
 public provenance bytes only; future releases use automatic durable assets.
+
+For a stable tag push, baseline selection excludes only that exact candidate
+tag derived from the trusted GitHub event and ref. A rerun therefore compares
+with the prior proven stable even if its own Release already exists after a
+failed promotion, or was previously promoted. The receipt records
+`excluded_candidate_tag`; PRs and manual dispatches cannot supply an exclusion.
+Any other latest stable with missing or invalid evidence still fails closed.

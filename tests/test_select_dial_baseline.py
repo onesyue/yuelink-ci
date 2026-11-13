@@ -142,6 +142,99 @@ class BaselineSelectionTests(unittest.TestCase):
         self.assertEqual(api.attested, [api.binding])
         self.assertTrue(any("attempts/2/jobs" in call for call in api.calls))
 
+    def test_current_push_tag_is_excluded_even_with_existing_release(self):
+        # A failed/in-progress promotion and an already-promoted candidate
+        # both use the prior stable: never inspect or compare against self.
+        api = FakeGitHub()
+        candidate_tag = "v1.3.177"
+        api.releases.append(
+            dict(
+                api.release,
+                id=8,
+                tag_name=candidate_tag,
+                published_at="2026-11-12T12:00:00Z",
+            )
+        )
+        receipt = mod.select(
+            api, CUTOFF, event_name="push", ref="refs/tags/" + candidate_tag
+        )
+        self.assertEqual(receipt["tag"], TAG)
+        self.assertEqual(receipt["excluded_candidate_tag"], candidate_tag)
+        self.assertNotIn("tag:" + candidate_tag, api.calls)
+
+    def test_current_already_proven_release_is_also_excluded(self):
+        api = FakeGitHub()
+        # The only release has otherwise fully valid promotion evidence.
+        with self.assertRaisesRegex(ValueError, "no published stable release"):
+            mod.select(api, CUTOFF, event_name="push", ref="refs/tags/" + TAG)
+        self.assertEqual(api.attested, [])
+
+    def test_pr_dispatch_and_branch_push_cannot_exclude_latest(self):
+        for event, ref in (
+            ("pull_request", "refs/tags/" + TAG),
+            ("workflow_dispatch", "refs/tags/" + TAG),
+            ("push", "refs/heads/" + TAG),
+            ("push", "refs/tags/" + TAG + "-rc1"),
+            ("", "refs/tags/" + TAG),
+        ):
+            api = FakeGitHub()
+            api.job["steps"][0]["conclusion"] = "failure"
+            api.releases.append(
+                dict(
+                    api.release,
+                    id=6,
+                    tag_name="v1.3.175",
+                    published_at="2026-11-10T00:00:00Z",
+                )
+            )
+            with self.subTest(event=event, ref=ref), self.assertRaises(ValueError):
+                mod.select(api, CUTOFF, event_name=event, ref=ref)
+            self.assertNotIn("tag:v1.3.175", api.calls)
+
+    def test_exclusion_cannot_skip_a_different_unproven_release(self):
+        api = FakeGitHub()
+        api.releases.append(
+            dict(
+                api.release,
+                id=8,
+                tag_name="v1.3.177",
+                published_at="2026-11-12T12:00:00Z",
+            )
+        )
+        api.job["steps"][0]["conclusion"] = "failure"
+        api.releases.append(
+            dict(
+                api.release,
+                id=6,
+                tag_name="v1.3.175",
+                published_at="2026-11-10T00:00:00Z",
+            )
+        )
+        with self.assertRaises(ValueError):
+            mod.select(api, CUTOFF, event_name="push", ref="refs/tags/v1.3.177")
+        self.assertNotIn("tag:v1.3.175", api.calls)
+
+    def test_unknown_newer_release_cannot_be_skipped_by_current_tag(self):
+        api = FakeGitHub()
+        api.releases.append(
+            dict(
+                api.release,
+                id=9,
+                tag_name="v1.3.178",
+                published_at="2026-11-12T14:00:00Z",
+            )
+        )
+        with self.assertRaises(ValueError):
+            mod.select(api, CUTOFF, event_name="push", ref="refs/tags/v1.3.177")
+        self.assertIn("tag:v1.3.178", api.calls)
+        self.assertNotIn("tag:" + TAG, api.calls)
+
+    def test_exclusion_is_exact_not_prefix_or_version_range(self):
+        api = FakeGitHub()
+        receipt = mod.select(api, CUTOFF, event_name="push", ref="refs/tags/v1.3.17")
+        self.assertEqual(receipt["tag"], TAG)
+        self.assertEqual(receipt["excluded_candidate_tag"], "v1.3.17")
+
     def test_latest_unproven_release_never_falls_back_to_older(self):
         for failure in ("tag", "attest", "promotion"):
             api = FakeGitHub()
@@ -285,6 +378,9 @@ class BaselineWorkflowTests(unittest.TestCase):
             'test "$(git -C baseline rev-parse HEAD)" = "$BASELINE_SOURCE"', workflow
         )
         self.assertIn("name: dial-baseline-receipt", workflow)
+        self.assertIn("BASELINE_CALLER_EVENT: ${{ github.event_name }}", workflow)
+        self.assertIn("BASELINE_CALLER_REF: ${{ github.ref }}", workflow)
+        self.assertNotIn("exclude_tag:", workflow)
         self.assertIn(
             "value: ${{ jobs.baseline_binding.outputs.baseline_source }}", workflow
         )
