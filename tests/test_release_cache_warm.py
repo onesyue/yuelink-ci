@@ -226,7 +226,9 @@ class WarmUpWorkflowBoundary(unittest.TestCase):
         init = (ROOT / "scripts/warm_gradle.init.gradle").read_text()
         self.assertIn("tasks.register('warmDependencyCache')", init)
         self.assertIn("'releaseCompileClasspath', 'releaseRuntimeClasspath'", init)
-        self.assertIn('configuration.resolve()', init)
+        self.assertIn('configuration.incoming.artifactView', init)
+        self.assertIn('ModuleComponentIdentifier', init)
+        self.assertNotIn('configuration.resolve()', init)
         self.assertNotIn('assemble', init)
         self.assertNotIn('KEYSTORE', WARM)
 

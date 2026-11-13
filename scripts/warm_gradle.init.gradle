@@ -17,7 +17,13 @@ gradle.projectsEvaluated {
                 if (!configuration.canBeResolved) {
                     throw new GradleException("Cannot resolve ${name}")
                 }
-                configuration.resolve()
+                // Warm only external modules. Resolving Android library *project*
+                // variants (e.g. :android_file_picker) without an artifactType is
+                // ambiguous and failed run 43434250452; they are built, not cached.
+                configuration.incoming.artifactView {
+                    componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+                    lenient false
+                }.files.files
             }
         }
     }
