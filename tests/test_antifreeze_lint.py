@@ -238,6 +238,59 @@ class AntifreezeCliTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("anti-freeze baseline grew", result.stderr)
 
+    def test_git_owned_projection_preserves_dirty_inputs_and_target_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cwd = Path(directory)
+            target = cwd / "consumer"
+            baseline = self.make_repository(target)
+            (target / ".gitignore").write_text("scratch/\n")
+            ignored = target / "scratch/test_generated.py"
+            ignored.parent.mkdir()
+            pin = "workflow.yml" + ":123"
+            ignored.write_text(f"# {pin}\n")
+            # A plain recursive scan sees the ignored artifact. The shared
+            # Git-owned mode must exclude it without modifying the source.
+            plain = self.invoke(cwd, "--root", str(target))
+            self.assertNotEqual(plain.returncode, 0)
+            self.assertIn("new anti-freeze offender", plain.stderr)
+            def check(message: str | None = None) -> None:
+                command = ["git", "-C", str(target), "status", "--porcelain=v1"]
+                before = subprocess.check_output(command)
+                result = self.invoke(cwd, "--root", str(target), "--git-owned")
+                self.assertEqual(subprocess.check_output(command), before)
+                if message is None:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(message, result.stderr)
+            check()
+            from unittest.mock import patch
+            with patch.dict("os.environ", {"GIT_DIR": str(cwd / "missing.git")}):
+                isolated = self.invoke(cwd, "--root", str(target), "--git-owned")
+            self.assertEqual(isolated.returncode, 0, isolated.stderr)
+            link = target / "tests/test_link.py"
+            link.symlink_to("test_case_0.py")
+            check()
+            link.unlink()
+            link.symlink_to("../scratch/test_generated.py")
+            check("source snapshot unavailable")
+            link.unlink()
+            added = target / "tests/test_new.py"
+            added.write_text(f"# {pin}\n")
+            check("new anti-freeze offender")
+            added.unlink()
+            tracked = target / "tests/test_case_0.py"
+            tracked.write_text(f"# {pin}\n")
+            check("new anti-freeze offender")
+            baseline.write_text(f"file-line tests/test_case_0.py {pin}\n")
+            check("anti-freeze baseline grew")
+            baseline.write_text("# shrink only\n")
+            tracked.unlink()
+            check(f"scan saw {lint.MIN_TEST_FILES - 1} test files")
+            subprocess.run(["git", "-C", str(target), "update-ref", "-d",
+                            "refs/remotes/origin/master"], check=True, capture_output=True)
+            check("source snapshot unavailable")
+
     def test_empty_or_missing_target_never_falls_back_to_authority(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             cwd = Path(directory)

@@ -17,8 +17,10 @@ import argparse
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 HEX64 = re.compile(r"\b[0-9a-f]{64}\b")
@@ -267,14 +269,100 @@ def issues(root: Path) -> list[str]:
     return compare(current, baseline, ancestor)
 
 
+def source_snapshot(root: Path, destination: Path, env: dict[str, str]) -> Path:
+    """Scan current root-owned bytes without ignored siblings or evidence trees."""
+    master = subprocess.check_output(
+        ["git", "-C", str(root), "rev-parse", "origin/master^{commit}"],
+        env=env, text=True, timeout=30,
+    ).strip()
+    subprocess.run(
+        ["git", "clone", "--quiet", "--shared", "--no-checkout", str(root), str(destination)],
+        env=env, check=True, capture_output=True, timeout=30,
+    )
+    subprocess.run(
+        ["git", "-C", str(destination), "checkout", "--quiet", "--detach", "HEAD"],
+        env=env, check=True, capture_output=True, timeout=30,
+    )
+    subprocess.run(
+        ["git", "-C", str(destination), "update-ref", "refs/remotes/origin/master", master],
+        env=env, check=True, capture_output=True, timeout=30,
+    )
+    listed = subprocess.check_output(
+        ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        env=env, timeout=30,
+    )
+    paths = sorted(os.fsdecode(raw) for raw in set(listed.split(b"\0")) - {b""})
+    original = subprocess.check_output(
+        ["git", "-C", str(destination), "ls-files", "-z"], env=env, timeout=30,
+    )
+    original_paths = {os.fsdecode(raw) for raw in original.split(b"\0") if raw}
+    links: list[tuple[Path, str]] = []
+    # Remove checkout files first: a former link must not redirect later copies.
+    for rel in original_paths:
+        target = destination / rel
+        if target.is_symlink() or target.is_file():
+            target.unlink()
+    for rel in paths:
+        source, target = root / rel, destination / rel
+        if target.is_symlink() or target.is_file():
+            target.unlink()
+        if source.is_symlink():
+            link = os.readlink(source)
+            if Path(link).is_absolute():
+                raise OSError("Absolute symbolic link cannot be projected")
+            links.append((target, link))
+        elif source.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+    # Install links only after copying regular files, then reject links whose
+    # inputs are absent or outside the projection instead of silently skipping.
+    for target, link in links:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to(link)
+    for target, _ in links:
+        try:
+            resolved = target.resolve(strict=True)
+        except (OSError, RuntimeError) as error:
+            raise OSError("Symbolic link cannot be projected") from error
+        if not resolved.is_relative_to(destination.resolve()):
+            raise OSError("Symbolic link escapes projection")
+    # The shared hash corpus uses Git membership, including new local files.
+    subprocess.run(
+        ["git", "--literal-pathspecs", "-C", str(destination), "add", "-f",
+         "--pathspec-from-file=-", "--pathspec-file-nul"],
+        input=b"".join(os.fsencode(path) + b"\0" for path in sorted(set(paths) | original_paths)),
+        env=env, check=True, capture_output=True, timeout=30,
+    )
+    return destination
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--root", type=Path, default=Path(__file__).resolve().parents[1],
         help="repository to scan (default: this policy repository)",
     )
-    root = parser.parse_args().root.resolve()
-    found = issues(root)
+    parser.add_argument(
+        "--git-owned", action="store_true",
+        help="scan tracked and non-ignored current files in a private Git snapshot",
+    )
+    args = parser.parse_args()
+    root = args.root.resolve()
+    if args.git_owned:
+        # Git hook selectors must not redirect either repository. This only
+        # changes the isolated CLI process, never the caller's environment.
+        for name in list(os.environ):
+            if name.startswith("GIT_"):
+                del os.environ[name]
+        try:
+            with tempfile.TemporaryDirectory(prefix="antifreeze-source-") as directory:
+                snapshot = source_snapshot(root, Path(directory) / "source", dict(os.environ))
+                found = issues(snapshot)
+        except (OSError, subprocess.SubprocessError) as error:
+            print(f"anti-freeze source snapshot unavailable: {type(error).__name__}", file=sys.stderr)
+            return 2
+    else:
+        found = issues(root)
     if found:
         for item in found:
             print(item, file=sys.stderr)
