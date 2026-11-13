@@ -252,7 +252,9 @@ class DialGateConcurrencyTests(unittest.TestCase):
 
     def test_missing_duplicate_or_bypassed_caller_bindings_are_rejected(self) -> None:
         call = _single_job(self.caller, "dial_gate")
-        binding = re.search(r"(?m)^      candidate_ref: .+$", call).group(0)
+        binding_match = re.search(r"(?m)^      candidate_ref: .+$", call)
+        assert binding_match is not None, "live caller candidate_ref fixture is missing"
+        binding = binding_match.group(0)
         changes = (
             self.caller.replace("  dial_gate:\n", "  removed_dial_gate:\n", 1),
             self.caller + "\n  dial_gate:\n" + call,
@@ -302,10 +304,12 @@ class DialGateConcurrencyTests(unittest.TestCase):
             ("ios_unsigned_compile", "Checkout candidate"),
         ):
             job = _single_job(self.workflow, name)
-            step = re.search(
+            step_match = re.search(
                 rf"(?m)^      - name: {re.escape(checkout)}\n.*?(?=^      - |\Z)",
                 job, re.DOTALL,
-            ).group(0)
+            )
+            assert step_match is not None, f"live checkout fixture is missing: {checkout}"
+            step = step_match.group(0)
             reference = "          ref: ${{ inputs.candidate_ref || inputs.source_sha }}\n"
             self.assertEqual(step.count("        with:\n"), 1)
             self.assertEqual(step.count(reference), 1)
