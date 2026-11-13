@@ -135,10 +135,18 @@ def _checkout_ref(job: str, name: str) -> str:
         raise DialConcurrencyError(f"expected one {name} checkout")
     if not re.search(r"(?m)^        uses: actions/checkout@[0-9a-f]{40}(?: #.*)?$", steps[0]):
         raise DialConcurrencyError(f"{name} is not a pinned checkout step")
-    refs = re.findall(r"(?m)^          ref: (.+)$", steps[0])
+    inputs = re.findall(
+        r"(?m)^        with:\n(.*?)(?=^        [A-Za-z_][A-Za-z0-9_-]*:|\Z)",
+        steps[0],
+        re.DOTALL,
+    )
+    if len(inputs) != 1:
+        raise DialConcurrencyError(f"expected one with block in {name}")
+    refs = re.findall(r"(?m)^          ref: (.+)$", inputs[0])
     if len(refs) != 1:
         raise DialConcurrencyError(f"expected one ref in {name}")
-    if "          repository: onesyue/yuelink\n" not in steps[0]:
+    repositories = re.findall(r"(?m)^          repository: (.+)$", inputs[0])
+    if repositories != ["onesyue/yuelink"]:
         raise DialConcurrencyError(f"{name} must read the client repository")
     return refs[0].strip()
 
@@ -286,6 +294,31 @@ class DialGateConcurrencyTests(unittest.TestCase):
                 validate_pull_request_dial_ref(
                     self.caller, self.workflow.replace(f"  {name}:\n", f"  removed_{name}:\n", 1)
                 )
+
+    def test_checkout_inputs_must_belong_to_one_with_block(self) -> None:
+        for name, checkout in (
+            ("dial_gate", "Checkout dial-gate candidate"),
+            ("linux_auth_storage", "Checkout candidate"),
+            ("ios_unsigned_compile", "Checkout candidate"),
+        ):
+            job = _single_job(self.workflow, name)
+            step = re.search(
+                rf"(?m)^      - name: {re.escape(checkout)}\n.*?(?=^      - |\Z)",
+                job, re.DOTALL,
+            ).group(0)
+            reference = "          ref: ${{ inputs.candidate_ref || inputs.source_sha }}\n"
+            self.assertEqual(step.count("        with:\n"), 1)
+            self.assertEqual(step.count(reference), 1)
+            mutations = {
+                "missing with": step.replace("        with:\n", "", 1),
+                "renamed with": step.replace("        with:\n", "        env:\n", 1),
+                "ref moved to env": step.replace(reference, "", 1) + "        env:\n" + reference,
+                "duplicate with": step + "        with:\n" + reference,
+            }
+            for case, changed in mutations.items():
+                workflow = self.workflow.replace(job, job.replace(step, changed, 1), 1)
+                with self.subTest(job=name, case=case), self.assertRaises(DialConcurrencyError):
+                    validate_pull_request_dial_ref(self.caller, workflow)
 
     def test_malformed_declared_reference_is_rejected(self) -> None:
         for reference in ("", " ", "../old", "refs//heads/old", "ref.lock"):
