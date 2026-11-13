@@ -47,13 +47,9 @@ on:
         type: string
 
 concurrency:
-  # Tags and manual runs share one queue. A pull request uses its own
-  # group so the dial gate does not block a release.
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || 'release' }}
-  # A second tag queues behind the first. Cancelling a production build can
-  # leave only some immutable R2 artifacts/candidate inputs; the separate
-  # private signer has its own monotonic root-promotion guard.
-  cancel-in-progress: false
+  # Isolate immutable tags from branch dispatches and other workflows.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Least-privilege default. Build jobs add OIDC only for provenance;
 # R2 publication does not need repository write permission. Adding the

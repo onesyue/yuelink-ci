@@ -14,7 +14,7 @@ on:
         type: string
 
 concurrency:
-  group: source-attestation-${{ inputs.source_sha }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.source_sha }}
   cancel-in-progress: false
 
 permissions:
