@@ -187,7 +187,7 @@ jobs:
       (github.event_name == 'pull_request' || needs.plan.result == 'success')
     uses: ./.github/workflows/dial-gate.yml
     with:
-      candidate_ref: ${{ github.event.inputs.dialgate_candidate_ref || (github.event_name == 'pull_request' && 'master') || needs.plan.outputs.source_commit }}
+      candidate_ref: ${{ github.event.inputs.dialgate_candidate_ref || (github.event_name == 'pull_request' && '54c846ae35cae41d7549762881c10519788347f3') || needs.plan.outputs.source_commit }}
       run_pr_checks: ${{ github.event_name == 'pull_request' }}
     secrets:
       SRC_DEPLOY_KEY: ${{ secrets.SRC_DEPLOY_KEY }}
