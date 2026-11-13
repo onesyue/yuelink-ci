@@ -13,6 +13,7 @@ is a failure, not a pass.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import os
 import re
@@ -267,7 +268,12 @@ def issues(root: Path) -> list[str]:
 
 
 def main() -> int:
-    root = Path(__file__).resolve().parents[1]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--root", type=Path, default=Path(__file__).resolve().parents[1],
+        help="repository to scan (default: this policy repository)",
+    )
+    root = parser.parse_args().root.resolve()
     found = issues(root)
     if found:
         for item in found:
