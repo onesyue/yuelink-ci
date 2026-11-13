@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -188,6 +190,68 @@ class AntifreezeLintTests(unittest.TestCase):
         self.assertTrue(lint.compare(set(), {"added"}, set()))
         self.assertEqual(lint.compare(set(), set(), None), [])
         self.assertEqual(lint.compare({"kept"}, {"kept"}, {"kept", "older"}), [])
+
+
+class AntifreezeCliTests(unittest.TestCase):
+    def invoke(self, cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "-I", str(ROOT / "scripts/antifreeze_lint.py"), *args],
+            cwd=cwd, capture_output=True, text=True, timeout=30, check=False,
+        )
+
+    def make_repository(self, root: Path) -> Path:
+        root.mkdir()
+        (root / "tests").mkdir()
+        for index in range(lint.MIN_TEST_FILES):
+            (root / "tests" / f"test_case_{index}.py").write_text(f"# case {index}\n")
+        for index in range(lint.MIN_HASHED_FILES):
+            (root / f"source_{index}.txt").write_text(f"source {index}\n")
+        baseline = root / lint.BASELINE_NAME
+        baseline.write_text("# shrink only\n")
+        def git(*args: str) -> None:
+            subprocess.run(
+                ["git", "-C", str(root), *args], check=True,
+                capture_output=True, text=True, timeout=15,
+            )
+        git("init", "--quiet")
+        git("add", ".")
+        git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+            "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "fixture")
+        git("update-ref", "refs/remotes/origin/master", "HEAD")
+        return baseline
+
+    def test_explicit_repository_is_scanned_from_an_unrelated_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cwd = Path(directory)
+            target = cwd / "target with spaces"
+            baseline = self.make_repository(target)
+            result = self.invoke(cwd, "--root", target.name)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            pin = "workflow.yml" + ":123"
+            (target / "tests/test_case_0.py").write_text(f"# {pin}\n")
+            result = self.invoke(cwd, "--root", str(target))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("new anti-freeze offender", result.stderr)
+            # The target's own merge-base must reject widening its baseline.
+            baseline.write_text(f"file-line tests/test_case_0.py {pin}\n")
+            result = self.invoke(cwd, "--root", str(target))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("anti-freeze baseline grew", result.stderr)
+
+    def test_empty_or_missing_target_never_falls_back_to_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cwd = Path(directory)
+            for target, message in ((cwd, "scan saw 0 test files"),
+                                    (cwd / "absent", "cannot scan test directory")):
+                with self.subTest(target=target):
+                    result = self.invoke(cwd, "--root", str(target))
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(message, result.stderr)
+
+    def test_default_still_scans_authority_independent_of_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.invoke(Path(directory))
+            self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":
