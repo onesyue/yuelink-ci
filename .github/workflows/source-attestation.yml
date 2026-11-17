@@ -191,6 +191,19 @@ jobs:
             exit 1
           }
 
+      - name: Import release signing key
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILDER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$BUILDER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          key="$(mktemp)"
+          trap 'rm -f "$key"' EXIT
+          gh api -H "Accept: application/vnd.github.raw" "repos/${GITHUB_REPOSITORY}/contents/scripts/release-signing-key.asc?ref=${BUILDER_SHA}" > "$key"
+          gpg --batch --import "$key"
+
       - name: Release metadata guard
         env:
           RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}

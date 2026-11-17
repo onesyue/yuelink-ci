@@ -34,6 +34,8 @@ WORKFLOW_MARKERS = (
     "dart run tool/automation/workflow_guard.dart",
     "bash scripts/security_scan.sh --json",
     "test -f windows/third_party/wintun/wintun.sha256",
+    'repos/${GITHUB_REPOSITORY}/contents/scripts/release-signing-key.asc?ref=${BUILDER_SHA}',
+    'gpg --batch --import "$key"',
     'dart run tool/automation/release_guard.dart --tag "$RELEASE_TAG"',
     "dart run tool/automation/manifest_guard.dart --self-check",
     "ref: ${{ github.sha }}",
@@ -526,6 +528,12 @@ class SourceAttestationContractTests(unittest.TestCase):
 
     def test_current_contract_is_complete(self) -> None:
         self.assertEqual(contract_issues(self.workflow, self.release, self.readme), [])
+        self.assertLess(
+            self.workflow.index(
+                "scripts/release-signing-key.asc?ref="),
+            self.workflow.index(
+                'dart run tool/automation/release_guard.dart --tag "$RELEASE_TAG"'),
+        )
 
     def test_release_attestation_does_not_run_full_flutter_suite(self):
         # 2026-10-30 Jim decision (plan B5): the release attestation keeps
