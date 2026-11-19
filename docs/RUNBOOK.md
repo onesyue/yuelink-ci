@@ -26,6 +26,12 @@ commit, exact generated-workflow parity and required sideload
 secrets before creating the signed public tag. Its annotation binds
 `ATTESTED_SOURCE_COMMIT=<40hex>` and `SOURCE_ATTESTATION_RUN_ID=<id>`.
 
+`release.sh` takes that private tag from a shallow, signature-verified fetch
+(`--depth=1` into a fresh temporary snapshot: the signed tag object, its commit
+and that commit's tree). A failed fetch is retried at most three times. The
+script may run on any authorized host that has the signing subkey and a `gh`
+login, including the build box or a Mac.
+
 A preview dispatch of `build.yml` is `gh workflow run build.yml -f source_sha="$SOURCE_SHA"`.
 The workflow looks up the newest green Source attestation for that SHA on this
 builder and verifies the proof. Do not pass a run id. A SHA with no matching

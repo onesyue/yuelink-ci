@@ -14,10 +14,15 @@ gh_read() {
 }
 
 SOURCE_SNAPSHOT=""
+FETCH_ERR=""
 cleanup() {
   if [[ "$SOURCE_SNAPSHOT" == */yuelink-ci-source-tag.* ]] &&
      [ -d "$SOURCE_SNAPSHOT" ]; then
     rm -rf -- "$SOURCE_SNAPSHOT"
+  fi
+  if [[ "$FETCH_ERR" == */yuelink-ci-source-fetch.* ]] &&
+     [ -f "$FETCH_ERR" ]; then
+    rm -f -- "$FETCH_ERR"
   fi
 }
 trap cleanup EXIT
@@ -162,17 +167,59 @@ PUBLIC_TAG_MESSAGE="$(printf \
 
 # Fetch the exact source tag for version verification. The public workflow
 # is no longer generated from a private build.yml, so this snapshot is not
-# a workflow template.
-SOURCE_SNAPSHOT="$(mktemp -d "${TMPDIR:-/tmp}/yuelink-ci-source-tag.XXXXXX")"
-# Fetch the exact source tag over HTTPS using gh's credential helper. Never
-# print authentication data or fall back to a sibling working tree.
-git init -q "$SOURCE_SNAPSHOT"
-if ! git -C "$SOURCE_SNAPSHOT" -c credential.helper= \
-  -c 'credential.helper=!gh auth git-credential' fetch --quiet --no-tags \
-  https://github.com/onesyue/yuelink.git "refs/tags/$TAG:refs/tags/$TAG" 2>/dev/null; then
+# a workflow template. Depth 1 carries the signed tag object, its commit and
+# that commit's tree; verify-source-version needs nothing older. Never print
+# authentication data or fall back to a sibling working tree.
+fetch_private_source_snapshot() {
+  local attempt
+  FETCH_ERR="$(mktemp "${TMPDIR:-/tmp}/yuelink-ci-source-fetch.XXXXXX")"
+  for attempt in 1 2 3; do
+    if [[ "$SOURCE_SNAPSHOT" == */yuelink-ci-source-tag.* ]] &&
+       [ -d "$SOURCE_SNAPSHOT" ]; then
+      rm -rf -- "$SOURCE_SNAPSHOT"
+    fi
+    SOURCE_SNAPSHOT="$(mktemp -d "${TMPDIR:-/tmp}/yuelink-ci-source-tag.XXXXXX")"
+    git init -q "$SOURCE_SNAPSHOT"
+    # Clear inherited credential helpers, then use gh. Drop curl/git traces so
+    # a stalled fetch cannot write Authorization headers into the error log.
+    if env \
+      -u GIT_TRACE -u GIT_TRACE_PACKET -u GIT_TRACE_CURL \
+      -u GIT_CURL_VERBOSE -u GIT_TRACE_PERFORMANCE \
+      git -C "$SOURCE_SNAPSHOT" \
+      -c credential.helper= \
+      -c 'credential.helper=!gh auth git-credential' \
+      -c http.lowSpeedLimit=1000 \
+      -c http.lowSpeedTime=60 \
+      fetch --depth=1 --quiet --no-tags \
+      https://github.com/onesyue/yuelink.git \
+      "refs/tags/$TAG:refs/tags/$TAG" 2>"$FETCH_ERR"; then
+      if [[ "$FETCH_ERR" == */yuelink-ci-source-fetch.* ]]; then
+        rm -f -- "$FETCH_ERR"
+      fi
+      FETCH_ERR=""
+      return 0
+    fi
+    if [ "$attempt" -lt 3 ]; then
+      echo "::notice::private source tag fetch failed; retry ${attempt}/3." >&2
+      sleep "$attempt"
+    fi
+  done
   echo '::error::cannot fetch private source tag; release admission rejected' >&2
-  exit 1
-fi
+  if [ -f "$FETCH_ERR" ]; then
+    sed -E \
+      -e '/^[[:space:]]*(=> )?Send header:/d' \
+      -e '/^[[:space:]]*[Aa]uthorization:/d' \
+      -e '/^[[:space:]]*[Pp]rivate-token:/d' \
+      -e '/^[[:space:]]*[Cc]redential:/d' \
+      -e 's/[Bb]earer[[:space:]]+[A-Za-z0-9._~+/=-]+/Bearer [redacted]/g' \
+      -e 's/(ghp_|github_pat_|gho_|ghu_|ghs_|ghr_)[A-Za-z0-9_]+/[redacted]/g' \
+      -e 's#(https?://)[^[:space:]@/]+@#\1#g' \
+      "$FETCH_ERR" | tail -n 20 >&2
+  fi
+  return 1
+}
+
+fetch_private_source_snapshot
 bash scripts/verify-source-version.sh "$SOURCE_SNAPSHOT" "$TAG" "$SOURCE_COMMIT"
 # The public workflow is canonical. Do not fetch a private build.yml: that
 # file is retired, and a missing private template must not block admission.
