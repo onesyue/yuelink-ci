@@ -110,6 +110,13 @@ RELEASE_MARKERS = (
     'printf \'%s\\n\' "$PUBLIC_TAG_MESSAGE"',
     '[ "$actual_annotation_sha" = "$expected_annotation_sha" ]',
     "  inspect_local_public_tag\n",
+    "--depth=1",
+    "-c http.lowSpeedLimit=1000",
+    "-c http.lowSpeedTime=60",
+    "fetch_private_source_snapshot() {",
+    "tail -n 20",
+    "sibling working tree",
+    'bash scripts/verify-source-version.sh "$SOURCE_SNAPSHOT" "$TAG" "$SOURCE_COMMIT"',
 )
 
 SOURCE_VERIFIER_MARKERS = (
@@ -315,6 +322,57 @@ def windows_runtime_issues(workflow: str) -> list[str]:
             issues.append(f"Windows native runtime executable step changed: {name}")
     return issues
 
+def source_snapshot_issues(release: str) -> list[str]:
+    """The private tag snapshot is a depth-1 fetch, then the unchanged verifier."""
+    issues: list[str] = []
+    start = release.find("fetch_private_source_snapshot() {")
+    call = release.find("\nfetch_private_source_snapshot\n")
+    verify = release.find(
+        'bash scripts/verify-source-version.sh '
+        '"$SOURCE_SNAPSHOT" "$TAG" "$SOURCE_COMMIT"'
+    )
+    tag = release.find('git tag -s -m "$PUBLIC_TAG_MESSAGE"')
+    if min(start, call, verify, tag) < 0 or not (start < call < verify < tag):
+        issues.append(
+            "shallow source snapshot must be fetched and verified before the public tag"
+        )
+    end = release.find("\n}\n", start) if start >= 0 else -1
+    body = release[start:end] if start >= 0 and end > start else ""
+    for marker in (
+        "--depth=1",
+        "-c credential.helper=",
+        "-c 'credential.helper=!gh auth git-credential'",
+        "-c http.lowSpeedLimit=1000",
+        "-c http.lowSpeedTime=60",
+        "--no-tags",
+        "https://github.com/onesyue/yuelink.git",
+        "-u GIT_TRACE",
+        "-u GIT_TRACE_PACKET",
+        "-u GIT_TRACE_CURL",
+        "-u GIT_CURL_VERBOSE",
+        "-u GIT_TRACE_PERFORMANCE",
+        "tail -n 20",
+    ):
+        if marker not in body:
+            issues.append(f"source snapshot fetch missing {marker!r}")
+    if body.count("for attempt in 1 2 3; do") != 1:
+        issues.append("source snapshot fetch must retry at most 3 times")
+    for forbidden in ("verify-source-version", "verify-tag", "2>/dev/null"):
+        if forbidden in body:
+            issues.append(f"source snapshot fetch must not contain {forbidden!r}")
+    for forbidden in ("../yuelink", "git -C ../"):
+        if forbidden in release:
+            issues.append(f"release must not fall back to a sibling tree via {forbidden!r}")
+    version_path = ROOT / "scripts/verify-source-version.sh"
+    version_text = version_path.read_text(encoding="utf-8") if version_path.is_file() else ""
+    for marker in (
+        'git -C "$repo" -c gpg.minTrustLevel=fully verify-tag "$tag"',
+        'rev-parse "refs/tags/${tag}^{commit}"',
+    ):
+        if marker not in version_text:
+            issues.append(f"verify-source-version.sh missing {marker!r}")
+    return issues
+
 
 def contract_issues(
     workflow: str,
@@ -360,6 +418,9 @@ def contract_issues(
         ('.verification.verified == true and .verification.reason == "valid"', 2),
         ('[ "$remote_state" = exists ]', 2),
         ('git verify-tag "$TAG"', 1),
+        ("--depth=1", 1),
+        ("-c http.lowSpeedLimit=1000", 1),
+        ("-c http.lowSpeedTime=60", 1),
     ):
         if release.count(marker) != expected_count:
             issues.append(
@@ -431,6 +492,7 @@ def contract_issues(
         push < push_recheck < post_push_verify
     ):
         issues.append("failed/uncertain push must re-read and verify remote truth")
+    issues.extend(source_snapshot_issues(release))
     return issues
 
 
