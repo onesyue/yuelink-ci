@@ -32,6 +32,12 @@ SPEC = importlib.util.spec_from_file_location(
 assert SPEC and SPEC.loader
 verifier = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(verifier)
+_BRAND_SPEC = importlib.util.spec_from_file_location(
+    "brand_literals_for_manifest_tests", ROOT / "scripts/brand_literals.py"
+)
+assert _BRAND_SPEC and _BRAND_SPEC.loader
+BRAND = importlib.util.module_from_spec(_BRAND_SPEC)
+_BRAND_SPEC.loader.exec_module(BRAND)
 
 
 def _later_than(iso: str) -> str:
@@ -439,15 +445,16 @@ class UpdateManifestVerifierTests(unittest.TestCase):
             candidate["platforms"]["macos-universal"].pop("sha256"))
 
     def test_asset_url_host_path_and_extension_are_exact(self) -> None:
+        host = BRAND.ASSET_HOST
         for bad_url in (
-            "http://yuetong.app/v1.3.7/YueLink-1.3.7-ios.ipa",
+            f"http://{host}/v1.3.7/YueLink-1.3.7-ios.ipa",
             "https://evil.example/v1.3.7/YueLink-1.3.7-ios.ipa",
-            "https://yuetong.app/v1.3.7/YueLink-1.3.7-ios.zip",
-            "https://yuetong.app/v1.3.7/YueLink-1.3.7-ios.ipa?next=evil",
-            " https://yuetong.app/v1.3.7/YueLink-1.3.7-ios.ipa",
-            "https://yuetong.app/v1.3.7/YueLink-1.3.7-ios.ipa\t",
-            "https://yuetong.app:bad/v1.3.7/YueLink-1.3.7-ios.ipa",
-            "https://[yuetong.app/v1.3.7/YueLink-1.3.7-ios.ipa",
+            f"https://{host}/v1.3.7/YueLink-1.3.7-ios.zip",
+            f"https://{host}/v1.3.7/YueLink-1.3.7-ios.ipa?next=evil",
+            f" https://{host}/v1.3.7/YueLink-1.3.7-ios.ipa",
+            f"https://{host}/v1.3.7/YueLink-1.3.7-ios.ipa\t",
+            f"https://{host}:bad/v1.3.7/YueLink-1.3.7-ios.ipa",
+            f"https://[{host}/v1.3.7/YueLink-1.3.7-ios.ipa",
         ):
             with self.subTest(url=bad_url):
                 self.assert_policy_rejects(
@@ -511,7 +518,7 @@ class UpdateManifestVerifierTests(unittest.TestCase):
     def assert_manifest_health_uses_bounded_get(self, workflow: str) -> None:
         self.assertNotRegex(workflow, r"(?m)^\s*--head(?:\s|$)")
         self.assertIn(
-            'health_url="https://yuetong.app/health/yue-to-download.json"', workflow
+            f'health_url="{BRAND.URL_DOWNLOAD_HEALTH}"', workflow
         )
         self.assertIn("python3 scripts/verify-release-page-health.py", workflow)
         self.assertNotIn("command -v google-chrome", workflow)
@@ -526,11 +533,11 @@ class UpdateManifestVerifierTests(unittest.TestCase):
 
     def assert_manifest_health_enforces_transport_security(self, workflow: str) -> None:
         markers = (
-            "'http://yuetong.app/update.json'",
+            f"'http://{BRAND.ASSET_HOST}/update.json'",
             '[ "$http_code" != 301 ]',
-            "^location:[[:space:]]*https://yuetong\\.app/update\\.json",
+            "^location:[[:space:]]*" + BRAND.URL_UPDATE_MANIFEST.replace(".", r"\."),
             "--tlsv1.1 --tls-max 1.1",
-            "yuetong.app still accepts obsolete TLS 1.1",
+            f"{BRAND.ASSET_HOST} still accepts obsolete TLS 1.1",
             "--tls-max 1.2",
             "^strict-transport-security:[[:space:]]*max-age=15552000;",
             "includeSubDomains",
@@ -580,7 +587,7 @@ class UpdateManifestVerifierTests(unittest.TestCase):
     def test_manifest_health_rejects_release_page_probe_mutations(self) -> None:
         workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
         for required in (
-            'health_url="https://yuetong.app/health/yue-to-download.json"',
+            f'health_url="{BRAND.URL_DOWNLOAD_HEALTH}"',
             "python3 scripts/verify-release-page-health.py",
         ):
             with self.subTest(required=required):

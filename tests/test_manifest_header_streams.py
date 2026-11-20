@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import importlib.util
 from pathlib import Path
 import re
 import subprocess
@@ -10,8 +11,13 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / '.github/workflows/manifest-health.yml'
+_BRAND_SPEC = importlib.util.spec_from_file_location(
+    'brand_literals_for_header_streams', ROOT / 'scripts/brand_literals.py')
+assert _BRAND_SPEC and _BRAND_SPEC.loader
+_BRAND = importlib.util.module_from_spec(_BRAND_SPEC)
+_BRAND_SPEC.loader.exec_module(_BRAND)
 HEADERS = {
-    'location': 'location: https://yuetong.app/update.json',
+    'location': f'location: {_BRAND.URL_UPDATE_MANIFEST}',
     'strict-transport-security': 'strict-transport-security: max-age=15552000; includeSubDomains',
     'x-content-type-options': 'x-content-type-options: nosniff',
 }

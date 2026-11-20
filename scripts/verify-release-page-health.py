@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import importlib.util
 import json
 import re
 import subprocess
@@ -27,8 +28,23 @@ DEFAULT_PUBLIC_KEY = ROOT / "security/yue-to-download-health-ed25519.pem"
 ALGORITHM = "Ed25519"
 CANONICALIZATION = "jq-cjS-v1"
 PROBE_ID = "yue-to-download-v1"
-RELEASE_URL = "https://yue.to/download.html"
-PUBLIC_URL = "https://yuetong.app/health/yue-to-download.json"
+
+
+def _load_brand_literals():
+    spec = importlib.util.spec_from_file_location(
+        "brand_literals",
+        Path(__file__).resolve().parent / "brand_literals.py",
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("brand_literals.py is missing")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_BRAND = _load_brand_literals()
+RELEASE_URL = _BRAND.URL_DOWNLOAD
+PUBLIC_URL = _BRAND.URL_DOWNLOAD_HEALTH
 TRUSTED_KEY_ID = (
     "ed25519:sha256:"
     "8cab652c26734789d428b6f1aab8827e461719a52ab038d9b70f48a5596f796d"

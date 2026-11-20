@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import stat
@@ -19,6 +20,12 @@ BUILDER = "b" * 40
 CONTROL = BUILDER
 CHALLENGE = "d" * 64
 RUN_ID = "32512971575"
+_BRAND_SPEC = importlib.util.spec_from_file_location(
+    "brand_literals_for_r2_lock", ROOT / "scripts/brand_literals.py"
+)
+assert _BRAND_SPEC and _BRAND_SPEC.loader
+BRAND = importlib.util.module_from_spec(_BRAND_SPEC)
+_BRAND_SPEC.loader.exec_module(BRAND)
 
 
 class R2LockAttestationContractTest(unittest.TestCase):
@@ -202,10 +209,14 @@ esac
         return subprocess.run(args, env=env, text=True, capture_output=True), output
 
     def test_generator_binds_release_and_exact_indefinite_lock(self) -> None:
-        stack, root, digest, env, _ = self._fixture()
+        stack, root, digest, env, call_log = self._fixture()
         self.addCleanup(stack.cleanup)
         result, output = self._run(root, digest, env)
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            f"https://{BRAND.ASSET_HOST}/v1.3.14/update.candidate.json",
+            call_log.read_text(),
+        )
         proof = json.loads(output.read_text())
         self.assertEqual(proof["candidateSha256"], digest)
         self.assertEqual(proof["candidateBuilderCommit"], BUILDER)
