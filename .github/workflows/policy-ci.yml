@@ -34,6 +34,9 @@ jobs:
       - name: Run offline policy regression suites
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Forbid retired Telegram bot handle
+        run: python3 scripts/check_bot_handle.py
+
       # Same pinned actionlint as yueto-ci policy-ci (reviewed version + the
       # release's linux_amd64 sha256). It also runs ShellCheck over every
       # `run:` block; the second command covers the repo's own *.sh.
