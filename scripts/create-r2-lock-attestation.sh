@@ -150,7 +150,18 @@ fetch_with_budget() {
 }
 
 candidate="$work_dir/update.candidate.json"
-candidate_url="https://yuetong.app/$TAG/update.candidate.json"
+# PATH python3 is the replaceable monotonic clock. command -p keeps this
+# lookup on the default system interpreter.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+asset_host="$(command -p python3 "$script_dir/brand_literals.py" ASSET_HOST)" || {
+  echo "::error::official asset host is missing" >&2
+  exit 1
+}
+[[ "$asset_host" =~ ^[A-Za-z0-9.-]+$ ]] || {
+  echo "::error::official asset host is missing" >&2
+  exit 1
+}
+candidate_url="https://${asset_host}/$TAG/update.candidate.json"
 effective_url="$(
   fetch_with_budget 60 4 15 "$candidate" \
     --proto '=https' --proto-redir '=https' --tlsv1.2 "$candidate_url"

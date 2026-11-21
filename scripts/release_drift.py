@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Report source/channel drift. Requires the version-gate-enabled source checkout."""
 import argparse
+import importlib.util
 import json
 from pathlib import Path
 import subprocess
@@ -9,7 +10,20 @@ import time
 import urllib.request
 
 # lib/modules/updater/update_checker.dart: _primaryHost + /update.json.
-CHANNEL_URL = 'https://yuetong.app/update.json'
+def _load_brand_literals():
+    spec = importlib.util.spec_from_file_location(
+        'brand_literals',
+        Path(__file__).resolve().parent / 'brand_literals.py',
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError('brand_literals.py is missing')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_BRAND = _load_brand_literals()
+CHANNEL_URL = _BRAND.URL_UPDATE_MANIFEST
 
 
 def main():

@@ -107,8 +107,23 @@ EXPECTED_PLATFORM_ARTIFACTS = {
     "windows-amd64-portable": "windows-amd64-portable.zip",
     "linux-amd64-appimage": "linux-amd64.AppImage",
 }
-ASSET_HOST = "yuetong.app"
-RELEASE_URL = "https://yue.to/download.html"
+
+
+def _load_brand_literals():
+    spec = importlib.util.spec_from_file_location(
+        "brand_literals",
+        Path(__file__).resolve().parent / "brand_literals.py",
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("brand_literals.py is missing")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_BRAND = _load_brand_literals()
+ASSET_HOST = _BRAND.ASSET_HOST
+RELEASE_URL = _BRAND.URL_DOWNLOAD
 MAX_MANIFEST_LIFETIME = timedelta(days=45)
 MAX_PUBLISH_CLOCK_SKEW = timedelta(hours=6)
 MINIMUM_MANIFEST = (

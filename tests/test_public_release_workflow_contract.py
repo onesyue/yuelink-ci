@@ -6,6 +6,7 @@ the workflows that actually run. A missing file fails; it is not a skip.
 
 from __future__ import annotations
 
+import importlib.util
 import re
 import subprocess
 import textwrap
@@ -13,6 +14,12 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+_BRAND_SPEC = importlib.util.spec_from_file_location(
+    "brand_literals_for_public_release", ROOT / "scripts/brand_literals.py"
+)
+assert _BRAND_SPEC and _BRAND_SPEC.loader
+BRAND = importlib.util.module_from_spec(_BRAND_SPEC)
+_BRAND_SPEC.loader.exec_module(BRAND)
 BUILD = ROOT / ".github/workflows/build.yml"
 ATTESTATION = ROOT / ".github/workflows/source-attestation.yml"
 INSTALLER = re.compile(
@@ -47,7 +54,7 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
     def test_release_markers_remain_on_the_public_workflow(self) -> None:
         required = [
             "name: Assemble R2 candidate",
-            "Publish to R2 (yuetong.app CDN origin)",
+            f"Publish to R2 ({BRAND.ASSET_HOST} CDN origin)",
             "Record exact sideload identity",
             "ATTESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}",
             '[ "$source_commit" = "$ATTESTED_SOURCE_COMMIT" ]',
