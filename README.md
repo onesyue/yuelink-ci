@@ -22,6 +22,13 @@ builder paths cannot bring back the retired Telegram bot. The official handle is
 `@yuetoo_bot`. Tests are `unittest.TestCase` methods; discovery rejects
 unreachable cases. For a small change, select the affected test module.
 
+To check whether the anti-freeze implementations are byte-identical, run
+`bash scripts/check-antifreeze-copy.sh /path/to/pinned-yuelink-checkout`
+against a clean checkout at the source commit being evaluated. The check exits
+nonzero for drift or a missing file. The builder retains its copy while
+YueLink's copy lacks the additional test filename coverage and Git-owned scan
+mode.
+
 ## Release contract
 
 Finalize, review and sign the public builder and private source before requesting
