@@ -29,6 +29,12 @@ concurrency:
   group: yuelink-r2-prune
   cancel-in-progress: false
 
+env:
+  R2_AUDIT_CONNECT_SECONDS: '10'
+  R2_AUDIT_REQUEST_SECONDS: '30'
+  R2_AUDIT_RETRIES: '2'
+  R2_AUDIT_RETRY_BUDGET_SECONDS: '120'
+
 jobs:
   audit:
     name: Audit permanent versioned releases
@@ -142,8 +148,8 @@ jobs:
           # advertised retries never ran during a stalled Cloudflare request.
           curl --fail --silent --show-error \
             --proto '=https' --tlsv1.2 \
-            --connect-timeout 10 --max-time 30 \
-            --retry 2 --retry-all-errors --retry-max-time 120 \
+            --connect-timeout "$R2_AUDIT_CONNECT_SECONDS" --max-time "$R2_AUDIT_REQUEST_SECONDS" \
+            --retry "$R2_AUDIT_RETRIES" --retry-all-errors --retry-max-time "$R2_AUDIT_RETRY_BUDGET_SECONDS" \
             --max-redirs 0 --max-filesize 262144 \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             --output "$lock_response" \

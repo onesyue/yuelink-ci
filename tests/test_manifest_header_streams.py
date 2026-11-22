@@ -26,16 +26,17 @@ HEADERS = {
 class ManifestHeaderStreamTests(unittest.TestCase):
     def predicates(self) -> dict[str, str]:
         source = WORKFLOW.read_text()
-        found = re.findall(r"tr -d '\\r' < \"\$(?:http|https)_headers\" \| grep -E(?:qi|i) \\\n\s+'[^']+'(?: >/dev/null)?", source)
+        found = re.findall(r"tr -d '\\r' < \"\$(?:http|https)_headers\" \| grep -E(?:qi|i) \\\n\s+(?:'[^']+'|\"[^\"]+\")(?: >/dev/null)?", source)
         self.assertEqual(len(found), 3, 'all three real HTTP header checks must be exercised')
-        return {name: next(value for value in found if "'^" + name + ':' in value) for name in HEADERS}
+        return {name: next(value for value in found if "^" + name + ':' in value) for name in HEADERS}
 
     def invoke(self, command: str, data: str | None, *, failed_transform: bool = False) -> int:
         with tempfile.TemporaryDirectory() as directory:
             headers = Path(directory) / 'headers'
             if data is not None:
                 headers.write_bytes(data.encode())
-            env = dict(os.environ, http_headers=str(headers), https_headers=str(headers))
+            env = dict(os.environ, http_headers=str(headers), https_headers=str(headers),
+                       manifest_url=_BRAND.URL_UPDATE_MANIFEST)
             prefix = 'tr() { command tr "$@"; return 23; }\n' if failed_transform else ''
             result = subprocess.run(['bash', '-euo', 'pipefail', '-c', prefix + command],
                                     env=env, capture_output=True, text=True, timeout=10)

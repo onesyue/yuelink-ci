@@ -21,6 +21,12 @@ on:
 permissions:
   contents: read
 
+env:
+  HEALTH_CONNECT_SECONDS: '5'
+  HEALTH_PROBE_SECONDS: '20'
+  MANIFEST_FETCH_SECONDS: '30'
+  HEALTH_FETCH_RETRIES: '2'
+
 jobs:
   manifest_check:
     name: Updater manifest freshness
@@ -45,6 +51,7 @@ jobs:
         id: check
         run: |
           set -euo pipefail
+          manifest_url="$(python3 scripts/brand_literals.py URL_UPDATE_MANIFEST)"
           tmp="$(mktemp)"
           release_health="$(mktemp)"
           https_headers="$(mktemp)"
@@ -55,34 +62,34 @@ jobs:
           # repair a plaintext first request or a weakened zone TLS boundary.
           # Enforce the CDN controls independently before trusting the object.
           if ! http_code="$(curl --fail --silent --show-error \
-            --proto '=http' --connect-timeout 5 --max-time 20 \
-            --retry 2 --retry-all-errors \
+            --proto '=http' --connect-timeout "$HEALTH_CONNECT_SECONDS" --max-time "$HEALTH_PROBE_SECONDS" \
+            --retry "$HEALTH_FETCH_RETRIES" --retry-all-errors \
             --dump-header "$http_headers" --output /dev/null \
             --write-out '%{http_code}' \
-            'http://yuetong.app/update.json')"; then
+            "http://${manifest_url#https://}")"; then
             echo "detail=plaintext update endpoint could not be checked" >> "$GITHUB_OUTPUT"
             exit 1
           fi
           if [ "$http_code" != 301 ] ||
              ! tr -d '\r' < "$http_headers" | grep -Ei \
-               '^location:[[:space:]]*https://yuetong\.app/update\.json[[:space:]]*$' >/dev/null; then
+               "^location:[[:space:]]*${manifest_url//./\\.}[[:space:]]*$" >/dev/null; then
             echo "detail=plaintext update endpoint must 301 to the exact HTTPS URL" >> "$GITHUB_OUTPUT"
             exit 1
           fi
           if curl --fail --silent --show-error \
             --tlsv1.1 --tls-max 1.1 \
-            --connect-timeout 5 --max-time 20 \
-            --output /dev/null 'https://yuetong.app/update.json'; then
+            --connect-timeout "$HEALTH_CONNECT_SECONDS" --max-time "$HEALTH_PROBE_SECONDS" \
+            --output /dev/null "$manifest_url"; then
             echo "detail=yuetong.app still accepts obsolete TLS 1.1" >> "$GITHUB_OUTPUT"
             exit 1
           fi
           if ! code="$(curl --fail --location --silent --show-error \
             --proto '=https' --proto-redir '=https' --tlsv1.2 \
             --tls-max 1.2 \
-            --connect-timeout 5 --max-time 30 --retry 2 --retry-all-errors \
+            --connect-timeout "$HEALTH_CONNECT_SECONDS" --max-time "$MANIFEST_FETCH_SECONDS" --retry "$HEALTH_FETCH_RETRIES" --retry-all-errors \
             --dump-header "$https_headers" \
             --output "$tmp" --write-out '%{http_code}' \
-            "https://yuetong.app/update.json")"; then
+            "$manifest_url")"; then
             echo "detail=root manifest HTTPS fetch failed" >> "$GITHUB_OUTPUT"
             exit 1
           fi
@@ -126,7 +133,7 @@ jobs:
           health_url="https://yuetong.app/health/yue-to-download.json"
           if ! health_code="$(curl --fail --location --silent --show-error \
             --proto '=https' --proto-redir '=https' --tlsv1.2 \
-            --connect-timeout 5 --max-time 20 --retry 2 --retry-all-errors \
+            --connect-timeout "$HEALTH_CONNECT_SECONDS" --max-time "$HEALTH_PROBE_SECONDS" --retry "$HEALTH_FETCH_RETRIES" --retry-all-errors \
             --max-filesize 65536 \
             --output "$release_health" --write-out '%{http_code}' "$health_url")"; then
             detail="signed release-page health envelope is unreachable: $health_url (HTTP ${health_code:-000})"
@@ -151,7 +158,7 @@ jobs:
             # of the nine large installer payloads.
             if ! asset_code="$(curl --fail --location --silent --show-error \
               --proto '=https' --proto-redir '=https' --tlsv1.2 \
-              --connect-timeout 5 --max-time 20 --retry 2 --retry-all-errors \
+              --connect-timeout "$HEALTH_CONNECT_SECONDS" --max-time "$HEALTH_PROBE_SECONDS" --retry "$HEALTH_FETCH_RETRIES" --retry-all-errors \
               --range 0-0 --output /dev/null --write-out '%{http_code}' "$url")"; then
               detail="manifest references an unreachable release URL: $url (HTTP ${asset_code:-000})"
               echo "::error::$detail"
@@ -172,7 +179,7 @@ jobs:
           while IFS=$'\t' read -r url expected; do
             sidecar="$(curl --fail --location --silent --show-error \
               --proto '=https' --proto-redir '=https' --tlsv1.2 \
-              --connect-timeout 5 --max-time 20 --retry 2 --retry-all-errors \
+              --connect-timeout "$HEALTH_CONNECT_SECONDS" --max-time "$HEALTH_PROBE_SECONDS" --retry "$HEALTH_FETCH_RETRIES" --retry-all-errors \
               "${url}.sha256")" || {
                 echo "detail=manifest checksum sidecar is unreachable: ${url}.sha256" >> "$GITHUB_OUTPUT"
                 exit 1
