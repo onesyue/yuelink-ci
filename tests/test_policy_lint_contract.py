@@ -26,12 +26,15 @@ def shell_scripts() -> list[Path]:
 class PolicyLintContractTests(unittest.TestCase):
     def test_policy_ci_runs_pinned_actionlint_and_shellcheck(self) -> None:
         text = POLICY_CI.read_text(encoding="utf-8")
+        self.assertIn("run: scripts/check-policy.sh ci", text)
+        text += (ROOT / "scripts/check-policy.sh").read_text(encoding="utf-8")
         for fragment in (
             "ACTIONLINT_VERSION: '1.7.12'",
             "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8",
             "sha256sum --check --strict",
             "--proto '=https' --tlsv1.2",
-            '"$destination/actionlint" .github/workflows/*.yml',
+            'echo "$destination" >> "$GITHUB_PATH"',
+            "actionlint .github/workflows/*.yml",
             "command -v shellcheck",
             "shellcheck --severity=warning ./*.sh scripts/*.sh",
             "timeout-minutes:",
