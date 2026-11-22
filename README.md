@@ -17,7 +17,9 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
 The [policy workflow](.github/workflows/policy-ci.yml) also owns pinned actionlint
-and ShellCheck commands. Tests are `unittest.TestCase` methods; discovery rejects
+and ShellCheck commands, and it runs `scripts/check_bot_handle.py` so first-party
+builder paths cannot bring back the retired Telegram bot. The official handle is
+`@yuetoo_bot`. Tests are `unittest.TestCase` methods; discovery rejects
 unreachable cases. For a small change, select the affected test module.
 
 ## Release contract
