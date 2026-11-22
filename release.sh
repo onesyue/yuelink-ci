@@ -171,9 +171,14 @@ PUBLIC_TAG_MESSAGE="$(printf \
 # that commit's tree; verify-source-version needs nothing older. Never print
 # authentication data or fall back to a sibling working tree.
 fetch_private_source_snapshot() {
+  # Git measures this in bytes/s. Its numeric value matches the advertised
+  # Infinity cap (YueBoard speedpolicy.InfinityCapMbps), with different units.
+  local -r SOURCE_FETCH_LOW_SPEED_BYTES_PER_SECOND=1000
+  local -r SOURCE_FETCH_LOW_SPEED_SECONDS=60
+  local -r SOURCE_FETCH_ATTEMPTS=3
   local attempt
   FETCH_ERR="$(mktemp "${TMPDIR:-/tmp}/yuelink-ci-source-fetch.XXXXXX")"
-  for attempt in 1 2 3; do
+  for ((attempt = 1; attempt <= SOURCE_FETCH_ATTEMPTS; attempt++)); do
     if [[ "$SOURCE_SNAPSHOT" == */yuelink-ci-source-tag.* ]] &&
        [ -d "$SOURCE_SNAPSHOT" ]; then
       rm -rf -- "$SOURCE_SNAPSHOT"
@@ -188,8 +193,8 @@ fetch_private_source_snapshot() {
       git -C "$SOURCE_SNAPSHOT" \
       -c credential.helper= \
       -c 'credential.helper=!gh auth git-credential' \
-      -c http.lowSpeedLimit=1000 \
-      -c http.lowSpeedTime=60 \
+      -c "http.lowSpeedLimit=$SOURCE_FETCH_LOW_SPEED_BYTES_PER_SECOND" \
+      -c "http.lowSpeedTime=$SOURCE_FETCH_LOW_SPEED_SECONDS" \
       fetch --depth=1 --quiet --no-tags \
       https://github.com/onesyue/yuelink.git \
       "refs/tags/$TAG:refs/tags/$TAG" 2>"$FETCH_ERR"; then
@@ -199,8 +204,8 @@ fetch_private_source_snapshot() {
       FETCH_ERR=""
       return 0
     fi
-    if [ "$attempt" -lt 3 ]; then
-      echo "::notice::private source tag fetch failed; retry ${attempt}/3." >&2
+    if [ "$attempt" -lt "$SOURCE_FETCH_ATTEMPTS" ]; then
+      echo "::notice::private source tag fetch failed; retry ${attempt}/${SOURCE_FETCH_ATTEMPTS}." >&2
       sleep "$attempt"
     fi
   done
@@ -228,10 +233,11 @@ bash scripts/verify-source-version.sh "$SOURCE_SNAPSHOT" "$TAG" "$SOURCE_COMMIT"
 echo "✓ 工作区、公开构建器自检和 tag 状态均已验证"
 
 remote_public_tag_state() {
+  local -r PUBLIC_TAG_LOOKUP_ATTEMPTS=3
   local status attempt
   # Only this read is replayed. A transient transport failure does not prove
   # absence, and an uncertain push must still be resolved by remote readback.
-  for attempt in 1 2 3; do
+  for ((attempt = 1; attempt <= PUBLIC_TAG_LOOKUP_ATTEMPTS; attempt++)); do
     set +e
     git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1
     status=$?
@@ -240,8 +246,8 @@ remote_public_tag_state() {
       0) echo exists; return 0 ;;
       2) echo absent; return 0 ;;
     esac
-    if [ "$attempt" -lt 3 ]; then
-      echo "::notice::远端 tag 读取失败（git ls-remote exit=${status}）；重试只读查询 ${attempt}/3。" >&2
+    if [ "$attempt" -lt "$PUBLIC_TAG_LOOKUP_ATTEMPTS" ]; then
+      echo "::notice::远端 tag 读取失败（git ls-remote exit=${status}）；重试只读查询 ${attempt}/${PUBLIC_TAG_LOOKUP_ATTEMPTS}。" >&2
       sleep "$attempt"
     fi
   done

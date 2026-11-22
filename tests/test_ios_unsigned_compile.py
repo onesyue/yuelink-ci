@@ -6,10 +6,13 @@ import contextlib
 import importlib.util
 import io
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+from scripts import constants
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -17,7 +20,8 @@ SPEC = importlib.util.spec_from_file_location(
 )
 assert SPEC and SPEC.loader
 compile_mod = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(compile_mod)
+with patch.object(sys, "path", [str(ROOT / "scripts"), *sys.path]):
+    SPEC.loader.exec_module(compile_mod)
 
 PHONE = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
 
@@ -37,6 +41,14 @@ def _listing(available: bool, name: str = "iPhone 17") -> dict:
 
 
 class IosUnsignedCompileTests(unittest.TestCase):
+    def test_native_build_limits_stay_pinned(self) -> None:
+        self.assertEqual(compile_mod.IOS_NATIVE_BUILD_TIMEOUT_SECONDS,
+                         constants.IOS_NATIVE_BUILD_TIMEOUT_SECONDS)
+        self.assertEqual(constants.IOS_NATIVE_BUILD_TIMEOUT_SECONDS, 2400)
+        self.assertEqual(compile_mod.IOS_COMPILER_DISCOVERY_TIMEOUT_SECONDS,
+                         constants.IOS_COMPILER_DISCOVERY_TIMEOUT_SECONDS)
+        self.assertEqual(constants.IOS_COMPILER_DISCOVERY_TIMEOUT_SECONDS, 60)
+
     def test_available_iphone_is_selected_from_simctl_json(self) -> None:
         listing = _listing(True)
         listing["devices"]["com.apple.CoreSimulator.SimRuntime.iOS-26-6"].insert(

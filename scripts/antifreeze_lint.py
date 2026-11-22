@@ -17,6 +17,7 @@ import argparse
 import hashlib
 import os
 import re
+import runpy
 import shutil
 import subprocess
 import sys
@@ -271,29 +272,33 @@ def issues(root: Path) -> list[str]:
 
 def source_snapshot(root: Path, destination: Path, env: dict[str, str]) -> Path:
     """Scan current root-owned bytes without ignored siblings or evidence trees."""
+    # The isolated CLI (-I) does not put this script's directory on sys.path.
+    git_timeout = runpy.run_path(str(Path(__file__).with_name("constants.py")))[
+        "ANTIFREEZE_GIT_TIMEOUT_SECONDS"
+    ]
     master = subprocess.check_output(
         ["git", "-C", str(root), "rev-parse", "origin/master^{commit}"],
-        env=env, text=True, timeout=30,
+        env=env, text=True, timeout=git_timeout,
     ).strip()
     subprocess.run(
         ["git", "clone", "--quiet", "--shared", "--no-checkout", str(root), str(destination)],
-        env=env, check=True, capture_output=True, timeout=30,
+        env=env, check=True, capture_output=True, timeout=git_timeout,
     )
     subprocess.run(
         ["git", "-C", str(destination), "checkout", "--quiet", "--detach", "HEAD"],
-        env=env, check=True, capture_output=True, timeout=30,
+        env=env, check=True, capture_output=True, timeout=git_timeout,
     )
     subprocess.run(
         ["git", "-C", str(destination), "update-ref", "refs/remotes/origin/master", master],
-        env=env, check=True, capture_output=True, timeout=30,
+        env=env, check=True, capture_output=True, timeout=git_timeout,
     )
     listed = subprocess.check_output(
         ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-        env=env, timeout=30,
+        env=env, timeout=git_timeout,
     )
     paths = sorted(os.fsdecode(raw) for raw in set(listed.split(b"\0")) - {b""})
     original = subprocess.check_output(
-        ["git", "-C", str(destination), "ls-files", "-z"], env=env, timeout=30,
+        ["git", "-C", str(destination), "ls-files", "-z"], env=env, timeout=git_timeout,
     )
     original_paths = {os.fsdecode(raw) for raw in original.split(b"\0") if raw}
     links: list[tuple[Path, str]] = []
@@ -331,7 +336,7 @@ def source_snapshot(root: Path, destination: Path, env: dict[str, str]) -> Path:
         ["git", "--literal-pathspecs", "-C", str(destination), "add", "-f",
          "--pathspec-from-file=-", "--pathspec-file-nul"],
         input=b"".join(os.fsencode(path) + b"\0" for path in sorted(set(paths) | original_paths)),
-        env=env, check=True, capture_output=True, timeout=30,
+        env=env, check=True, capture_output=True, timeout=git_timeout,
     )
     return destination
 

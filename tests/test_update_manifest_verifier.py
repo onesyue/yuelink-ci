@@ -531,11 +531,12 @@ class UpdateManifestVerifierTests(unittest.TestCase):
         self.assertIn("release asset probe: $url HTTP $asset_code", workflow)
         self.assertIn("manifest references an unreachable release URL", workflow)
 
-    def assert_manifest_health_enforces_transport_security(self, workflow: str) -> None:
-        markers = (
-            f"'http://{BRAND.ASSET_HOST}/update.json'",
+    def manifest_transport_markers(self) -> tuple[str, ...]:
+        return (
+            'manifest_url="$(python3 scripts/brand_literals.py URL_UPDATE_MANIFEST)"',
+            '"http://${manifest_url#https://}"',
             '[ "$http_code" != 301 ]',
-            "^location:[[:space:]]*" + BRAND.URL_UPDATE_MANIFEST.replace(".", r"\."),
+            r'"^location:[[:space:]]*${manifest_url//./\\.}[[:space:]]*$"',
             "--tlsv1.1 --tls-max 1.1",
             f"{BRAND.ASSET_HOST} still accepts obsolete TLS 1.1",
             "--tls-max 1.2",
@@ -543,7 +544,9 @@ class UpdateManifestVerifierTests(unittest.TestCase):
             "includeSubDomains",
             "^x-content-type-options:[[:space:]]*nosniff",
         )
-        for marker in markers:
+
+    def assert_manifest_health_enforces_transport_security(self, workflow: str) -> None:
+        for marker in self.manifest_transport_markers():
             self.assertIn(marker, workflow)
 
     def test_manifest_health_compares_every_signed_checksum_sidecar(self) -> None:
@@ -560,13 +563,7 @@ class UpdateManifestVerifierTests(unittest.TestCase):
 
     def test_manifest_transport_security_contract_is_mutation_sensitive(self) -> None:
         workflow = MANIFEST_HEALTH.read_text(encoding="utf-8")
-        for marker in (
-            '[ "$http_code" != 301 ]',
-            "--tlsv1.1 --tls-max 1.1",
-            "--tls-max 1.2",
-            "max-age=15552000",
-            "x-content-type-options",
-        ):
+        for marker in self.manifest_transport_markers():
             with self.subTest(marker=marker):
                 mutated = workflow.replace(marker, "", 1)
                 self.assertNotEqual(mutated, workflow)

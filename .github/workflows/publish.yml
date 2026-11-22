@@ -447,7 +447,7 @@ jobs:
           # is a 404, and releaseUrl is the client's terminal fallback
           # (iOS post-download, manifest-missing platforms). Point it at
           # the real download page.
-          RELEASE_URL="https://yue.to/download.html"
+          RELEASE_URL="$(python3 .release-builder/scripts/brand_literals.py URL_DOWNLOAD)"
           SUMS_FILE="dist/YueLink-${VERSION}-SHA256SUMS"
           test -s "$SUMS_FILE"
           SHA256SUMS_SHA256="$(sha256sum "$SUMS_FILE" | awk '{print $1}')"

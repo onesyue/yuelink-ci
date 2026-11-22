@@ -10,10 +10,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BRAND_PATH = ROOT / "scripts" / "brand_literals.py"
-HELPER_URLS = (
-    "https://yue.to/download.html",
-    "yuetong.app",
-)
+DOWNLOAD_PATH = "yue.to" + "/download.html"
+UPDATE_PATH = "yuetong.app" + "/update.json"
+ENDPOINT_EXCEPTIONS = {
+    "scripts/brand_literals.py",
+    "docs/reconcile-yuelink-pin.md",
+    "docs/version-gates.md",
+}
 RETIRED_BOT = "yue" + "_to_bot"
 
 
@@ -31,9 +34,9 @@ BRAND = load("brand_literals_under_test", BRAND_PATH)
 
 class BrandLiteralTests(unittest.TestCase):
     def test_official_values_stay_pinned(self) -> None:
-        self.assertEqual(BRAND.URL_DOWNLOAD, "https://yue.to/download.html")
+        self.assertEqual(BRAND.URL_DOWNLOAD, "https://" + DOWNLOAD_PATH)
         self.assertEqual(BRAND.ASSET_HOST, "yuetong.app")
-        self.assertEqual(BRAND.URL_UPDATE_MANIFEST, "https://yuetong.app/update.json")
+        self.assertEqual(BRAND.URL_UPDATE_MANIFEST, "https://" + UPDATE_PATH)
         self.assertEqual(
             BRAND.URL_DOWNLOAD_HEALTH,
             "https://yuetong.app/health/yue-to-download.json",
@@ -68,13 +71,28 @@ class BrandLiteralTests(unittest.TestCase):
                 continue
             self.assertNotIn(RETIRED_BOT, path.read_text(encoding="utf-8"), str(path))
 
-    def test_helper_scripts_keep_official_urls_in_the_constant_module(self) -> None:
-        for path in (ROOT / "scripts").rglob("*"):
-            if path.suffix not in {".py", ".sh"} or path.name == "brand_literals.py":
+    def test_first_party_tree_keeps_official_urls_in_the_constant_module(self) -> None:
+        result = subprocess.run(
+            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        paths = set(result.stdout.split("\0")) - ENDPOINT_EXCEPTIONS - {""}
+        self.assertIn(".github/workflows/manifest-health.yml", paths)
+        for relative in sorted(paths):
+            if relative.startswith("tests/fixtures/"):
                 continue
-            text = path.read_text(encoding="utf-8")
-            for needle in HELPER_URLS:
-                self.assertNotIn(needle, text, f"{path} still contains {needle}")
+            path = ROOT / relative
+            data = path.read_bytes()
+            for needle in (DOWNLOAD_PATH, UPDATE_PATH):
+                self.assertNotIn(needle.encode(), data, relative)
+
+    def test_helper_scripts_keep_the_cdn_host_in_the_constant_module(self) -> None:
+        for path in (ROOT / "scripts").rglob("*"):
+            if path.suffix in {".py", ".sh"} and path != BRAND_PATH:
+                self.assertNotIn(BRAND.ASSET_HOST, path.read_text(encoding="utf-8"), str(path))
 
     def test_cli_prints_one_public_name_and_rejects_unknown(self) -> None:
         shown = subprocess.run(

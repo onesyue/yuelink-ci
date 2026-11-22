@@ -71,6 +71,15 @@ WORKFLOW_MARKERS = (
     '"windows-native-core-runtime"',
 )
 
+SNAPSHOT_LIMIT_MARKERS = (
+    "local -r SOURCE_FETCH_LOW_SPEED_BYTES_PER_SECOND=1000",
+    "local -r SOURCE_FETCH_LOW_SPEED_SECONDS=60",
+    "local -r SOURCE_FETCH_ATTEMPTS=3",
+    '-c "http.lowSpeedLimit=$SOURCE_FETCH_LOW_SPEED_BYTES_PER_SECOND"',
+    '-c "http.lowSpeedTime=$SOURCE_FETCH_LOW_SPEED_SECONDS"',
+    "for ((attempt = 1; attempt <= SOURCE_FETCH_ATTEMPTS; attempt++)); do",
+)
+
 RELEASE_MARKERS = (
     '[[ ! "$TAG" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]',
     "prerelease 发布链已停用",
@@ -111,8 +120,7 @@ RELEASE_MARKERS = (
     '[ "$actual_annotation_sha" = "$expected_annotation_sha" ]',
     "  inspect_local_public_tag\n",
     "--depth=1",
-    "-c http.lowSpeedLimit=1000",
-    "-c http.lowSpeedTime=60",
+    *SNAPSHOT_LIMIT_MARKERS,
     "fetch_private_source_snapshot() {",
     "tail -n 20",
     "sibling working tree",
@@ -342,8 +350,6 @@ def source_snapshot_issues(release: str) -> list[str]:
         "--depth=1",
         "-c credential.helper=",
         "-c 'credential.helper=!gh auth git-credential'",
-        "-c http.lowSpeedLimit=1000",
-        "-c http.lowSpeedTime=60",
         "--no-tags",
         "https://github.com/onesyue/yuelink.git",
         "-u GIT_TRACE",
@@ -355,8 +361,9 @@ def source_snapshot_issues(release: str) -> list[str]:
     ):
         if marker not in body:
             issues.append(f"source snapshot fetch missing {marker!r}")
-    if body.count("for attempt in 1 2 3; do") != 1:
-        issues.append("source snapshot fetch must retry at most 3 times")
+    for marker in SNAPSHOT_LIMIT_MARKERS:
+        if body.count(marker) != 1:
+            issues.append(f"source snapshot fetch must use exactly one {marker!r}")
     for forbidden in ("verify-source-version", "verify-tag", "2>/dev/null"):
         if forbidden in body:
             issues.append(f"source snapshot fetch must not contain {forbidden!r}")
@@ -419,8 +426,8 @@ def contract_issues(
         ('[ "$remote_state" = exists ]', 2),
         ('git verify-tag "$TAG"', 1),
         ("--depth=1", 1),
-        ("-c http.lowSpeedLimit=1000", 1),
-        ("-c http.lowSpeedTime=60", 1),
+        ('-c "http.lowSpeedLimit=', 1),
+        ('-c "http.lowSpeedTime=', 1),
     ):
         if release.count(marker) != expected_count:
             issues.append(

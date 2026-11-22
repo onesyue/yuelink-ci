@@ -18,6 +18,11 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  MANIFEST_CONNECT_SECONDS: '5'
+  MANIFEST_FETCH_SECONDS: '30'
+  MANIFEST_FETCH_RETRIES: '2'
+
 jobs:
   manifest_contract:
     name: Updater manifest trust contract
@@ -64,13 +69,14 @@ jobs:
       - name: Verify current live signed manifest
         run: |
           set -euo pipefail
+          manifest_url="$(python3 scripts/brand_literals.py URL_UPDATE_MANIFEST)"
           tmp="$(mktemp)"
           trap 'rm -f -- "$tmp"' EXIT
           curl --fail --location --silent --show-error \
             --proto '=https' --proto-redir '=https' --tlsv1.2 \
-            --connect-timeout 5 --max-time 30 \
-            --retry 2 --retry-all-errors \
-            https://yuetong.app/update.json -o "$tmp"
+            --connect-timeout "$MANIFEST_CONNECT_SECONDS" --max-time "$MANIFEST_FETCH_SECONDS" \
+            --retry "$MANIFEST_FETCH_RETRIES" --retry-all-errors \
+            "$manifest_url" -o "$tmp"
           python3 scripts/verify-update-manifest.py "$tmp"
 
   source_version:

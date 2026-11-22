@@ -15,6 +15,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from constants import (
+    IOS_COMPILER_DISCOVERY_TIMEOUT_SECONDS,
+    IOS_NATIVE_BUILD_TIMEOUT_SECONDS,
+)
+
 TARGETS = ("Runner", "PacketTunnel")
 _SWIFT_LINE = re.compile(
     r"SwiftCompile\b.*(?:/|\\)(?P<target>Runner|PacketTunnel)(?:/|\\)"
@@ -134,8 +139,10 @@ def _capture(
 
 def build_simulator_kernel(source: Path, log) -> None:
     """Build into PacketTunnel's simulator SDK library search directory."""
-    sdk = _capture(["xcrun", "--sdk", "iphonesimulator", "--show-sdk-path"], source, 60)
-    cc = _capture(["xcrun", "--sdk", "iphonesimulator", "--find", "clang"], source, 60)
+    sdk = _capture(["xcrun", "--sdk", "iphonesimulator", "--show-sdk-path"], source,
+                   IOS_COMPILER_DISCOVERY_TIMEOUT_SECONDS)
+    cc = _capture(["xcrun", "--sdk", "iphonesimulator", "--find", "clang"], source,
+                   IOS_COMPILER_DISCOVERY_TIMEOUT_SECONDS)
     log.write(sdk.stdout + sdk.stderr + cc.stdout + cc.stderr)
     if (
         sdk.returncode != 0
@@ -177,7 +184,7 @@ def build_simulator_kernel(source: Path, log) -> None:
         stdout=log,
         stderr=subprocess.STDOUT,
         env=env,
-        timeout=2400,
+        timeout=IOS_NATIVE_BUILD_TIMEOUT_SECONDS,
         check=False,
     ).returncode
     if code != 0:
@@ -254,7 +261,7 @@ def verify(args: argparse.Namespace) -> int:
                 cwd=source,
                 stdout=log,
                 stderr=subprocess.STDOUT,
-                timeout=2400,
+                timeout=IOS_NATIVE_BUILD_TIMEOUT_SECONDS,
                 check=False,
             ).returncode
         log_text = log_path.read_text(encoding="utf-8", errors="replace")
