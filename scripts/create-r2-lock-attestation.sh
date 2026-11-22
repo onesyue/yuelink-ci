@@ -273,6 +273,8 @@ jq -S -n \
     }
   ' > "$proof_tmp"
 chmod 0600 "$proof_tmp"
+proof_sha256="$(sha256sum < "$proof_tmp" | awk '{print $1}')"
+[[ "$proof_sha256" =~ ^[0-9a-f]{64}$ ]]
 ln "$proof_tmp" "$OUTPUT"
 rm "$proof_tmp"
-echo "R2_LOCK_PROOF_SHA256=$(sha256sum "$OUTPUT" | awk '{print $1}')"
+printf 'R2_LOCK_PROOF_SHA256=%s\n' "$proof_sha256"
