@@ -1,3 +1,7 @@
+import os
+import subprocess
+import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -8,6 +12,31 @@ BUILDER = ROOT / "scripts/build-keyvault-workstation-archive.sh"
 
 
 class KeyVaultWorkstationBackupContractTest(unittest.TestCase):
+    def test_age_checksum_failure_prevents_extraction_and_path_update(self) -> None:
+        step = WORKFLOW.read_text().split("      - name: Install age\n", 1)[1]
+        script = textwrap.dedent(step.split("        run: |\n", 1)[1].split("      - name:", 1)[0])
+        with tempfile.TemporaryDirectory(prefix="backup tools ") as directory:
+            root = Path(directory)
+            curl = root / "curl"
+            curl.write_text(
+                '#!/bin/sh\nwhile [ "$1" != "--output" ]; do shift; done\n'
+                'printf "fixture download" > "$2"\nprintf "%s" "$3" > "$RUNNER_TEMP/url"\n'
+            )
+            tar = root / "tar"
+            tar.write_text('#!/bin/sh\ntouch "$RUNNER_TEMP/extracted"\nexit 1\n')
+            for tool in (curl, tar):
+                tool.chmod(0o755)
+            env = dict(os.environ, PATH=f"{root}:{os.environ['PATH']}", RUNNER_TEMP=directory,
+                       GITHUB_PATH=str(root / "path"))
+            result = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("age.tar.gz: FAILED", result.stdout)
+            self.assertEqual((root / "url").read_text(),
+                             "https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-linux-amd64.tar.gz")
+            self.assertFalse((root / "extracted").exists())
+            self.assertFalse((root / "path").exists())
+            self.assertEqual(list(root.glob("backup-age.*")), [])
+
     def test_manual_public_job_is_least_privilege_and_pinned(self) -> None:
         text = WORKFLOW.read_text()
         self.assertIn("workflow_dispatch:", text)
