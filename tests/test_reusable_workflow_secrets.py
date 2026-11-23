@@ -119,3 +119,12 @@ class ReusableWorkflowSecretsTests(unittest.TestCase):
             contract_errors(workflows),
             ["build.yml/validate: missing mappings ['SRC_DEPLOY_KEY'], extra mappings []"],
         )
+
+    def test_removing_an_environment_exposes_undeclared_secrets(self):
+        workflows = deepcopy(self.workflows)
+        del workflows["publish.yml"]["jobs"]["release"]["environment"]
+        self.assertEqual(
+            contract_errors(workflows),
+            [f"publish.yml: undeclared {sorted(ENVIRONMENT_SECRETS['yuelink-release'])}, "
+             "unused declarations []"],
+        )
