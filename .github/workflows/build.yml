@@ -22,8 +22,8 @@ name: Build YueLink
 
 # The plan, validate, build and publish stages are reusable workflows in
 # this directory. Dial jobs stay here: four dial platforms, strict summary.
-# A called workflow sees this run's github context. secrets: inherit keeps
-# the existing secret boundary. Do not dispatch a preview from this split.
+# A called workflow sees this run's github context. Signing and R2 secrets
+# come from the environments on the jobs that use them.
 on:
   pull_request:
   push:
@@ -117,7 +117,6 @@ jobs:
     with:
       only: ${{ github.event.inputs.only }}
       source_sha: ${{ inputs.source_sha }}
-    secrets: inherit
 
   validate:
     name: Validate
@@ -131,7 +130,8 @@ jobs:
     with:
       source_commit: ${{ needs.plan.outputs.source_commit }}
       attestation_run_id: ${{ needs.plan.outputs.attestation_run_id }}
-    secrets: inherit
+    secrets:
+      SRC_DEPLOY_KEY: ${{ secrets.SRC_DEPLOY_KEY }}
 
   build:
     name: Build
@@ -145,7 +145,8 @@ jobs:
     with:
       source_commit: ${{ needs.plan.outputs.source_commit }}
       matrix: ${{ needs.plan.outputs.matrix }}
-    secrets: inherit
+    secrets:
+      SRC_DEPLOY_KEY: ${{ secrets.SRC_DEPLOY_KEY }}
 
   publish:
     name: Publish
@@ -168,7 +169,8 @@ jobs:
       source_commit: ${{ needs.plan.outputs.source_commit }}
       attestation_run_id: ${{ needs.plan.outputs.attestation_run_id }}
       tag_kind: ${{ needs.validate.outputs.tag_kind }}
-    secrets: inherit
+    secrets:
+      SRC_DEPLOY_KEY: ${{ secrets.SRC_DEPLOY_KEY }}
 
 
   # ───────────────────────────────────────────────────────────────────────────

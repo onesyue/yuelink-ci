@@ -17,6 +17,9 @@ on:
         description: preflight classification
         required: true
         type: string
+    secrets:
+      SRC_DEPLOY_KEY:
+        required: true
 
 permissions:
   contents: read

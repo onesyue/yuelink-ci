@@ -55,6 +55,12 @@ jobs:
           tar --extract --gzip --file "$archive" --directory "$destination" actionlint
           echo "$destination" >> "$GITHUB_PATH"
 
+      - name: Install policy test dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/policy-tests"
+          "$RUNNER_TEMP/policy-tests/bin/python" -m pip install 'PyYAML==6.0.3'
+          echo "$RUNNER_TEMP/policy-tests/bin" >> "$GITHUB_PATH"
+
       - name: Run offline policy checks
         run: scripts/check-policy.sh ci
 

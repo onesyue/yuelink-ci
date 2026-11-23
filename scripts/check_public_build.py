@@ -15,7 +15,12 @@ import sys
 from pathlib import Path
 
 MIN_PRIVATE_CHECKOUTS = 7
-CALLED = ("plan.yml", "validate.yml", "build-matrix.yml", "publish.yml")
+CALLED = {
+    "plan": "plan.yml",
+    "validate": "validate.yml",
+    "build": "build-matrix.yml",
+    "publish": "publish.yml",
+}
 INSTALLER = re.compile(
     r"onesyue/yuelink-ci/\.github/actions/setup-flutter@[0-9a-f]{40}"
 )
@@ -41,7 +46,6 @@ REQUIRED = (
     "needs.dial_gate_summary.result == 'success'",
     "value: ${{ jobs.source_binding.outputs.source_commit }}",
     "value: ${{ jobs.preflight.outputs.tag_kind }}",
-    "secrets: inherit",
 )
 DIAL_PLATFORMS = ("windows", "macos", "linux", "android")
 
@@ -76,7 +80,7 @@ def composed_text(path: Path) -> str:
     composed_workflow(), because the orchestrator calls it by path.
     """
     parts = [path.read_text(encoding="utf-8")]
-    for name in CALLED:
+    for name in CALLED.values():
         sibling = path.parent / name
         if not sibling.is_file():
             raise FileNotFoundError(sibling)
@@ -126,14 +130,19 @@ def issues(text: str) -> list[str]:
     for marker in REQUIRED:
         if marker not in text:
             found.append(f"public build workflow lost {marker!r}")
-    for name in CALLED:
-        uses = f"uses: ./.github/workflows/{name}"
-        if uses not in text:
-            found.append(f"build.yml does not call {name}")
+    for job, name in CALLED.items():
+        body = job_body(text, job)
+        if f"    uses: ./.github/workflows/{name}\n" not in body:
+            found.append(f"build.yml {job} job does not call {name}")
             continue
-        window = text[text.find(uses) : text.find(uses) + 500]
-        if "secrets: inherit" not in window:
-            found.append(f"{name} call does not inherit secrets")
+        mappings = re.findall(r"(?m)^    secrets:([^\n]*(?:\n {6}[^\n]*)*)", body)
+        expected = (
+            []
+            if job == "plan"
+            else ["\n      SRC_DEPLOY_KEY: ${{ secrets.SRC_DEPLOY_KEY }}"]
+        )
+        if mappings != expected:
+            found.append(f"{name} call has an unexpected secrets mapping")
     if "ubuntu-latest" in text:
         found.append("public build workflow uses the floating ubuntu-latest label")
     lines = text.splitlines()
@@ -212,7 +221,7 @@ def main(argv: list[str]) -> int:
     if not path.is_file():
         print(f"::error::missing public workflow {path}", file=sys.stderr)
         return 1
-    missing = [name for name in CALLED if not (path.parent / name).is_file()]
+    missing = [name for name in CALLED.values() if not (path.parent / name).is_file()]
     if missing:
         for name in missing:
             print(f"::error::missing reusable workflow {name}", file=sys.stderr)
