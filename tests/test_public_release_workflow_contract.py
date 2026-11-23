@@ -101,15 +101,13 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
         android = self.build.split("      # ANDROID", 1)[1].split("      # iOS —", 1)[0]
         self.assertIn("Verify APK signature is the pinned release key", android)
 
-    def test_release_calls_only_forward_the_source_checkout_secret(self) -> None:
-        jobs = yaml.load(BUILD.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)["jobs"]
+    def test_release_calls_keep_checkout_and_release_secrets_separate(self) -> None:
+        jobs = yaml.safe_load(BUILD.read_text())["jobs"]
         self.assertNotIn("secrets", jobs["plan"])
         for job in ("validate", "build", "publish"):
-            with self.subTest(job=job):
-                self.assertEqual(
-                    jobs[job]["secrets"],
-                    {"SRC_DEPLOY_KEY": "${{ secrets.SRC_DEPLOY_KEY }}"},
-                )
+            self.assertEqual(jobs[job]["secrets"]["SRC_DEPLOY_KEY"], "${{ secrets.SRC_DEPLOY_KEY }}")
+        self.assertNotIn("UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64", jobs["build"]["secrets"])
+        self.assertNotIn("UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64", jobs["validate"]["secrets"])
 
     def test_dropping_validate_from_build_needs_is_rejected(self) -> None:
         from scripts.check_public_build import composed_workflow, issues

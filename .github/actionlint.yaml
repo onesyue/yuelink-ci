@@ -4,10 +4,5 @@ paths:
   .github/workflows/{validate,build-matrix}.yml:
     ignore:
       - >-
-        ^property "(apple_certificate_base64|apple_certificate_password|apple_id|apple_password|apple_signing_identity|apple_team_id|key_alias|key_password|keystore_base64|keystore_password|windows_cert_base64|windows_cert_password|r2_key_id|r2_app_key|cloudflare_r2_config_token)"
-        is not defined in object type \{actions_runner_debug: string; actions_step_debug: string; github_token: string; src_deploy_key: string\}$
-  .github/workflows/publish.yml:
-    ignore:
-      - >-
-        ^property "(r2_key_id|r2_app_key|cloudflare_r2_config_token|update_manifest_ed25519_private_key_b64)"
-        is not defined in object type \{actions_runner_debug: string; actions_step_debug: string; github_token: string; src_deploy_key: string\}$
+        ^property "(apple_certificate_base64|apple_certificate_password|apple_id|apple_password|apple_signing_identity|apple_team_id|windows_cert_base64|windows_cert_password)"
+        is not defined in object type \{actions_runner_debug: string; actions_step_debug: string; cloudflare_r2_config_token: string; github_token: string; key_alias: string; key_password: string; keystore_base64: string; keystore_password: string; r2_app_key: string; r2_key_id: string; src_deploy_key: string\}$

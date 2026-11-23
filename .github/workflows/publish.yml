@@ -20,6 +20,14 @@ on:
     secrets:
       SRC_DEPLOY_KEY:
         required: true
+      R2_KEY_ID:
+        required: false
+      R2_APP_KEY:
+        required: false
+      CLOUDFLARE_R2_CONFIG_TOKEN:
+        required: false
+      UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64:
+        required: false
 
 permissions:
   contents: read

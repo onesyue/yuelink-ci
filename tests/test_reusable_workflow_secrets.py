@@ -19,13 +19,11 @@ EXPRESSION = re.compile(r"\$\{\{\s*(.*?)\s*\}\}", re.DOTALL)
 
 R2_SECRETS = {"R2_KEY_ID", "R2_APP_KEY", "CLOUDFLARE_R2_CONFIG_TOKEN"}
 ENVIRONMENT_SECRETS = {
-    "yuelink-build": R2_SECRETS | {
-        "KEYSTORE_BASE64", "KEYSTORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD",
+    "yuelink-build": {
         "WINDOWS_CERT_BASE64", "WINDOWS_CERT_PASSWORD",
         "APPLE_CERTIFICATE_BASE64", "APPLE_CERTIFICATE_PASSWORD",
         "APPLE_SIGNING_IDENTITY", "APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID",
     },
-    "yuelink-release": R2_SECRETS | {"UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64"},
 }
 
 
@@ -120,11 +118,25 @@ class ReusableWorkflowSecretsTests(unittest.TestCase):
             ["build.yml/validate: missing mappings ['SRC_DEPLOY_KEY'], extra mappings []"],
         )
 
-    def test_removing_an_environment_exposes_undeclared_secrets(self):
+    def test_release_credentials_are_bound_to_tag_pushes(self):
+        jobs = self.workflows["build.yml"]["jobs"]
+        android = {"KEYSTORE_BASE64", "KEYSTORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD"}
+        for job_name, expected in (
+            ("validate", R2_SECRETS | android),
+            ("build", R2_SECRETS | android),
+            ("publish", R2_SECRETS | {"UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64"}),
+        ):
+            mappings = jobs[job_name]["secrets"]
+            self.assertEqual(set(mappings) - {"SRC_DEPLOY_KEY"}, expected)
+            for key in expected:
+                value = f"secrets.{key}"
+                if job_name == "validate" and key != "CLOUDFLARE_R2_CONFIG_TOKEN":
+                    value += " != '' && 'configured'"
+                self.assertEqual(mappings[key], "${{ github.event_name == 'push' && "
+                                 "startsWith(github.ref, 'refs/tags/v') && " + value + " || '' }}")
+        self.assertEqual(self.workflows["publish.yml"]["jobs"]["release"]["environment"], "yuelink-release")
+
+    def test_optional_signing_secrets_require_the_build_environment(self):
         workflows = deepcopy(self.workflows)
-        del workflows["publish.yml"]["jobs"]["release"]["environment"]
-        self.assertEqual(
-            contract_errors(workflows),
-            [f"publish.yml: undeclared {sorted(ENVIRONMENT_SECRETS['yuelink-release'])}, "
-             "unused declarations []"],
-        )
+        del workflows["build-matrix.yml"]["jobs"]["build"]["environment"]
+        self.assertTrue(any("undeclared" in error for error in contract_errors(workflows)))

@@ -16,6 +16,20 @@ on:
     secrets:
       SRC_DEPLOY_KEY:
         required: true
+      KEYSTORE_BASE64:
+        required: false
+      KEYSTORE_PASSWORD:
+        required: false
+      KEY_ALIAS:
+        required: false
+      KEY_PASSWORD:
+        required: false
+      R2_KEY_ID:
+        required: false
+      R2_APP_KEY:
+        required: false
+      CLOUDFLARE_R2_CONFIG_TOKEN:
+        required: false
 
 permissions:
   contents: read

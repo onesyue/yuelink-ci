@@ -123,6 +123,27 @@ def composed_workflow(path: Path) -> str:
     add(path)
     return "\n".join(parts)
 
+def expected_secret_mappings(job: str) -> list[str]:
+    if job == "plan":
+        return []
+    lines = ["\n      SRC_DEPLOY_KEY: ${{ secrets.SRC_DEPLOY_KEY }}"]
+    android = ("KEYSTORE_BASE64", "KEYSTORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD")
+    storage = ("R2_KEY_ID", "R2_APP_KEY", "CLOUDFLARE_R2_CONFIG_TOKEN")
+    keys = {
+        "validate": android + storage,
+        "build": android + storage,
+        "publish": storage + ("UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64",),
+    }
+    for key in keys.get(job, ()):
+        value = f"secrets.{key}"
+        if job == "validate" and key != "CLOUDFLARE_R2_CONFIG_TOKEN":
+            value += " != '' && 'configured'"
+        expression = ("${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && "
+                      + value + " || '' }}")
+        lines.append(f"\n      {key}: {expression}")
+    return ["".join(lines)]
+
+
 def issues(text: str) -> list[str]:
     found: list[str] = []
     if not text.strip():
@@ -136,12 +157,7 @@ def issues(text: str) -> list[str]:
             found.append(f"build.yml {job} job does not call {name}")
             continue
         mappings = re.findall(r"(?m)^    secrets:([^\n]*(?:\n {6}[^\n]*)*)", body)
-        expected = (
-            []
-            if job == "plan"
-            else ["\n      SRC_DEPLOY_KEY: ${{ secrets.SRC_DEPLOY_KEY }}"]
-        )
-        if mappings != expected:
+        if mappings != expected_secret_mappings(job):
             found.append(f"{name} call has an unexpected secrets mapping")
     if "ubuntu-latest" in text:
         found.append("public build workflow uses the floating ubuntu-latest label")

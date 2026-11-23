@@ -132,6 +132,13 @@ jobs:
       attestation_run_id: ${{ needs.plan.outputs.attestation_run_id }}
     secrets:
       SRC_DEPLOY_KEY: ${{ secrets.SRC_DEPLOY_KEY }}
+      KEYSTORE_BASE64: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.KEYSTORE_BASE64 != '' && 'configured' || '' }}
+      KEYSTORE_PASSWORD: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.KEYSTORE_PASSWORD != '' && 'configured' || '' }}
+      KEY_ALIAS: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.KEY_ALIAS != '' && 'configured' || '' }}
+      KEY_PASSWORD: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.KEY_PASSWORD != '' && 'configured' || '' }}
+      R2_KEY_ID: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.R2_KEY_ID != '' && 'configured' || '' }}
+      R2_APP_KEY: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.R2_APP_KEY != '' && 'configured' || '' }}
+      CLOUDFLARE_R2_CONFIG_TOKEN: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.CLOUDFLARE_R2_CONFIG_TOKEN || '' }}
 
   build:
     name: Build
@@ -147,6 +154,13 @@ jobs:
       matrix: ${{ needs.plan.outputs.matrix }}
     secrets:
       SRC_DEPLOY_KEY: ${{ secrets.SRC_DEPLOY_KEY }}
+      KEYSTORE_BASE64: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.KEYSTORE_BASE64 || '' }}
+      KEYSTORE_PASSWORD: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.KEYSTORE_PASSWORD || '' }}
+      KEY_ALIAS: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.KEY_ALIAS || '' }}
+      KEY_PASSWORD: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.KEY_PASSWORD || '' }}
+      R2_KEY_ID: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.R2_KEY_ID || '' }}
+      R2_APP_KEY: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.R2_APP_KEY || '' }}
+      CLOUDFLARE_R2_CONFIG_TOKEN: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.CLOUDFLARE_R2_CONFIG_TOKEN || '' }}
 
   publish:
     name: Publish
@@ -171,6 +185,10 @@ jobs:
       tag_kind: ${{ needs.validate.outputs.tag_kind }}
     secrets:
       SRC_DEPLOY_KEY: ${{ secrets.SRC_DEPLOY_KEY }}
+      R2_KEY_ID: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.R2_KEY_ID || '' }}
+      R2_APP_KEY: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.R2_APP_KEY || '' }}
+      CLOUDFLARE_R2_CONFIG_TOKEN: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.CLOUDFLARE_R2_CONFIG_TOKEN || '' }}
+      UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64 || '' }}
 
 
   # ───────────────────────────────────────────────────────────────────────────

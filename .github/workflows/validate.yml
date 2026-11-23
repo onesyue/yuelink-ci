@@ -16,6 +16,20 @@ on:
     secrets:
       SRC_DEPLOY_KEY:
         required: true
+      KEYSTORE_BASE64:
+        required: false
+      KEYSTORE_PASSWORD:
+        required: false
+      KEY_ALIAS:
+        required: false
+      KEY_PASSWORD:
+        required: false
+      R2_KEY_ID:
+        required: false
+      R2_APP_KEY:
+        required: false
+      CLOUDFLARE_R2_CONFIG_TOKEN:
+        required: false
     outputs:
       tag_kind:
         description: preflight classification
@@ -233,7 +247,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           R2_KEY_ID: ${{ secrets.R2_KEY_ID }}
           R2_APP_KEY: ${{ secrets.R2_APP_KEY }}
-          CLOUDFLARE_R2_CONFIG_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
+          CLOUDFLARE_R2_CONFIG_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN != '' && 'configured' || '' }}
           YUELINK_FLUTTER_INSTALLER: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49
         run: bash scripts/ci/release_preflight.sh
 
