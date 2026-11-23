@@ -395,6 +395,21 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: Checkout exact Ubuntu mirror selector
+        if: matrix.module == 'service'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.sha }}
+          path: .ubuntu-mirror-tools
+          sparse-checkout: scripts/select-ubuntu-https-mirror.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Select official Ubuntu HTTPS archive
+        if: matrix.module == 'service'
+        run: python3 .ubuntu-mirror-tools/scripts/select-ubuntu-https-mirror.py
+
       - name: Verify native Linux proxy backend before release tags
         if: matrix.module == 'service'
         run: |

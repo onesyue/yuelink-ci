@@ -252,6 +252,21 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
           echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
 
+      - name: Checkout exact Ubuntu mirror selector
+        if: matrix.platform == 'linux'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.sha }}
+          path: .ubuntu-mirror-tools
+          sparse-checkout: scripts/select-ubuntu-https-mirror.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Select official Ubuntu HTTPS archive
+        if: matrix.platform == 'linux'
+        run: python3 .ubuntu-mirror-tools/scripts/select-ubuntu-https-mirror.py
+
       - name: Install Linux build dependencies
         if: matrix.platform == 'linux'
         run: |

@@ -212,6 +212,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 .cache-tools/scripts/select-ubuntu-https-mirror.py
           python3 .cache-tools/scripts/release_cache_plan.py step-script 'Install Linux build dependencies' > "$RUNNER_TEMP/media-deps.sh"
           bash "$RUNNER_TEMP/media-deps.sh"
       - name: Build canonical Linux media for master cache
