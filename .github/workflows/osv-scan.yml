@@ -1,0 +1,72 @@
+name: Scan YueLink dependencies
+
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: Private YueLink ref selected by the caller
+        required: true
+        type: string
+    secrets:
+      SRC_DEPLOY_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: OSV lockfile scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout scanner tooling
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          path: tools
+          persist-credentials: false
+
+      - name: Checkout YueLink dependency inputs
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ inputs.source_ref }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          path: source
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up Go for dependency selection
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: source/core/go.mod
+          cache: false
+
+      - name: Install pinned OSV Scanner
+        env:
+          OSV_VERSION: '2.7.1'
+          OSV_SHA256: fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8
+        run: |
+          set -euo pipefail
+          binary="$RUNNER_TEMP/osv-scanner"
+          curl --fail --silent --show-error --location \
+            --retry 4 --retry-all-errors --retry-delay 2 \
+            --proto '=https' --tlsv1.2 \
+            "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" \
+            --output "$binary"
+          printf '%s  %s\n' "$OSV_SHA256" "$binary" | sha256sum --check --strict
+          chmod +x "$binary"
+
+      - name: Scan and enforce dependency policy
+        env:
+          GOTOOLCHAIN: local
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then
+            [[ "$SOURCE_REF" =~ ^[0-9a-f]{40}$ ]]
+            test "$(git -C source rev-parse HEAD)" = "$SOURCE_REF"
+          fi
+          python3 tools/scripts/scan-lockfiles.py "$RUNNER_TEMP/osv-scanner" source \
+            | tee -a "$GITHUB_STEP_SUMMARY"
