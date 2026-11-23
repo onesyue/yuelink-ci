@@ -89,21 +89,26 @@ def retryable(stderr: bytes) -> bool:
         text))
 
 
-def signal_group(pgid: int, signum: int) -> None:
-    try:
-        os.killpg(pgid, signum)
-    except ProcessLookupError:
-        pass
-    except PermissionError:
-        if sys.platform != "darwin":
-            raise
-        # Darwin can return EPERM while a group contains only zombies.
-        members = subprocess.check_output(["/bin/ps", "-axo", "pgid=,stat="],
-                                          text=True, timeout=2)
-        for line in members.splitlines():
-            group, state = line.split()
-            if group == str(pgid) and not state.startswith("Z"):
+def signal_group(pgid: int, sig: signal.Signals) -> None:
+    for attempt in range(21):
+        try:
+            os.killpg(pgid, sig)
+            return
+        except ProcessLookupError:
+            return
+        except PermissionError:
+            if sys.platform != "darwin":
                 raise
+            # Retry the exit race before inspecting any remaining group members.
+            if attempt == 20:
+                members = subprocess.check_output(
+                    ["/bin/ps", "-axo", "pgid=,stat="], text=True, timeout=2
+                )
+                if not any(group == str(pgid) and not state.startswith("Z")
+                           for group, state in map(str.split, members.splitlines())):
+                    return
+                raise
+            time.sleep(0.05)
 
 
 def stop(process: subprocess.Popen) -> None:
@@ -129,10 +134,8 @@ def execute(argv: list[str], timeout: float) -> tuple[int, bytes, bytes]:
         try:
             while process.poll() is None:
                 if time.monotonic() >= deadline:
-                    stop(process)
                     return 124, b"", b"release read deadline exceeded; not retrying\n"
                 if max(os.fstat(out.fileno()).st_size, os.fstat(err.fileno()).st_size) > OUTPUT_LIMIT:
-                    stop(process)
                     return 125, b"", b"release read output limit exceeded; not retrying\n"
                 time.sleep(min(0.05, max(0, deadline - time.monotonic())))
         finally:

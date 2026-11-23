@@ -17,10 +17,7 @@ import time
 
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-CHECKS = (
-    ("policy-ci", "policy-ci.yml", ("yuelink_sha",)),
-    ("dial", "dial-gate.yml", ("source_sha", "run_pr_checks")),
-)
+RUN_URL_RE = re.compile(r"https://[^/]+/([^/]+/[^/]+)/actions/runs/([1-9][0-9]*)")
 PASSING = {"success", "skipped"}
 
 
@@ -39,107 +36,58 @@ def _fail(message: str) -> int:
     return 1
 
 
-def dispatch(repo: str, ref: str, sha: str) -> int:
-    commands = (
-        ["workflow", "run", "policy-ci.yml", "--repo", repo, "--ref", ref, "-f", f"yuelink_sha={sha}"],
-        [
-            "workflow",
-            "run",
-            "dial-gate.yml",
-            "--repo",
-            repo,
-            "--ref",
-            ref,
-            "-f",
-            f"source_sha={sha}",
-            "-f",
-            "run_pr_checks=true",
-        ],
+def dispatch(repo: str, ref: str, sha: str) -> tuple[int, dict[str, str | None]]:
+    checks = (
+        ("policy-ci", "policy-ci.yml", ["-f", f"yuelink_sha={sha}"]),
+        ("dial", "dial-gate.yml", ["-f", f"source_sha={sha}", "-f", "run_pr_checks=true"]),
     )
-    for command in commands:
-        if "build.yml" in command:
-            return _fail("refusing to dispatch the release build")
-        proc = _gh(command)
+    run_ids: dict[str, str | None] = {}
+    expected_repo = "/".join(repo.split("/")[-2:])
+    for label, workflow, fields in checks:
+        if workflow == "build.yml":
+            return _fail("refusing to dispatch the release build"), {}
+        proc = _gh(["workflow", "run", workflow, "--repo", repo, "--ref", ref, *fields])
         if proc.returncode != 0:
             detail = (proc.stderr or proc.stdout).strip().splitlines()
             print(detail[0] if detail else "workflow dispatch failed", file=sys.stderr)
-            return proc.returncode or 1
-    return 0
+            return proc.returncode, {}
+        # Modern gh prints the new run URL on captured stdout when GitHub
+        # returns run details. A missing identity must fail closed.
+        match = RUN_URL_RE.fullmatch(proc.stdout.strip())
+        run_ids[label] = match[2] if match and match[1].lower() == expected_repo.lower() else None
+    return 0, run_ids
 
 
-def _runs(repo: str, workflow: str) -> list[dict]:
-    proc = _gh(
-        [
-            "run",
-            "list",
-            "--repo",
-            repo,
-            "--workflow",
-            workflow,
-            "--event",
-            "workflow_dispatch",
-            "--limit",
-            "20",
-            "--json",
-            "databaseId,displayTitle,status,conclusion,createdAt",
-        ]
-    )
-    if proc.returncode != 0:
-        raise RuntimeError("run list failed")
-    payload = json.loads(proc.stdout or "[]")
-    if not isinstance(payload, list):
-        raise RuntimeError("run list failed")
-    return [item for item in payload if isinstance(item, dict)]
-
-
-def _jobs(repo: str, run_id: int) -> list[dict]:
-    proc = _gh(
-        [
-            "run",
-            "view",
-            str(run_id),
-            "--repo",
-            repo,
-            "--json",
-            "jobs",
-        ]
-    )
+def _run(repo: str, run_id: str) -> dict:
+    proc = _gh(["run", "view", run_id, "--repo", repo, "--json", "status,jobs"])
     if proc.returncode != 0:
         raise RuntimeError("run view failed")
-    payload = json.loads(proc.stdout or "{}")
-    jobs = payload.get("jobs") if isinstance(payload, dict) else None
-    if not isinstance(jobs, list):
+    payload = json.loads(proc.stdout)
+    if not isinstance(payload, dict):
         raise RuntimeError("run view failed")
-    return [item for item in jobs if isinstance(item, dict)]
+    return payload
 
 
-def _match(runs: list[dict], sha: str) -> dict | None:
-    titled = [run for run in runs if sha in str(run.get("displayTitle") or "")]
-    chosen = titled or runs
-    if not chosen:
-        return None
-    return max(chosen, key=lambda run: str(run.get("createdAt") or ""))
-
-
-def wait_for(repo: str, label: str, workflow: str, sha: str, attempts: int, interval: float) -> list[str]:
+def wait_for(repo: str, label: str, run_id: str | None, attempts: int, interval: float) -> list[str]:
     print(f"waiting {label}", file=sys.stderr)
-    last: dict | None = None
-    for _ in range(attempts):
-        try:
-            last = _match(_runs(repo, workflow), sha)
-        except (RuntimeError, json.JSONDecodeError, subprocess.TimeoutExpired):
-            last = None
-        if last and last.get("status") == "completed":
-            break
-        if interval:
-            time.sleep(interval)
-    if not last:
+    if run_id is None:
         return [f"{label}/missing"]
-    if last.get("status") != "completed":
+    run: dict | None = None
+    for attempt in range(attempts):
+        try:
+            run = _run(repo, run_id)
+        except (RuntimeError, json.JSONDecodeError, subprocess.TimeoutExpired):
+            run = None
+        if run and run.get("status") == "completed":
+            break
+        if interval and attempt + 1 < attempts:
+            time.sleep(interval)
+    if run is None:
+        return [f"{label}/unreadable"]
+    if run.get("status") != "completed":
         return [f"{label}/incomplete"]
-    try:
-        jobs = _jobs(repo, int(last["databaseId"]))
-    except (RuntimeError, KeyError, TypeError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired):
+    jobs = run.get("jobs")
+    if not isinstance(jobs, list) or any(not isinstance(job, dict) for job in jobs):
         return [f"{label}/unreadable"]
     failing: list[str] = []
     for job in jobs:
@@ -170,12 +118,12 @@ def main(argv: list[str] | None = None) -> int:
     if attempts < 1:
         print("usage: ci-check.sh <40-hex-sha>", file=sys.stderr)
         return 2
-    dispatched = dispatch(repo, ref, sha)
+    dispatched, run_ids = dispatch(repo, ref, sha)
     if dispatched:
         return dispatched
     failing: list[str] = []
-    for label, workflow, _fields in CHECKS:
-        failing.extend(wait_for(repo, label, workflow, sha, attempts, interval))
+    for label, run_id in run_ids.items():
+        failing.extend(wait_for(repo, label, run_id, attempts, interval))
     for item in failing:
         print(item)
     return 1 if failing else 0

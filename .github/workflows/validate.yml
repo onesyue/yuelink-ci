@@ -57,6 +57,13 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  osv_scan:
+    name: Release dependency scan
+    uses: ./.github/workflows/osv-scan.yml
+    with:
+      source_ref: ${{ inputs.source_commit }}
+    secrets:
+      SRC_DEPLOY_KEY: ${{ secrets.SRC_DEPLOY_KEY }}
 
   preflight:
     name: Release preflight

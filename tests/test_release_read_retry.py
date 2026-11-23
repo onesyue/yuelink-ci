@@ -259,6 +259,23 @@ class ReleaseReadRetryTests(unittest.TestCase):
                     m.stop(process)
                 inspect.assert_called()
 
+    def test_darwin_group_exit_race_rechecks_the_same_group(self):
+        process = Mock(pid=123)
+        with patch.object(m.sys, "platform", "darwin"), patch.object(m.time, "sleep"), \
+                patch.object(m.os, "killpg", side_effect=[None, PermissionError, ProcessLookupError]) as kill:
+            m.stop(process)
+        self.assertEqual([call.args for call in kill.call_args_list],
+                         [(123, m.signal.SIGTERM), (123, m.signal.SIGKILL), (123, m.signal.SIGKILL)])
+
+    def test_darwin_live_group_permission_error_stays_fatal(self):
+        process = Mock(pid=123)
+        with patch.object(m.sys, "platform", "darwin"), patch.object(m.time, "sleep"), \
+                patch.object(m.subprocess, "check_output", return_value="123 S\n"):
+            with patch.object(m.os, "killpg", side_effect=PermissionError) as kill:
+                with self.assertRaises(PermissionError):
+                    m.stop(process)
+        self.assertEqual(kill.call_count, 21)
+
     def test_total_deadline_prevents_another_attempt(self):
         argv = ["gh", "api", "repos/onesyue/yuelink-ci/commits/" + BUILDER]
         with patch.object(m, "TOTAL_SECONDS", 1), patch.object(m, "execute", return_value=(

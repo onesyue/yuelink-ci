@@ -23,9 +23,12 @@ def _fake_body() -> str:
             log.write(json.dumps(sys.argv[1:]) + "\\n")
         if "build.yml" in sys.argv:
             raise SystemExit(9)
-        if sys.argv[1:3] == ["workflow", "run"]:
-            raise SystemExit(0)
         scenario = json.loads(open(os.environ["GH_SCENARIO"], encoding="utf-8").read())
+        if sys.argv[1:3] == ["workflow", "run"]:
+            run_id = scenario[sys.argv[3]].get("dispatch_id")
+            if run_id:
+                print(f"https://github.com/example/yuelink-ci/actions/runs/{run_id}")
+            raise SystemExit(0)
         if sys.argv[1:3] == ["run", "list"]:
             workflow = sys.argv[sys.argv.index("--workflow") + 1]
             print(json.dumps(scenario[workflow]["runs"]))
@@ -75,29 +78,14 @@ class CiCheckTests(unittest.TestCase):
     def test_green_runs_print_nothing_and_skip_the_release_build(self) -> None:
         scenario = {
             "policy-ci.yml": {
-                "runs": [
-                    {
-                        "databaseId": 1,
-                        "displayTitle": SHA,
-                        "status": "completed",
-                        "conclusion": "success",
-                        "createdAt": "2026-11-12T00:00:00Z",
-                    }
-                ],
-                "views": {"1": {"jobs": [{"name": "Policy", "conclusion": "success"}]}},
+                "dispatch_id": 1,
+                "views": {"1": {"status": "completed","jobs": [{"name": "Policy", "conclusion": "success"}]}},
             },
             "dial-gate.yml": {
-                "runs": [
-                    {
-                        "databaseId": 2,
-                        "displayTitle": SHA,
-                        "status": "completed",
-                        "conclusion": "success",
-                        "createdAt": "2026-11-12T00:00:01Z",
-                    }
-                ],
+                "dispatch_id": 2,
                 "views": {
                     "2": {
+                        "status": "completed",
                         "jobs": [
                             {"name": "Dial gate (ios)", "conclusion": "success"},
                             {"name": "Auth and storage Linux verification", "conclusion": "success"},
@@ -110,34 +98,23 @@ class CiCheckTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout, "")
         self.assertNotIn("build.yml", proc.gh_log)  # type: ignore[attr-defined]
-        self.assertIn("policy-ci.yml", proc.gh_log)  # type: ignore[attr-defined]
-        self.assertIn("dial-gate.yml", proc.gh_log)  # type: ignore[attr-defined]
+        calls = [json.loads(line) for line in proc.gh_log.splitlines()]  # type: ignore[attr-defined]
+        self.assertEqual([call[:4] for call in calls], [
+            ["workflow", "run", "policy-ci.yml", "--repo"],
+            ["workflow", "run", "dial-gate.yml", "--repo"],
+            ["run", "view", "1", "--repo"],
+            ["run", "view", "2", "--repo"],
+        ])
 
     def test_failing_jobs_are_printed(self) -> None:
         scenario = {
             "policy-ci.yml": {
-                "runs": [
-                    {
-                        "databaseId": 3,
-                        "displayTitle": SHA,
-                        "status": "completed",
-                        "conclusion": "failure",
-                        "createdAt": "2026-11-12T00:00:00Z",
-                    }
-                ],
-                "views": {"3": {"jobs": [{"name": "Updater manifest trust contract", "conclusion": "failure"}]}},
+                "dispatch_id": 3,
+                "views": {"3": {"status": "completed","jobs": [{"name": "Updater manifest trust contract", "conclusion": "failure"}]}},
             },
             "dial-gate.yml": {
-                "runs": [
-                    {
-                        "databaseId": 4,
-                        "displayTitle": SHA,
-                        "status": "completed",
-                        "conclusion": "failure",
-                        "createdAt": "2026-11-12T00:00:01Z",
-                    }
-                ],
-                "views": {"4": {"jobs": [{"name": "Dial gate (ios)", "conclusion": "failure"}]}},
+                "dispatch_id": 4,
+                "views": {"4": {"status": "completed","jobs": [{"name": "Dial gate (ios)", "conclusion": "failure"}]}},
             },
         }
         proc = self.run_check(scenario, [SHA])
@@ -158,3 +135,31 @@ class CiCheckTests(unittest.TestCase):
         proc = self.run_check(scenario, [SHA])
         self.assertEqual(proc.returncode, 1)
         self.assertEqual(proc.stdout.splitlines(), ["policy-ci/missing", "dial/missing"])
+
+    def test_dispatch_without_run_identity_cannot_use_previous_green_runs(self) -> None:
+        scenario = {
+            workflow: {
+                "runs": [{"databaseId": run_id, "displayTitle": title, "status": "completed"}],
+                "views": {str(run_id): {"jobs": [{"conclusion": "success"}]}},
+            }
+            for workflow, run_id, title in (
+                ("policy-ci.yml", 5, "b" * 40),
+                ("dial-gate.yml", 6, SHA),
+            )
+        }
+        proc = self.run_check(scenario, [SHA])
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(proc.stdout.splitlines(), ["policy-ci/missing", "dial/missing"])
+
+    def test_pending_dispatch_cannot_pass_on_current_jobs(self) -> None:
+        scenario = {
+            "policy-ci.yml": {"dispatch_id": 7, "views": {
+                "7": {"status": "in_progress", "jobs": [{"conclusion": "success"}]},
+            }},
+            "dial-gate.yml": {"dispatch_id": 8, "views": {
+                "8": {"status": "completed", "jobs": [{"conclusion": "success"}]},
+            }},
+        }
+        proc = self.run_check(scenario, [SHA])
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(proc.stdout.splitlines(), ["policy-ci/incomplete"])
