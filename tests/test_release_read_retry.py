@@ -234,10 +234,11 @@ class ReleaseReadRetryTests(unittest.TestCase):
                 self.assertEqual(self.calls(), [])
 
     def test_attempt_deadline_kills_actual_descendant_and_never_returns_partial(self):
-        # A descendant publishes partial stdout before signaling readiness.
-        # The real process group stays alive until execute() reaches its deadline.
+        # The descendant publishes partial stdout before signaling readiness.
+        # It ignores TERM so the test requires the final group SIGKILL.
         child = (
             "import os,signal,sys; "
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
             "print('partial', flush=True); "
             "os.write(int(sys.argv[1]), b'R'); signal.pause()"
         )
