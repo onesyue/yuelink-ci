@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.174",
+  "channel": "stable",
+  "publishedAt": "2026-11-11T00:28:23Z",
+  "expiresAt": "2026-12-16T00:28:23Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "自定义规则支持中文域名，网络抖动不再断长连接，个别坏节点不再拖垮启动\n\n- 自定义规则：中文等国际域名可以直接填写，会自动转换；关键词可以写中文；把 IPv6 地址段写成 IP-CIDR 也能保存，会自动改为 IP-CIDR6。\n- 同一个网卡重复上报、只有临时 IPv6 地址变化时，不再断开全部连接，看视频、下载等长连接不会每隔一分钟被掐断。电脑上全部断开重连一分钟最多一次。\n- 订阅里个别节点参数不合法，或者分组里写了不存在的节点时，不再整个连接失败：会跳过这些节点继续启动，并提示跳过了哪几个。如果仍然无法启动，提示会说明是哪类参数有问题，请更新订阅。\n",
+  "notesEn": "International domains in custom rules, no more dropped connections on network jitter, and one bad node no longer blocks startup\n\n- Custom rules: international domain names can be entered directly and are converted automatically, keywords can use any script, and an IPv6 range written as IP-CIDR is saved as IP-CIDR6.\n- When the same network interface reports again and only a temporary IPv6 address changed, connections are no longer all closed, so streams and downloads are not cut every minute. On desktop a full reconnect happens at most once a minute.\n- If a few nodes in a subscription have invalid settings, or a group names a node that does not exist, YueLink skips those nodes and keeps starting, and tells you which ones were skipped. If it still cannot start, the message names the kind of setting that is wrong and asks you to update the subscription.\n",
+  "sourceCommit": "576460aedc31690b85ccb529f519a43024e19930",
+  "sha256SumsSha256": "8bc5e499506d4007f6455d85eb14f6e5536ce1e56264d67a58c7b70a415a4423",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-android-arm64-v8a.apk",
+      "sha256": "e1d7a765b292506d3dfc1305ab5be9a7b0b0ed4c461e04b6b2c255c3ce3b2649"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-android-armeabi-v7a.apk",
+      "sha256": "39170b49a7100bd0b35fee44dd7e7bb353d9ebef2b3499cab7320f047447f867"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-android-x86_64.apk",
+      "sha256": "8ecf3b0b4a36f69a5d914ea86bc60b0a2c8a909c815d5c1d373c07cd84892749"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-android-universal.apk",
+      "sha256": "fd372de467efbeeca7ab63fae7562316963887e8af0dde02e7166b9230b15ae8"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-ios.ipa",
+      "sha256": "43a794cfc6d64f1675e9bf6234918d58b48c3016408934e86a983a6f1b1fe208"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-macos-universal.dmg",
+      "sha256": "09941e3c11e851494b54176d565c8ee2a48b0506a46093ab3350fad529395a36",
+      "minimumSystemVersion": "13.0"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-windows-amd64-setup.exe",
+      "sha256": "7187a8f7d352d00f4af5cf7254fee71f61845e06dacd960bc276f763e68e200f"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-windows-amd64-portable.zip",
+      "sha256": "ecaa9267a1dc62b2f002b6d1c646d4abb8404de2d1a8a1c3ff3dcad639b449e2"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-linux-amd64.AppImage",
+      "sha256": "9da7657f446aa54b4401e1de1a5fb36634229a49cf68b4f0b35a1a207d1b67eb"
+    }
+  },
+  "compatibility": {
+    "schemaVersion": 1,
+    "policyRevision": 1,
+    "effectiveAt": "2026-10-15T00:00:00Z",
+    "transitionDays": 90,
+    "enforcement": "observe",
+    "unknownClient": "unverified",
+    "releases": [
+      {
+        "product": "sing-box",
+        "version": "1.13.21",
+        "releasedAt": "2026-08-30T11:24:04Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.13.21/sing-box-1.13.21-linux-arm64.tar.gz",
+          "sha256": "3e30b876c9a93c19e503e2a2d6249cf05e6a26766553d4b61e1daf48223f304f"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      },
+      {
+        "product": "sing-box",
+        "version": "1.14.3",
+        "releasedAt": "2026-10-09T05:35:00Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-linux-arm64.tar.gz",
+          "sha256": "29dae24d76bea3bc62d07dd3e60cfc12003de7debbd6b768df9be9c68360174e"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      }
+    ],
+    "policySourceSha256": "f1a12d625595963fb3c16b69ac216101c733fd21f18aad8b95c7ccdefada58b4"
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "64f250efe9581e3cadb9f6d3401bb9f632fd7b8da3565ca3744bd3a51ac80224",
+    "sha256SumsSha256": "8bc5e499506d4007f6455d85eb14f6e5536ce1e56264d67a58c7b70a415a4423",
+    "payloadBundleSha256": "46321e72087be830b9b77c61da9a6ab647584c11569e69cb1e010808f258fc82",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:4FS1FXRPZrCW+rfwIvUC5ssou+sP7UGE/Lm/8d3RHgyp44Oqa8Av1QKE8WIUQZGIw8DWvffEinVyKvp0X+dvAQ=="
+}

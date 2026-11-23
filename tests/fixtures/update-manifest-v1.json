@@ -1,52 +1,52 @@
 {
   "schemaVersion": 1,
   "keyId": "update-manifest-2026-01",
-  "version": "1.3.174",
+  "version": "1.3.195",
   "channel": "stable",
-  "publishedAt": "2026-11-11T00:28:23Z",
-  "expiresAt": "2026-12-16T00:28:23Z",
+  "publishedAt": "2026-11-23T10:03:31Z",
+  "expiresAt": "2026-12-28T10:03:31Z",
   "releaseUrl": "https://yue.to/download.html",
-  "notes": "自定义规则支持中文域名，网络抖动不再断长连接，个别坏节点不再拖垮启动\n\n- 自定义规则：中文等国际域名可以直接填写，会自动转换；关键词可以写中文；把 IPv6 地址段写成 IP-CIDR 也能保存，会自动改为 IP-CIDR6。\n- 同一个网卡重复上报、只有临时 IPv6 地址变化时，不再断开全部连接，看视频、下载等长连接不会每隔一分钟被掐断。电脑上全部断开重连一分钟最多一次。\n- 订阅里个别节点参数不合法，或者分组里写了不存在的节点时，不再整个连接失败：会跳过这些节点继续启动，并提示跳过了哪几个。如果仍然无法启动，提示会说明是哪类参数有问题，请更新订阅。\n",
-  "notesEn": "International domains in custom rules, no more dropped connections on network jitter, and one bad node no longer blocks startup\n\n- Custom rules: international domain names can be entered directly and are converted automatically, keywords can use any script, and an IPv6 range written as IP-CIDR is saved as IP-CIDR6.\n- When the same network interface reports again and only a temporary IPv6 address changed, connections are no longer all closed, so streams and downloads are not cut every minute. On desktop a full reconnect happens at most once a minute.\n- If a few nodes in a subscription have invalid settings, or a group names a node that does not exist, YueLink skips those nodes and keeps starting, and tells you which ones were skipped. If it still cannot start, the message names the kind of setting that is wrong and asks you to update the subscription.\n",
-  "sourceCommit": "576460aedc31690b85ccb529f519a43024e19930",
-  "sha256SumsSha256": "8bc5e499506d4007f6455d85eb14f6e5536ce1e56264d67a58c7b70a415a4423",
+  "notes": "- 自动选点和连接恢复会参考缓存的地区状态。GeoIP 和 GeoSite 数据过期后可在保持连接时刷新。\n- 支持跨设备同步可移植的设置和自定义规则。导出连接日志时会保留当前筛选条件。\n- 改进桌面端关闭和更新回滚，清除已过期的更新提示。\n",
+  "notesEn": "- Node selection and recovery now use cached regional status. YueLink can refresh stale GeoIP and GeoSite data without reconnecting.\n- Portable settings and custom rules can sync across devices. Exporting a filtered connection log now respects the applied filter.\n- Desktop shutdown and update recovery handle more failure cases, and the updater dismisses stale prompts.\n",
+  "sourceCommit": "f52912e7e4b37dd73bc5b57326b2e023a21cca07",
+  "sha256SumsSha256": "4154232962c8364b18b07f146446b796d0b2517c282f0f21dc8815df85ccd594",
   "platforms": {
     "android-arm64-v8a": {
-      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-android-arm64-v8a.apk",
-      "sha256": "e1d7a765b292506d3dfc1305ab5be9a7b0b0ed4c461e04b6b2c255c3ce3b2649"
+      "url": "https://yuetong.app/v1.3.195/YueLink-1.3.195-android-arm64-v8a.apk",
+      "sha256": "d799ec3a77fb16e140d542b26ce6485d78890cd7704276a06a9304cc21ebe30e"
     },
     "android-armeabi-v7a": {
-      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-android-armeabi-v7a.apk",
-      "sha256": "39170b49a7100bd0b35fee44dd7e7bb353d9ebef2b3499cab7320f047447f867"
+      "url": "https://yuetong.app/v1.3.195/YueLink-1.3.195-android-armeabi-v7a.apk",
+      "sha256": "d8cf21ca721fa077cc7eb58f72e2c792050cc6815b62c385777031b21a796a97"
     },
     "android-x86_64": {
-      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-android-x86_64.apk",
-      "sha256": "8ecf3b0b4a36f69a5d914ea86bc60b0a2c8a909c815d5c1d373c07cd84892749"
+      "url": "https://yuetong.app/v1.3.195/YueLink-1.3.195-android-x86_64.apk",
+      "sha256": "f7e18194d69a0341d78d01cd3a8f685db827f8ac51857bcfbeceb22f1d52cfb3"
     },
     "android-universal": {
-      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-android-universal.apk",
-      "sha256": "fd372de467efbeeca7ab63fae7562316963887e8af0dde02e7166b9230b15ae8"
+      "url": "https://yuetong.app/v1.3.195/YueLink-1.3.195-android-universal.apk",
+      "sha256": "476cb5bc78588360a1fa41ffa05c9c23c90a683973a9afd3c21a593a29f10494"
     },
     "ios": {
-      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-ios.ipa",
-      "sha256": "43a794cfc6d64f1675e9bf6234918d58b48c3016408934e86a983a6f1b1fe208"
+      "url": "https://yuetong.app/v1.3.195/YueLink-1.3.195-ios.ipa",
+      "sha256": "9625f72a3dcb72ba0c57fdcc852259e4f327a971e44d5f8447c9770efbd0d3fb"
     },
     "macos-universal": {
-      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-macos-universal.dmg",
-      "sha256": "09941e3c11e851494b54176d565c8ee2a48b0506a46093ab3350fad529395a36",
+      "url": "https://yuetong.app/v1.3.195/YueLink-1.3.195-macos-universal.dmg",
+      "sha256": "309b1a5af9d6090cd59864d0caa7015de519f58cf8f01f6ec187da09a7ae36bc",
       "minimumSystemVersion": "13.0"
     },
     "windows-amd64-setup": {
-      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-windows-amd64-setup.exe",
-      "sha256": "7187a8f7d352d00f4af5cf7254fee71f61845e06dacd960bc276f763e68e200f"
+      "url": "https://yuetong.app/v1.3.195/YueLink-1.3.195-windows-amd64-setup.exe",
+      "sha256": "5f8cb6e7396ab706d9ae35ec04dbb6042edb22afa510e3ac30f366251330d1f4"
     },
     "windows-amd64-portable": {
-      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-windows-amd64-portable.zip",
-      "sha256": "ecaa9267a1dc62b2f002b6d1c646d4abb8404de2d1a8a1c3ff3dcad639b449e2"
+      "url": "https://yuetong.app/v1.3.195/YueLink-1.3.195-windows-amd64-portable.zip",
+      "sha256": "f9f48fc5ea1d930c215d821b201677815f1454ac44583b22d09e5605df6dd371"
     },
     "linux-amd64-appimage": {
-      "url": "https://yuetong.app/v1.3.174/YueLink-1.3.174-linux-amd64.AppImage",
-      "sha256": "9da7657f446aa54b4401e1de1a5fb36634229a49cf68b4f0b35a1a207d1b67eb"
+      "url": "https://yuetong.app/v1.3.195/YueLink-1.3.195-linux-amd64.AppImage",
+      "sha256": "2e7ea85e774eceb11ce9b7467c7c157d5869ade5144c6786698d0e531db1c259"
     }
   },
   "compatibility": {
@@ -84,10 +84,10 @@
   },
   "promotionEvidence": {
     "schemaVersion": 1,
-    "candidateSha256": "64f250efe9581e3cadb9f6d3401bb9f632fd7b8da3565ca3744bd3a51ac80224",
-    "sha256SumsSha256": "8bc5e499506d4007f6455d85eb14f6e5536ce1e56264d67a58c7b70a415a4423",
-    "payloadBundleSha256": "46321e72087be830b9b77c61da9a6ab647584c11569e69cb1e010808f258fc82",
+    "candidateSha256": "708fd7a330b2b16e2fc5cbbd113305c4134597d79af58784f422a10210a945bd",
+    "sha256SumsSha256": "4154232962c8364b18b07f146446b796d0b2517c282f0f21dc8815df85ccd594",
+    "payloadBundleSha256": "8712bbb0bcc0897978eda899a8dc4ef055741165b5e5453363e7cff358bf6dec",
     "payloadCount": 19
   },
-  "sig": "ed25519:4FS1FXRPZrCW+rfwIvUC5ssou+sP7UGE/Lm/8d3RHgyp44Oqa8Av1QKE8WIUQZGIw8DWvffEinVyKvp0X+dvAQ=="
+  "sig": "ed25519:tw5p81BjNfl1U4NZzZ419sYR0uQ11Xuc+YYfvsvwXbF2t2XRsr3oGPpy63mpXyhCxTvMSBoVTzqHFcpPXiz1CQ=="
 }
