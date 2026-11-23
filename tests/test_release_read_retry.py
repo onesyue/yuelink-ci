@@ -145,7 +145,8 @@ class ReleaseReadRetryTests(unittest.TestCase):
                 self.request.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
                 if context is None:
                     # ClientHello proves the native gh request reached TLS.
-                    self.server.hellos.append(self.request.recv(4096))
+                    with self.request.makefile("rb") as tls:
+                        self.server.hellos.append(tls.read(2))
                 else:
                     try:
                         with context.wrap_socket(self.request, server_side=True):
