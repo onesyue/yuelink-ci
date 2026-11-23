@@ -225,6 +225,28 @@ esac
         self.assertEqual(proof["workflowCommit"], CONTROL)
         self.assertEqual(proof["lockRule"]["conditionType"], "Indefinite")
         self.assertEqual(output.stat().st_mode & 0o777, 0o600)
+        self.assertIn(
+            f"R2_LOCK_PROOF_SHA256={hashlib.sha256(output.read_bytes()).hexdigest()}",
+            result.stdout.splitlines(),
+        )
+
+    def test_proof_digest_failure_leaves_no_published_file_or_receipt(self) -> None:
+        stack, root, digest, env, _ = self._fixture()
+        self.addCleanup(stack.cleanup)
+        hasher = root / "bin/sha256sum"
+        # The candidate digest succeeds. Reading the generated proof fails.
+        hasher.write_text(
+            '#!/bin/sh\ncase "${1:-}" in\n'
+            f'  */update.candidate.json) echo "{digest}  $1";;\n'
+            '  *) exit 42;;\nesac\n'
+        )
+        hasher.chmod(0o755)
+        result, output = self._run(root, digest, env)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((root / "lock.count").exists())
+        self.assertFalse(output.exists())
+        self.assertNotIn("R2_LOCK_PROOF_SHA256=", result.stdout)
+        self.assertEqual(list(root.glob("yuelink-r2-lock-create.*")), [])
 
     def test_candidate_failure_happens_before_cloudflare_request(self) -> None:
         stack, root, digest, env, call_log = self._fixture()

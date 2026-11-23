@@ -50,7 +50,10 @@ cleanup() {
   rm -rf -- "$work"
   exit "$rc"
 }
-trap cleanup EXIT HUP INT TERM
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 stage=$work/stage
 install -d -m 0700 "$stage/payload"
 
@@ -119,10 +122,11 @@ keytool -importkeystore -noprompt \
 rm -f -- "$work/probe.p12"
 
 manifest=$stage/MANIFEST
+created=$(date -u +%FT%TZ)
 {
   printf '#archive-version\t1\n'
   printf '#set\tworkstation\n'
-  printf '#created\t%s\n' "$(date -u +%FT%TZ)"
+  printf '#created\t%s\n' "$created"
   printf '#host\tgithub-actions-public-ci\n'
   printf '#recipient-breakglass\t%s\n' "$breakglass"
   printf '#recipient-verifier\t%s\n' "$verifier"
@@ -151,5 +155,6 @@ age -r "$breakglass" -r "$verifier" -o "$output" "$work/workstation.tar"
   printf 'encrypted archive is empty\n' >&2
   exit 1
 }
-printf 'encrypted workstation key-vault archive ready sha256=%s bytes=%s\n' \
-  "$(sha256sum "$output" | awk '{print $1}')" "$(stat -c '%s' "$output")"
+digest=$(sha256sum "$output")
+bytes=$(stat -c '%s' "$output")
+printf 'encrypted workstation key-vault archive ready sha256=%s bytes=%s\n' "${digest%% *}" "$bytes"
