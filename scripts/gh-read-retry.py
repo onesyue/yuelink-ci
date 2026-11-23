@@ -89,20 +89,28 @@ def retryable(stderr: bytes) -> bool:
         text))
 
 
-def stop(process: subprocess.Popen) -> None:
+def signal_group(process: subprocess.Popen, sig: int) -> None:
     try:
-        os.killpg(process.pid, signal.SIGTERM)
+        try:
+            os.killpg(process.pid, sig)
+        except PermissionError:
+            # macOS can report EPERM while the exited group leader is a zombie.
+            # Reap it and check the group again, since descendants may remain.
+            if process.poll() is None:
+                raise
+            os.killpg(process.pid, sig)
     except ProcessLookupError:
         pass
+
+
+def stop(process: subprocess.Popen) -> None:
+    signal_group(process, signal.SIGTERM)
     try:
         process.wait(timeout=1)
     except subprocess.TimeoutExpired:
         pass
     # The group can still contain descendants after its leader exits.
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
+    signal_group(process, signal.SIGKILL)
     process.wait()
 
 
@@ -118,10 +126,8 @@ def execute(argv: list[str], timeout: float) -> tuple[int, bytes, bytes]:
         try:
             while process.poll() is None:
                 if time.monotonic() >= deadline:
-                    stop(process)
                     return 124, b"", b"release read deadline exceeded; not retrying\n"
                 if max(os.fstat(out.fileno()).st_size, os.fstat(err.fileno()).st_size) > OUTPUT_LIMIT:
-                    stop(process)
                     return 125, b"", b"release read output limit exceeded; not retrying\n"
                 time.sleep(min(0.05, max(0, deadline - time.monotonic())))
         finally:

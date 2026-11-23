@@ -6,6 +6,7 @@ import os
 import select
 from pathlib import Path
 import shutil
+import signal
 import socketserver
 import ssl
 import subprocess
@@ -13,7 +14,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
 from test_release_source_binding_behavior import (
     BUILDER, SOURCE, source_proof, source_run, source_workflow,
@@ -267,6 +268,28 @@ class ReleaseReadRetryTests(unittest.TestCase):
             self.assertEqual(stdout, b"")
             self.assertTrue(select.select([ready], [], [], 5)[0], "descendant survived the deadline")
             self.assertEqual(ready.read(1), b"")
+
+    def test_process_group_permission_error_rechecks_after_reaping_leader(self):
+        process = Mock(spec=subprocess.Popen, pid=123)
+        process.poll.return_value = 0
+        with patch.object(m.os, "killpg", side_effect=[
+            PermissionError(), ProcessLookupError(), ProcessLookupError(),
+        ]) as killpg:
+            m.stop(process)
+        process.poll.assert_called_once_with()
+        self.assertEqual(killpg.call_args_list, [
+            call(123, signal.SIGTERM), call(123, signal.SIGTERM), call(123, signal.SIGKILL),
+        ])
+
+    def test_process_group_permission_error_stays_fatal_if_signal_is_still_denied(self):
+        for status, attempts in ((None, 1), (0, 2)):
+            with self.subTest(leader_status=status):
+                process = Mock(spec=subprocess.Popen, pid=123)
+                process.poll.return_value = status
+                with patch.object(m.os, "killpg", side_effect=PermissionError) as killpg:
+                    with self.assertRaises(PermissionError):
+                        m.stop(process)
+                self.assertEqual(killpg.call_count, attempts)
 
     def test_total_deadline_prevents_another_attempt(self):
         argv = ["gh", "api", "repos/onesyue/yuelink-ci/commits/" + BUILDER]
