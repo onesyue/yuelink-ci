@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import select
 from pathlib import Path
 import shutil
 import socketserver
@@ -231,25 +232,50 @@ class ReleaseReadRetryTests(unittest.TestCase):
                 self.assertEqual(self.calls(), [])
 
     def test_attempt_deadline_kills_actual_descendant_and_never_returns_partial(self):
-        pidfile = self.path / "child-pid"
-        program = ("import subprocess,sys,time,pathlib; "
-                   "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)']); "
-                   "pathlib.Path(sys.argv[1]).write_text(str(p.pid)); "
-                   "print('partial',flush=True);time.sleep(60)")
-        code, stdout, _ = m.execute([sys.executable, "-c", program, str(pidfile)], 0.5)
-        self.assertEqual(code, 124)
-        self.assertEqual(stdout, b"")
-        self.assertTrue(pidfile.exists())  # prove the descendant actually ran
-        child = subprocess.run(["ps", "-p", pidfile.read_text(), "-o", "stat="],
-                               capture_output=True, text=True)
-        self.assertTrue(child.returncode != 0 or child.stdout.strip().startswith("Z"), child.stdout)
+        # A descendant publishes partial stdout before signaling readiness.
+        # The real process group stays alive until execute() reaches its deadline.
+        child = (
+            "import os,signal,sys; "
+            "print('partial', flush=True); "
+            "os.write(int(sys.argv[1]), b'R'); signal.pause()"
+        )
+        parent = (
+            "import signal,subprocess,sys; "
+            "fd=int(sys.argv[1]); "
+            "subprocess.Popen([sys.executable, '-c', sys.argv[2], str(fd)], pass_fds=(fd,)); "
+            "signal.pause()"
+        )
+        read_fd, write_fd = os.pipe()
+        with os.fdopen(read_fd, "rb", buffering=0) as ready, os.fdopen(write_fd, "wb") as writer:
+            def clock_ticks():
+                yield 0.0
+                self.assertTrue(select.select([ready], [], [], 5)[0], "descendant did not start")
+                self.assertEqual(ready.read(1), b"R")
+                yield 0.5
+
+            popen = subprocess.Popen
+
+            def start_process(*args, **kwargs):
+                return popen(*args, **kwargs, pass_fds=(write_fd,))
+
+            with patch.object(m, "time") as clock, patch.object(m.subprocess, "Popen", start_process):
+                clock.monotonic.side_effect = clock_ticks()
+                code, stdout, _ = m.execute([sys.executable, "-c", parent, str(write_fd), child], 0.5)
+            writer.close()
+            self.assertEqual(code, 124)
+            self.assertEqual(stdout, b"")
+            self.assertTrue(select.select([ready], [], [], 5)[0], "descendant survived the deadline")
+            self.assertEqual(ready.read(1), b"")
 
     def test_total_deadline_prevents_another_attempt(self):
         argv = ["gh", "api", "repos/onesyue/yuelink-ci/commits/" + BUILDER]
-        with patch.object(m, "TOTAL_SECONDS", 1), patch.object(m, "execute", return_value=(
-                1, b"partial", b'Get "https://api.github.com/read": EOF\n')) as execute:
+        with patch.object(m, "TOTAL_SECONDS", 2), patch.object(m, "time") as clock, patch.object(
+            m, "execute", return_value=(1, b"partial", b'Get "https://api.github.com/read": EOF\n'),
+        ) as execute:
+            clock.monotonic.side_effect = (0.0, 0.0, 1.0)
             self.assertEqual(m.run(argv), 124)
-            self.assertEqual(execute.call_count, 1)
+            execute.assert_called_once()
+            clock.sleep.assert_not_called()
 
     def test_actual_release_entry_reaches_secret_read_retry_and_keeps_bad_tag_red(self):
         git = self.bin / "git"
