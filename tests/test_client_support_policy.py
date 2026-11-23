@@ -9,6 +9,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 OPS = (ROOT / 'scripts/verify-yuelink-update-manifest.py').is_file()
@@ -60,6 +61,17 @@ class ClientSupportPolicyTests(unittest.TestCase):
             result = V._verify_signed_manifest(raw)
             V._validate_manifest_policy(result, now=NOW)
             return result
+
+    def test_payload_uses_the_verifier_endpoints(self):
+        release_url = 'https://release.example.invalid/download'
+        asset_host = 'assets.example.invalid'
+        with mock.patch.multiple(V, RELEASE_URL=release_url, ASSET_HOST=asset_host):
+            payload = self.payload()
+        self.assertEqual(payload['releaseUrl'], release_url)
+        self.assertTrue(payload['platforms'])
+        for name, asset in payload['platforms'].items():
+            with self.subTest(platform=name):
+                self.assertEqual(urlsplit(asset['url']).hostname, asset_host)
 
     def test_legacy_and_valid_policy_remain_authenticated(self):
         for present in [False, True]:
