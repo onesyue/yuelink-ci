@@ -25,6 +25,10 @@ def _fake_body() -> str:
             raise SystemExit(9)
         scenario = json.loads(open(os.environ["GH_SCENARIO"], encoding="utf-8").read())
         if sys.argv[1:3] == ["workflow", "run"]:
+            if scenario.get(sys.argv[3], {}).get("dispatch_fails"):
+                print("example dispatch denied", file=sys.stderr)
+                raise SystemExit(7)
+
             run_id = scenario[sys.argv[3]].get("dispatch_id")
             if run_id:
                 print(f"https://github.com/example/yuelink-ci/actions/runs/{run_id}")
@@ -64,6 +68,7 @@ class CiCheckTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 env=env,
+                timeout=15,
                 check=False,
             )
             proc.gh_log = (root / "gh.log").read_text(encoding="utf-8") if (root / "gh.log").exists() else ""  # type: ignore[attr-defined]
@@ -135,6 +140,30 @@ class CiCheckTests(unittest.TestCase):
         proc = self.run_check(scenario, [SHA])
         self.assertEqual(proc.returncode, 1)
         self.assertEqual(proc.stdout.splitlines(), ["policy-ci/missing", "dial/missing"])
+
+    def test_dispatch_failure_stops_before_dial_or_polling(self) -> None:
+        proc = self.run_check({"policy-ci.yml": {"dispatch_fails": True}}, [SHA])
+        self.assertEqual(proc.returncode, 7, proc.stderr)
+        self.assertEqual(proc.stdout, "")
+        self.assertIn("example dispatch denied", proc.stderr)
+        calls = [json.loads(line) for line in proc.gh_log.splitlines()]  # type: ignore[attr-defined]
+        self.assertEqual([call[:3] for call in calls], [["workflow", "run", "policy-ci.yml"]])
+
+    def test_incomplete_or_unusable_job_evidence_is_not_success(self) -> None:
+        dial = {
+            "dispatch_id": 2,
+            "views": {"2": {"status": "completed", "jobs": [{"name": "Dial", "conclusion": "success"}]}},
+        }
+        for view, failure in (
+            ({"status": "in_progress"}, "incomplete"),
+            ({"status": "completed"}, "unreadable"),
+            ({"status": "completed", "jobs": []}, "no-jobs"),
+        ):
+            with self.subTest(failure=failure):
+                policy = {"dispatch_id": 1, "views": {"1": view}}
+                proc = self.run_check({"policy-ci.yml": policy, "dial-gate.yml": dial}, [SHA])
+                self.assertEqual(proc.returncode, 1, proc.stderr)
+                self.assertEqual(proc.stdout.splitlines(), [f"policy-ci/{failure}"])
 
     def test_dispatch_without_run_identity_cannot_use_previous_green_runs(self) -> None:
         scenario = {

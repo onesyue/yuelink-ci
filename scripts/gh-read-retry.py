@@ -96,14 +96,17 @@ def signal_group(pgid: int, sig: signal.Signals) -> None:
             return
         except ProcessLookupError:
             return
-        except PermissionError:
+        except PermissionError as error:
             if sys.platform != "darwin":
                 raise
             # Retry the exit race before inspecting any remaining group members.
             if attempt == 20:
-                members = subprocess.check_output(
-                    ["/bin/ps", "-axo", "pgid=,stat="], text=True, timeout=2
-                )
+                try:
+                    members = subprocess.check_output(
+                        ["/bin/ps", "-axo", "pgid=,stat="], text=True, timeout=2
+                    )
+                except (OSError, subprocess.SubprocessError) as check_error:
+                    raise error from check_error
                 if not any(group == str(pgid) and not state.startswith("Z")
                            for group, state in map(str.split, members.splitlines())):
                     return

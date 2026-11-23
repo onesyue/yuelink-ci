@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import socketserver
 import ssl
 import subprocess
@@ -231,18 +232,63 @@ class ReleaseReadRetryTests(unittest.TestCase):
                 self.assertEqual(self.calls(), [])
 
     def test_attempt_deadline_kills_actual_descendant_and_never_returns_partial(self):
-        pidfile = self.path / "child-pid"
-        program = ("import subprocess,sys,time,pathlib; "
-                   "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)']); "
-                   "pathlib.Path(sys.argv[1]).write_text(str(p.pid)); "
-                   "print('partial',flush=True);time.sleep(60)")
-        code, stdout, _ = m.execute([sys.executable, "-c", program, str(pidfile)], 0.5)
-        self.assertEqual(code, 124)
-        self.assertEqual(stdout, b"")
-        self.assertTrue(pidfile.exists())  # prove the descendant actually ran
-        child = subprocess.run(["ps", "-p", pidfile.read_text(), "-o", "stat="],
-                               capture_output=True, text=True)
-        self.assertTrue(child.returncode != 0 or child.stdout.strip().startswith("Z"), child.stdout)
+        descendant = (
+            "import signal, socket, sys; "
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+            "conn = socket.create_connection(('127.0.0.1', int(sys.argv[1])), timeout=20); "
+            "conn.sendall(b'R'); conn.recv(1)"
+        )
+        program = (
+            "import subprocess, sys; "
+            "print('partial', flush=True); "
+            "child = subprocess.Popen([sys.executable, '-c', sys.argv[1], sys.argv[2]]); "
+            "child.wait(timeout=20)"
+        )
+        with socket.create_server(("127.0.0.1", 0)) as listener:
+            listener.settimeout(5)
+            connection = None
+
+            def deadline_ticks():
+                nonlocal connection
+                yield 0.0
+                # Advance the helper's clock only after the real descendant is ready.
+                connection, _ = listener.accept()
+                self.addCleanup(connection.close)
+                connection.settimeout(5)
+                self.assertEqual(connection.recv(1), b"R")
+                yield 1.0
+
+            port = str(listener.getsockname()[1])
+            with patch.object(m, "time") as clock:
+                clock.monotonic.side_effect = deadline_ticks()
+                code, stdout, _ = m.execute(
+                    [sys.executable, "-c", program, descendant, port], 0.5
+                )
+            self.assertEqual(code, 124)
+            self.assertEqual(stdout, b"")
+            # Only the descendant held this connection and it ignores SIGTERM.
+            self.assertIsNotNone(connection)
+            self.assertEqual(connection.recv(1), b"")
+
+    def test_darwin_zombie_only_group_can_finish(self):
+        process = Mock(pid=123)
+        with (
+            patch.object(m.sys, "platform", "darwin"),
+            patch.object(m.os, "killpg", side_effect=PermissionError),
+            patch.object(m.subprocess, "check_output", return_value="123 Z\n456 S\n"),
+        ):
+            m.stop(process)
+        process.wait.assert_called()
+
+    def test_darwin_permission_failure_is_kept_for_a_live_group(self):
+        process = Mock(pid=123)
+        with (
+            patch.object(m.sys, "platform", "darwin"),
+            patch.object(m.os, "killpg", side_effect=PermissionError),
+            patch.object(m.subprocess, "check_output", return_value="123 Z\n123 S\n"),
+            self.assertRaises(PermissionError),
+        ):
+            m.stop(process)
 
     def test_darwin_cleanup_distinguishes_zombies_from_live_group_members(self):
         process = Mock(pid=123)
@@ -282,6 +328,22 @@ class ReleaseReadRetryTests(unittest.TestCase):
                 1, b"partial", b'Get "https://api.github.com/read": EOF\n')) as execute:
             self.assertEqual(m.run(argv), 124)
             self.assertEqual(execute.call_count, 1)
+
+    def test_output_limit_discards_both_streams(self):
+        for oversized_stream in ("stdout", "stderr"):
+            with self.subTest(stream=oversized_stream), patch.object(m, "OUTPUT_LIMIT", 64):
+                program = (
+                    "import sys; "
+                    "sys.stdout.write('partial response'); "
+                    "sys.stderr.write('partial diagnostic'); "
+                    "getattr(sys, sys.argv[1]).write('x' * 65)"
+                )
+                code, stdout, stderr = m.execute(
+                    [sys.executable, "-c", program, oversized_stream], 5
+                )
+                self.assertEqual(code, 125)
+                self.assertEqual(stdout, b"")
+                self.assertEqual(stderr, b"release read output limit exceeded; not retrying\n")
 
     def test_actual_release_entry_reaches_secret_read_retry_and_keeps_bad_tag_red(self):
         git = self.bin / "git"
