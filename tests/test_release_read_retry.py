@@ -277,6 +277,22 @@ class ReleaseReadRetryTests(unittest.TestCase):
             self.assertEqual(m.run(argv), 124)
             self.assertEqual(execute.call_count, 1)
 
+    def test_output_limit_discards_both_streams(self):
+        for oversized_stream in ("stdout", "stderr"):
+            with self.subTest(stream=oversized_stream), patch.object(m, "OUTPUT_LIMIT", 64):
+                program = (
+                    "import sys; "
+                    "sys.stdout.write('partial response'); "
+                    "sys.stderr.write('partial diagnostic'); "
+                    "getattr(sys, sys.argv[1]).write('x' * 65)"
+                )
+                code, stdout, stderr = m.execute(
+                    [sys.executable, "-c", program, oversized_stream], 5
+                )
+                self.assertEqual(code, 125)
+                self.assertEqual(stdout, b"")
+                self.assertEqual(stderr, b"release read output limit exceeded; not retrying\n")
+
     def test_actual_release_entry_reaches_secret_read_retry_and_keeps_bad_tag_red(self):
         git = self.bin / "git"
         git.write_text('#!/bin/sh\ncase "$*" in\n"branch --show-current") echo master;;\n'
