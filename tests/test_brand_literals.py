@@ -7,6 +7,8 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 BRAND_PATH = ROOT / "scripts" / "brand_literals.py"
@@ -60,6 +62,22 @@ class BrandLiteralTests(unittest.TestCase):
         self.assertEqual(health.RELEASE_URL, BRAND.URL_DOWNLOAD)
         self.assertEqual(health.PUBLIC_URL, BRAND.URL_DOWNLOAD_HEALTH)
         self.assertEqual(drift.CHANNEL_URL, BRAND.URL_UPDATE_MANIFEST)
+
+    def test_client_support_policy_fixture_uses_verifier_endpoints(self) -> None:
+        policy = load(
+            "client_support_policy_brand",
+            ROOT / "tests/test_client_support_policy.py",
+        )
+        release_url = "https://release.example.invalid/download"
+        asset_host = "assets.example.invalid"
+        with mock.patch.multiple(policy.V, RELEASE_URL=release_url, ASSET_HOST=asset_host):
+            manifest = policy.ClientSupportPolicyTests().payload(policy=False)
+
+        self.assertEqual(manifest["releaseUrl"], release_url)
+        self.assertEqual(set(manifest["platforms"]), set(policy.V.EXPECTED_PLATFORM_ARTIFACTS))
+        for platform, asset in manifest["platforms"].items():
+            with self.subTest(platform=platform):
+                self.assertEqual(urlsplit(asset["url"]).hostname, asset_host)
 
     def test_first_party_tree_does_not_restore_retired_bot(self) -> None:
         for path in (ROOT / "scripts").rglob("*"):

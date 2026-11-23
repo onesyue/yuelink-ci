@@ -58,8 +58,10 @@ class BotHandleGateTests(unittest.TestCase):
         self.assertNotIn(HANDLE, (ROOT / "scripts/check_bot_handle.py").read_text(encoding="utf-8"))
         self.assertNotIn(URL, (ROOT / "tests/test_bot_handle_gate.py").read_text(encoding="utf-8"))
         workflow = (ROOT / ".github/workflows/policy-ci.yml").read_text(encoding="utf-8")
-        self.assertIn("python3 scripts/check_bot_handle.py", workflow)
-        self.assertIn("python3 -m unittest discover -s tests -p 'test_*.py'", workflow)
+        self.assertIn("run: scripts/check-policy.sh ci", workflow)
+        entry = (ROOT / "scripts/check-policy.sh").read_text(encoding="utf-8")
+        self.assertIn("python3 scripts/check_bot_handle.py", entry)
+        self.assertIn("python3 -m unittest discover -s tests -p 'test_*.py'", entry)
 
     def test_official_handles_stay_allowed(self) -> None:
         self.assertEqual(gate.needle_labels(allowed_tree()["scripts/ok.py"]), ())
