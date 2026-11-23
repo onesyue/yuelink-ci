@@ -89,20 +89,31 @@ def retryable(stderr: bytes) -> bool:
         text))
 
 
-def stop(process: subprocess.Popen) -> None:
+def signal_group(pgid: int, signum: int) -> None:
     try:
-        os.killpg(process.pid, signal.SIGTERM)
+        os.killpg(pgid, signum)
     except ProcessLookupError:
         pass
+    except PermissionError:
+        if sys.platform != "darwin":
+            raise
+        # Darwin can return EPERM while a group contains only zombies.
+        members = subprocess.check_output(["/bin/ps", "-axo", "pgid=,stat="],
+                                          text=True, timeout=2)
+        for line in members.splitlines():
+            group, state = line.split()
+            if group == str(pgid) and not state.startswith("Z"):
+                raise
+
+
+def stop(process: subprocess.Popen) -> None:
+    signal_group(process.pid, signal.SIGTERM)
     try:
         process.wait(timeout=1)
     except subprocess.TimeoutExpired:
         pass
     # The group can still contain descendants after its leader exits.
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
+    signal_group(process.pid, signal.SIGKILL)
     process.wait()
 
 

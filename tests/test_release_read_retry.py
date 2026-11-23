@@ -12,7 +12,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from test_release_source_binding_behavior import (
     BUILDER, SOURCE, source_proof, source_run, source_workflow,
@@ -243,6 +243,21 @@ class ReleaseReadRetryTests(unittest.TestCase):
         child = subprocess.run(["ps", "-p", pidfile.read_text(), "-o", "stat="],
                                capture_output=True, text=True)
         self.assertTrue(child.returncode != 0 or child.stdout.strip().startswith("Z"), child.stdout)
+
+    def test_darwin_cleanup_distinguishes_zombies_from_live_group_members(self):
+        process = Mock(pid=123)
+        for processes, has_live_member in ((" 123 Z\n 456 S\n", False),
+                                           (" 456 S\n", False),
+                                           (" 123 Z\n 123 S\n", True)):
+            with self.subTest(processes=processes), patch.object(m.sys, "platform", "darwin"), \
+                    patch.object(m.os, "killpg", side_effect=PermissionError(1, "not permitted")), \
+                    patch.object(m.subprocess, "check_output", return_value=processes) as inspect:
+                if has_live_member:
+                    with self.assertRaises(PermissionError):
+                        m.stop(process)
+                else:
+                    m.stop(process)
+                inspect.assert_called()
 
     def test_total_deadline_prevents_another_attempt(self):
         argv = ["gh", "api", "repos/onesyue/yuelink-ci/commits/" + BUILDER]
