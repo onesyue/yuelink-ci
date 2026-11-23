@@ -90,17 +90,23 @@ def retryable(stderr: bytes) -> bool:
 
 
 def signal_group(pgid: int, sig: signal.Signals) -> None:
-    deadline = time.monotonic() + 1
-    while True:
+    for attempt in range(21):
         try:
             os.killpg(pgid, sig)
             return
         except ProcessLookupError:
             return
         except PermissionError:
-            # Darwin can report EPERM while the group's last members exit.
-            # Require a delivered signal or ESRCH before treating cleanup as done.
-            if sys.platform != "darwin" or time.monotonic() >= deadline:
+            if sys.platform != "darwin":
+                raise
+            # Retry the exit race before inspecting any remaining group members.
+            if attempt == 20:
+                members = subprocess.check_output(
+                    ["/bin/ps", "-axo", "pgid=,stat="], text=True, timeout=2
+                )
+                if not any(group == str(pgid) and not state.startswith("Z")
+                           for group, state in map(str.split, members.splitlines())):
+                    return
                 raise
             time.sleep(0.05)
 
