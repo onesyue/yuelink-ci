@@ -23,9 +23,12 @@ def _fake_body() -> str:
             log.write(json.dumps(sys.argv[1:]) + "\\n")
         if "build.yml" in sys.argv:
             raise SystemExit(9)
-        if sys.argv[1:3] == ["workflow", "run"]:
-            raise SystemExit(0)
         scenario = json.loads(open(os.environ["GH_SCENARIO"], encoding="utf-8").read())
+        if sys.argv[1:3] == ["workflow", "run"]:
+            if scenario.get(sys.argv[3], {}).get("dispatch_fails"):
+                print("example dispatch denied", file=sys.stderr)
+                raise SystemExit(7)
+            raise SystemExit(0)
         if sys.argv[1:3] == ["run", "list"]:
             workflow = sys.argv[sys.argv.index("--workflow") + 1]
             print(json.dumps(scenario[workflow]["runs"]))
@@ -61,6 +64,7 @@ class CiCheckTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 env=env,
+                timeout=15,
                 check=False,
             )
             proc.gh_log = (root / "gh.log").read_text(encoding="utf-8") if (root / "gh.log").exists() else ""  # type: ignore[attr-defined]
@@ -158,3 +162,30 @@ class CiCheckTests(unittest.TestCase):
         proc = self.run_check(scenario, [SHA])
         self.assertEqual(proc.returncode, 1)
         self.assertEqual(proc.stdout.splitlines(), ["policy-ci/missing", "dial/missing"])
+
+    def test_dispatch_failure_stops_before_dial_or_polling(self) -> None:
+        proc = self.run_check({"policy-ci.yml": {"dispatch_fails": True}}, [SHA])
+        self.assertEqual(proc.returncode, 7, proc.stderr)
+        self.assertEqual(proc.stdout, "")
+        self.assertIn("example dispatch denied", proc.stderr)
+        calls = [json.loads(line) for line in proc.gh_log.splitlines()]  # type: ignore[attr-defined]
+        self.assertEqual([call[:3] for call in calls], [["workflow", "run", "policy-ci.yml"]])
+
+    def test_incomplete_or_unusable_job_evidence_is_not_success(self) -> None:
+        dial = {
+            "runs": [{"databaseId": 2, "displayTitle": SHA, "status": "completed"}],
+            "views": {"2": {"jobs": [{"name": "Dial", "conclusion": "success"}]}},
+        }
+        for status, view, failure in (
+            ("in_progress", None, "incomplete"),
+            ("completed", {}, "unreadable"),
+            ("completed", {"jobs": []}, "no-jobs"),
+        ):
+            with self.subTest(failure=failure):
+                policy = {
+                    "runs": [{"databaseId": 1, "displayTitle": SHA, "status": status}],
+                    "views": {"1": view} if view is not None else {},
+                }
+                proc = self.run_check({"policy-ci.yml": policy, "dial-gate.yml": dial}, [SHA])
+                self.assertEqual(proc.returncode, 1, proc.stderr)
+                self.assertEqual(proc.stdout.splitlines(), [f"policy-ci/{failure}"])
