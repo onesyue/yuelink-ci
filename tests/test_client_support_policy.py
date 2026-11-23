@@ -1,4 +1,4 @@
-"""Standalone component contract using shared root-generated policy fixtures."""
+"""Source for the generated tests/test_client_support_policy.py in CI and Ops."""
 import base64
 import copy
 import importlib.util
@@ -9,6 +9,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 OPS = (ROOT / 'scripts/verify-yuelink-update-manifest.py').is_file()
@@ -61,10 +62,28 @@ class ClientSupportPolicyTests(unittest.TestCase):
             V._validate_manifest_policy(result, now=NOW)
             return result
 
+    def test_payload_uses_the_verifier_endpoints(self):
+        release_url = 'https://release.example.invalid/download'
+        asset_host = 'assets.example.invalid'
+        with mock.patch.multiple(V, RELEASE_URL=release_url, ASSET_HOST=asset_host):
+            payload = self.payload()
+        self.assertEqual(payload['releaseUrl'], release_url)
+        self.assertTrue(payload['platforms'])
+        for name, asset in payload['platforms'].items():
+            with self.subTest(platform=name):
+                self.assertEqual(urlsplit(asset['url']).hostname, asset_host)
+
     def test_legacy_and_valid_policy_remain_authenticated(self):
         for present in [False, True]:
             with self.subTest(policy=present):
                 self.assertEqual('compatibility' in self.verify(self.seal(self.payload(present))), present)
+
+    def test_signed_policy_fixture_uses_verifier_endpoints(self):
+        with mock.patch.multiple(V, RELEASE_URL='https://download.example.invalid/client',
+                                 ASSET_HOST='cdn.example.invalid'):
+            value = self.payload()
+            result = self.verify(self.seal(value))
+        self.assertEqual(result['compatibility'], value['compatibility'])
 
     def test_shared_malformed_policy_corpus_reaches_signed_consumer(self):
         cases = json.loads(INVALID.read_text())
