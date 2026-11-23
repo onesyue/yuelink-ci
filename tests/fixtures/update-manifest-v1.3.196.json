@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.196",
+  "channel": "stable",
+  "publishedAt": "2026-11-23T11:06:54Z",
+  "expiresAt": "2026-12-28T11:06:54Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "- 调整内核启动阶段和桌面端系统代理的处理流程，沿用已有连接设置。\n",
+  "notesEn": "- Reorganizes the core startup stages and desktop system proxy handling. Your existing connection settings carry over.\n",
+  "sourceCommit": "2f0a263b04187baff0d86c92d0af1735bd707fc8",
+  "sha256SumsSha256": "b0a766cdfac51f697ecdebb6eff08663fa1e5003eb26a120f886acd38c3177f2",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.196/YueLink-1.3.196-android-arm64-v8a.apk",
+      "sha256": "8a9a7212873120abec610250f4e6783eba7045b7b207fd37ba5480c2973257bc"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.196/YueLink-1.3.196-android-armeabi-v7a.apk",
+      "sha256": "e63cdf60cd05022c72122083521dede50155aa5efd0194a6618c5e042b8e2370"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.196/YueLink-1.3.196-android-x86_64.apk",
+      "sha256": "acedbd8bb826269a94b24db9010308a43b4c4b4c8b1b33fabfb338e9eef7f688"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.196/YueLink-1.3.196-android-universal.apk",
+      "sha256": "8b4256e11553c8ad3803da822d534ebc0f5437daf54ab6f361c2962c35a39453"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.196/YueLink-1.3.196-ios.ipa",
+      "sha256": "2077f3eece408b16ad99aa76fe7ce7be01da7832aea749ebbfd0264c7a486f50"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.196/YueLink-1.3.196-macos-universal.dmg",
+      "sha256": "569f147e4b2d2ee0b9d528e9c2f667bd0c4a8b232aadeaeae8ec3c0dd7ca953a",
+      "minimumSystemVersion": "13.0"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.196/YueLink-1.3.196-windows-amd64-setup.exe",
+      "sha256": "562c23519ea95545ce365d4f04017ab2e868242bfd8467627884dbfa02804cb3"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.196/YueLink-1.3.196-windows-amd64-portable.zip",
+      "sha256": "02c55a72d04e37175b54c494acac5ede9af791efa1b703720f93ded62876d7d0"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.196/YueLink-1.3.196-linux-amd64.AppImage",
+      "sha256": "9fd6a9ddee53645cd91cb8fc941e6aa85f3f50412fbf6a71899288ebb9f58090"
+    }
+  },
+  "compatibility": {
+    "schemaVersion": 1,
+    "policyRevision": 1,
+    "effectiveAt": "2026-10-15T00:00:00Z",
+    "transitionDays": 90,
+    "enforcement": "observe",
+    "unknownClient": "unverified",
+    "releases": [
+      {
+        "product": "sing-box",
+        "version": "1.13.21",
+        "releasedAt": "2026-08-30T11:24:04Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.13.21/sing-box-1.13.21-linux-arm64.tar.gz",
+          "sha256": "3e30b876c9a93c19e503e2a2d6249cf05e6a26766553d4b61e1daf48223f304f"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      },
+      {
+        "product": "sing-box",
+        "version": "1.14.3",
+        "releasedAt": "2026-10-09T05:35:00Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-linux-arm64.tar.gz",
+          "sha256": "29dae24d76bea3bc62d07dd3e60cfc12003de7debbd6b768df9be9c68360174e"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      }
+    ],
+    "policySourceSha256": "f1a12d625595963fb3c16b69ac216101c733fd21f18aad8b95c7ccdefada58b4"
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "fa5a39e9576d1d8cc3fa117bc1a16d70ae71b13ec69bce90ed64a70372818909",
+    "sha256SumsSha256": "b0a766cdfac51f697ecdebb6eff08663fa1e5003eb26a120f886acd38c3177f2",
+    "payloadBundleSha256": "57d2a13da90ed8a98510498bf8e13152cb4bca74a7ced1858fd2b7954378d24a",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:JUUxyJyZkMNb+aIx9T4KgOThx+m99J8U5wIavRmszfPbXxI4PjK6J7Sp2xb5uHOW/D6TcoeMlY+3OqRG+DwgAg=="
+}
