@@ -744,6 +744,15 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
                 self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
 
     def test_resource_default_unknown_capacity_limit_and_refusal_reach_entry(self):
+        groups = self.plan["groups"]
+        # Validate the complete plan while giving each possible worker a group.
+        # Full-corpus execution has dedicated tests and dominates serial fixture time.
+        shard_count = (len(groups) + 3) // 4
+        indexes = list(range(0, len(groups), shard_count))
+        self.assertEqual(len(indexes), 4)
+        fixture_env = {"COVERAGE_JOB_SHARD": f"0/{shard_count}",
+                       "FIXTURE_GROUPS": str(len(indexes))}
+        out = self.root / "coverage/source-gate"
         for cpu, memory, limit, workers in ((4, 16 * RUNNER.GIB, None, 4),
                                            (2, 16 * RUNNER.GIB, "3", 2),
                                            (8, 6 * RUNNER.GIB, None, 2),
@@ -753,10 +762,15 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
                 env = {"FIXTURE_RESOURCES": json.dumps({"effective_cpus": cpu, "available_memory_bytes": memory, "capacity_status": "UNKNOWN" if cpu is None or memory is None else "VISIBLE_BOUNDS", "missing_interfaces": ["fixture CPU/memory"] if cpu is None or memory is None else []})}
                 if limit is not None:
                     env["YUELINK_COVERAGE_MAX_WORKERS"] = limit
-                result = self.run_gate(**env)
+                result = self.run_gate(**fixture_env, **env)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                receipt = json.loads((self.root / "coverage/source-gate/execution.json").read_text())
+                receipt = json.loads((out / "execution.json").read_text())
                 self.assertEqual(receipt["workers"], workers)
+                self.assertEqual(receipt["groups"], groups)
+                self.assertEqual(receipt["status"], "COMPLETE")
+                shard = json.loads((out / "shard.json").read_text())
+                self.assertEqual(shard["indexes"], indexes)
+                self.assertEqual(shard["files"], [path for index in indexes for path in groups[index]])
                 if memory is None:
                     self.assertEqual(receipt["resources_before"]["capacity_status"], "UNKNOWN")
                     self.assertEqual(receipt["worker_selection"], "CONSERVATIVE_UNKNOWN")
@@ -765,9 +779,11 @@ os.execv({real_git!r},[{real_git!r},*sys.argv[1:]])
         for env in ({"YUELINK_COVERAGE_MAX_WORKERS": "0"}, {"YUELINK_COVERAGE_MAX_WORKERS": "auto"},
                     {"FIXTURE_RESOURCES": json.dumps({"effective_cpus": 4, "available_memory_bytes": RUNNER.GIB, "capacity_status": "UNKNOWN", "missing_interfaces": ["fixture cgroup"]})}):
             shutil.rmtree(self.root / "coverage", ignore_errors=True)
-            result = self.run_gate(**env)
+            result = self.run_gate(**fixture_env, **env)
             self.assertNotEqual(result.returncode, 0)
-            self.assertFalse(list((self.root / "coverage/source-gate").glob("*.jsonl")))
+            receipt = json.loads((out / "execution.json").read_text())
+            self.assertEqual(receipt["status"], "RESOURCE_REFUSED")
+            self.assertFalse(list(out.glob("*.jsonl")))
 
     def test_visible_linux_and_macos_capacity_interfaces_do_not_require_new_env(self):
         values = {"cpu.max": "200000 100000", "memory.max": str(8 * RUNNER.GIB),

@@ -36,16 +36,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Run offline policy regression suites
-        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
-
-      - name: Forbid retired Telegram bot handle
-        run: python3 scripts/check_bot_handle.py
-
-      # Same pinned actionlint as yueto-ci policy-ci (reviewed version + the
-      # release's linux_amd64 sha256). It also runs ShellCheck over every
-      # `run:` block; the second command covers the repo's own *.sh.
-      - name: Lint workflows and shell scripts
+      - name: Install pinned actionlint
         env:
           ACTIONLINT_VERSION: '1.7.12'
           ACTIONLINT_ARCHIVE_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
@@ -62,9 +53,10 @@ jobs:
             | sha256sum --check --strict
           mkdir -p "$destination"
           tar --extract --gzip --file "$archive" --directory "$destination" actionlint
-          command -v shellcheck
-          "$destination/actionlint" .github/workflows/*.yml
-          shellcheck --severity=warning ./*.sh scripts/*.sh
+          echo "$destination" >> "$GITHUB_PATH"
+
+      - name: Run offline policy checks
+        run: scripts/check-policy.sh ci
 
       - name: Verify current live signed manifest
         run: |

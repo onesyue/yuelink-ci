@@ -45,7 +45,9 @@ class PolicyDiscoveryContractTests(unittest.TestCase):
         self.assertGreaterEqual(len(list(directory.glob("test_*.py"))), 15)
         self.assertEqual(undiscovered_cases(directory), [])
         workflow = (ROOT / ".github/workflows/policy-ci.yml").read_text()
-        self.assertIn("python3 -m unittest discover -s tests -p 'test_*.py'", workflow)
+        self.assertIn("run: scripts/check-policy.sh ci", workflow)
+        entry = (ROOT / "scripts/check-policy.sh").read_text()
+        self.assertIn("python3 -m unittest discover -s tests -p 'test_*.py'", entry)
 
     def test_missing_suite_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

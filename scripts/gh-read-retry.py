@@ -89,18 +89,33 @@ def retryable(stderr: bytes) -> bool:
         text))
 
 
-def signal_group(process: subprocess.Popen, sig: int) -> None:
-    try:
+def signal_group(process: subprocess.Popen, sig: signal.Signals) -> None:
+    pgid = process.pid
+    for attempt in range(21):
         try:
-            os.killpg(process.pid, sig)
-        except PermissionError:
-            # macOS can report EPERM while the exited group leader is a zombie.
-            # Reap it and check the group again, since descendants may remain.
-            if process.poll() is None:
+            os.killpg(pgid, sig)
+            return
+        except ProcessLookupError:
+            return
+        except PermissionError as error:
+            # Reap the exited leader, then signal the same group for descendants.
+            if attempt == 0 and process.poll() is not None:
+                continue
+            if sys.platform != "darwin":
                 raise
-            os.killpg(process.pid, sig)
-    except ProcessLookupError:
-        pass
+            # Retry the exit race before inspecting any remaining group members.
+            if attempt == 20:
+                try:
+                    members = subprocess.check_output(
+                        ["/bin/ps", "-axo", "pgid=,stat="], text=True, timeout=2
+                    )
+                except (OSError, subprocess.SubprocessError) as check_error:
+                    raise error from check_error
+                if not any(group == str(pgid) and not state.startswith("Z")
+                           for group, state in map(str.split, members.splitlines())):
+                    return
+                raise
+            time.sleep(0.05)
 
 
 def stop(process: subprocess.Popen) -> None:
