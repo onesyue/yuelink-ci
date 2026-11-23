@@ -4,7 +4,7 @@ run-name: Warm release caches after attestation ${{ github.event.workflow_run.id
 # Cache-only work on master. Tag caches cannot be restored by the next tag;
 # these trusted, source-bound master caches can. Never publishes or signs.
 on:
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers] -- The plan accepts only successful same-repo master attestations dispatched manually and extracts a full source commit ID.
     workflows: [Source attestation]
     types: [completed]
     branches: [master]
@@ -74,12 +74,10 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         env:
-          XCODE: ${{ needs.plan.outputs.xcode }}
+          DEVELOPER_DIR: ${{ format('/Applications/Xcode_{0}.app/Contents/Developer', needs.plan.outputs.xcode) }}
         run: |
           set -euo pipefail
-          developer_dir="/Applications/Xcode_${XCODE}.app/Contents/Developer"
-          test -d "$developer_dir"
-          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+          test -d "$DEVELOPER_DIR"
       - name: Record canonical Go core identity
         shell: bash
         env:
@@ -156,17 +154,24 @@ jobs:
         run: |
           set -euo pipefail
           sdkmanager "ndk;$NDK"
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/$NDK" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/$NDK" >> "$GITHUB_ENV"
       - name: Build exact native core and service inputs
         if: steps.core.outputs.cache-hit != 'true'
         shell: bash
         env:
           PLATFORM: ${{ matrix.platform }}
+          DEVELOPER_DIR: ${{ runner.os == 'macOS' && format('/Applications/Xcode_{0}.app/Contents/Developer', needs.plan.outputs.xcode) || '' }}
+          NDK: ${{ needs.plan.outputs.ndk }}
           GOFLAGS: -mod=readonly
           GOTOOLCHAIN: local
         run: |
           set -euo pipefail
+          if [ -z "$DEVELOPER_DIR" ]; then
+            unset DEVELOPER_DIR
+          fi
+          if [ "$PLATFORM" = android ]; then
+            export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/$NDK"
+            export ANDROID_NDK="$ANDROID_NDK_HOME"
+          fi
           flutter pub get --enforce-lockfile
           dart run slang
           if [ "$CORE_ARCH_SCOPE" = amd64 ]; then
@@ -186,8 +191,11 @@ jobs:
         shell: bash
         env:
           FLUTTER_ROOT: ${{ steps.flutter.outputs.flutter-root }}
+          NDK: ${{ needs.plan.outputs.ndk }}
         run: |
           set -euo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/$NDK"
+          export ANDROID_NDK="$ANDROID_NDK_HOME"
           flutter pub get --enforce-lockfile
           dart run slang
           printf 'flutter.sdk=%s\nsdk.dir=%s\n' "$FLUTTER_ROOT" "$ANDROID_SDK_ROOT" > android/local.properties
