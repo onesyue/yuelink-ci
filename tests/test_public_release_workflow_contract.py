@@ -13,6 +13,8 @@ import textwrap
 import unittest
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 _BRAND_SPEC = importlib.util.spec_from_file_location(
     "brand_literals_for_public_release", ROOT / "scripts/brand_literals.py"
@@ -81,7 +83,6 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
             "value: ${{ jobs.preflight.outputs.tag_kind }}",
             "source_commit: ${{ needs.plan.outputs.source_commit }}",
             "tag_kind: ${{ needs.validate.outputs.tag_kind }}",
-            "secrets: inherit",
         ]
         for marker in required:
             with self.subTest(marker=marker):
@@ -99,6 +100,16 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("git rev-list", identity)
         android = self.build.split("      # ANDROID", 1)[1].split("      # iOS —", 1)[0]
         self.assertIn("Verify APK signature is the pinned release key", android)
+
+    def test_release_calls_only_forward_the_source_checkout_secret(self) -> None:
+        jobs = yaml.load(BUILD.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)["jobs"]
+        self.assertNotIn("secrets", jobs["plan"])
+        for job in ("validate", "build", "publish"):
+            with self.subTest(job=job):
+                self.assertEqual(
+                    jobs[job]["secrets"],
+                    {"SRC_DEPLOY_KEY": "${{ secrets.SRC_DEPLOY_KEY }}"},
+                )
 
     def test_dropping_validate_from_build_needs_is_rejected(self) -> None:
         from scripts.check_public_build import composed_workflow, issues

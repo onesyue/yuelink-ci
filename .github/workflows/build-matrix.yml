@@ -13,6 +13,9 @@ on:
         description: JSON build matrix from plan
         required: true
         type: string
+    secrets:
+      SRC_DEPLOY_KEY:
+        required: true
 
 permissions:
   contents: read
