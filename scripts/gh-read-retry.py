@@ -89,20 +89,30 @@ def retryable(stderr: bytes) -> bool:
         text))
 
 
+def signal_group(pgid: int, sig: signal.Signals) -> None:
+    deadline = time.monotonic() + 1
+    while True:
+        try:
+            os.killpg(pgid, sig)
+            return
+        except ProcessLookupError:
+            return
+        except PermissionError:
+            # Darwin can report EPERM while the group's last members exit.
+            # Require a delivered signal or ESRCH before treating cleanup as done.
+            if sys.platform != "darwin" or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.05)
+
+
 def stop(process: subprocess.Popen) -> None:
-    try:
-        os.killpg(process.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
+    signal_group(process.pid, signal.SIGTERM)
     try:
         process.wait(timeout=1)
     except subprocess.TimeoutExpired:
         pass
     # The group can still contain descendants after its leader exits.
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
+    signal_group(process.pid, signal.SIGKILL)
     process.wait()
 
 
@@ -118,10 +128,8 @@ def execute(argv: list[str], timeout: float) -> tuple[int, bytes, bytes]:
         try:
             while process.poll() is None:
                 if time.monotonic() >= deadline:
-                    stop(process)
                     return 124, b"", b"release read deadline exceeded; not retrying\n"
                 if max(os.fstat(out.fileno()).st_size, os.fstat(err.fileno()).st_size) > OUTPUT_LIMIT:
-                    stop(process)
                     return 125, b"", b"release read output limit exceeded; not retrying\n"
                 time.sleep(min(0.05, max(0, deadline - time.monotonic())))
         finally:
