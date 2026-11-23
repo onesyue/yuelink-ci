@@ -41,8 +41,8 @@ class ClientSupportPolicyTests(unittest.TestCase):
         artifacts = {name: (name.removesuffix('-appimage') + ext) for name, ext in extensions.items()}
         value = {'schemaVersion': 1, 'keyId': V.CURRENT_KEY_ID, 'version': '9.9.9', 'channel': 'stable',
                  'publishedAt': '2026-10-15T00:00:00Z', 'expiresAt': '2026-11-14T00:00:00Z',
-                 'releaseUrl': V.RELEASE_URL, 'notes': 'Isolated policy schema fixture',
-                 'platforms': {name: {'url': f'https://{V.ASSET_HOST}/v9.9.9/YueLink-9.9.9-{artifact}', 'sha256': 'a'*64}
+                 'releaseUrl': 'https://yue.to/download.html', 'notes': 'Isolated policy schema fixture',
+                 'platforms': {name: {'url': f'https://yuetong.app/v9.9.9/YueLink-9.9.9-{artifact}', 'sha256': 'a'*64}
                                for name, artifact in artifacts.items()}}
         if policy: value['compatibility'] = copy.deepcopy(self.policy)
         return value
