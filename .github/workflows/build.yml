@@ -14,7 +14,7 @@ name: Build YueLink
 #   • vX.Y.Z signed tag → stable release
 #   • every non-stable tag is rejected before source/R2 access
 #   • workflow_dispatch
-#   • pull_request runs only the dial gate; release jobs stay on signed tags
+#   • pull_request runs dial verification and dependency scanning
 #
 # Analyze + integration tests live in ci.yml (master/PR/manual). The release
 # preflight below independently re-runs every hard gate, so a tag cannot race
@@ -95,6 +95,17 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  osv_scan:
+    name: PR dependency scan
+    # Fork PRs have no deploy key for the private source repository.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/osv-scan.yml
+    with:
+      # On pull_request there are no dispatch inputs. The dial gate uses master.
+      source_ref: master
+    secrets:
+      SRC_DEPLOY_KEY: ${{ secrets.SRC_DEPLOY_KEY }}
+
   plan:
     name: Plan
     if: github.event_name != 'pull_request'

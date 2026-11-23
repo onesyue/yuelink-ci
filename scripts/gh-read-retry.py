@@ -89,24 +89,29 @@ def retryable(stderr: bytes) -> bool:
         text))
 
 
-def signal_group(pid: int, sig: signal.Signals) -> None:
-    try:
-        os.killpg(pid, sig)
-    except ProcessLookupError:
-        return
-    except PermissionError as error:
-        if sys.platform != "darwin":
-            raise
-        # Darwin can report EPERM while the group only has zombie members.
+def signal_group(pgid: int, sig: signal.Signals) -> None:
+    for attempt in range(21):
         try:
-            states = subprocess.check_output(
-                ["/bin/ps", "-ax", "-o", "pgid=,stat="], text=True, timeout=5
-            )
-        except (OSError, subprocess.SubprocessError) as check_error:
-            raise error from check_error
-        for group, state in map(str.split, states.splitlines()):
-            if group == str(pid) and not state.startswith("Z"):
+            os.killpg(pgid, sig)
+            return
+        except ProcessLookupError:
+            return
+        except PermissionError as error:
+            if sys.platform != "darwin":
                 raise
+            # Retry the exit race before inspecting any remaining group members.
+            if attempt == 20:
+                try:
+                    members = subprocess.check_output(
+                        ["/bin/ps", "-axo", "pgid=,stat="], text=True, timeout=2
+                    )
+                except (OSError, subprocess.SubprocessError) as check_error:
+                    raise error from check_error
+                if not any(group == str(pgid) and not state.startswith("Z")
+                           for group, state in map(str.split, members.splitlines())):
+                    return
+                raise
+            time.sleep(0.05)
 
 
 def stop(process: subprocess.Popen) -> None:
