@@ -3,8 +3,10 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import select
 from pathlib import Path
 import shutil
+import signal
 import socket
 import socketserver
 import ssl
@@ -13,7 +15,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from test_release_source_binding_behavior import (
     BUILDER, SOURCE, source_proof, source_run, source_workflow,
@@ -118,7 +120,8 @@ class ReleaseReadRetryTests(unittest.TestCase):
         result = self.verifier("attestation", 1,
                                'unknown proof failure\nGet "https://api.github.com/read": EOF\n')
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(len(self.calls("attestation")), 1)
+        self.assertIn("unknown proof failure", result.stderr)
+        self.assertEqual(len(self.calls("attestation")), 1, result.stderr)
 
     def native_gh_tls_failure(self, certificate_rejection=False):
         """A loopback proxy closes a real gh TLS handshake; no external I/O."""
@@ -145,7 +148,8 @@ class ReleaseReadRetryTests(unittest.TestCase):
                 self.request.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
                 if context is None:
                     # ClientHello proves the native gh request reached TLS.
-                    self.server.hellos.append(self.request.recv(4096))
+                    with self.request.makefile("rb") as tls:
+                        self.server.hellos.append(tls.read(2))
                 else:
                     try:
                         with context.wrap_socket(self.request, server_side=True):
@@ -232,6 +236,67 @@ class ReleaseReadRetryTests(unittest.TestCase):
                 self.assertEqual(self.calls(), [])
 
     def test_attempt_deadline_kills_actual_descendant_and_never_returns_partial(self):
+        # The descendant publishes partial stdout before signaling readiness.
+        # It ignores TERM so the test requires the final group SIGKILL.
+        child = (
+            "import os,signal,sys; "
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+            "print('partial', flush=True); "
+            "os.write(int(sys.argv[1]), b'R'); signal.pause()"
+        )
+        parent = (
+            "import signal,subprocess,sys; "
+            "fd=int(sys.argv[1]); "
+            "subprocess.Popen([sys.executable, '-c', sys.argv[2], str(fd)], pass_fds=(fd,)); "
+            "signal.pause()"
+        )
+        read_fd, write_fd = os.pipe()
+        with os.fdopen(read_fd, "rb", buffering=0) as ready, os.fdopen(write_fd, "wb") as writer:
+            def clock_ticks():
+                yield 0.0
+                self.assertTrue(select.select([ready], [], [], 5)[0], "descendant did not start")
+                self.assertEqual(ready.read(1), b"R")
+                yield 0.5
+
+            popen = subprocess.Popen
+
+            def start_process(*args, **kwargs):
+                return popen(*args, **kwargs, pass_fds=(write_fd,))
+
+            with patch.object(m, "time") as clock, patch.object(m.subprocess, "Popen", start_process):
+                clock.monotonic.side_effect = clock_ticks()
+                code, stdout, _ = m.execute([sys.executable, "-c", parent, str(write_fd), child], 0.5)
+            writer.close()
+            self.assertEqual(code, 124)
+            self.assertEqual(stdout, b"")
+            self.assertTrue(select.select([ready], [], [], 5)[0], "descendant survived the deadline")
+            self.assertEqual(ready.read(1), b"")
+
+    def test_process_group_permission_error_rechecks_after_reaping_leader(self):
+        process = Mock(spec=subprocess.Popen, pid=123)
+        process.poll.return_value = 0
+        with patch.object(m.os, "killpg", side_effect=[
+            PermissionError(), ProcessLookupError(), ProcessLookupError(),
+        ]) as killpg:
+            m.stop(process)
+        process.poll.assert_called_once_with()
+        self.assertEqual(killpg.call_args_list, [
+            call(123, signal.SIGTERM), call(123, signal.SIGTERM), call(123, signal.SIGKILL),
+        ])
+
+    def test_process_group_permission_error_stays_fatal_if_signal_is_still_denied(self):
+        for status, attempts in ((None, 1), (0, 2)):
+            with self.subTest(leader_status=status):
+                process = Mock(spec=subprocess.Popen, pid=123)
+                process.poll.return_value = status
+                with patch.object(m.sys, "platform", "linux"), patch.object(
+                    m.os, "killpg", side_effect=PermissionError,
+                ) as killpg:
+                    with self.assertRaises(PermissionError):
+                        m.stop(process)
+                self.assertEqual(killpg.call_count, attempts)
+
+    def test_deadline_closes_the_descendant_socket_after_sigkill(self):
         descendant = (
             "import signal, socket, sys; "
             "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
@@ -324,10 +389,27 @@ class ReleaseReadRetryTests(unittest.TestCase):
 
     def test_total_deadline_prevents_another_attempt(self):
         argv = ["gh", "api", "repos/onesyue/yuelink-ci/commits/" + BUILDER]
-        with patch.object(m, "TOTAL_SECONDS", 1), patch.object(m, "execute", return_value=(
-                1, b"partial", b'Get "https://api.github.com/read": EOF\n')) as execute:
+        with patch.object(m, "TOTAL_SECONDS", 2), patch.object(m, "time") as clock, patch.object(
+            m, "execute", return_value=(1, b"partial", b'Get "https://api.github.com/read": EOF\n'),
+        ) as execute:
+            clock.monotonic.side_effect = (0.0, 0.0, 1.0)
             self.assertEqual(m.run(argv), 124)
-            self.assertEqual(execute.call_count, 1)
+            execute.assert_called_once()
+            clock.sleep.assert_not_called()
+
+    def test_oversized_stdout_or_stderr_discards_all_output(self):
+        program = (
+            "import os,signal,sys; "
+            "fd=int(sys.argv[1]); "
+            "os.write(3 - fd, b'partial'); "
+            "os.write(fd, b'x' * 65); signal.pause()"
+        )
+        for stream, fd in (("stdout", 1), ("stderr", 2)):
+            with self.subTest(stream=stream), patch.object(m, "OUTPUT_LIMIT", 64):
+                code, stdout, stderr = m.execute([sys.executable, "-c", program, str(fd)], 10)
+                self.assertEqual(code, 125)
+                self.assertEqual(stdout, b"")
+                self.assertEqual(stderr, b"release read output limit exceeded; not retrying\n")
 
     def test_output_limit_discards_both_streams(self):
         for oversized_stream in ("stdout", "stderr"):

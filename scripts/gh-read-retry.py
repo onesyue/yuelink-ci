@@ -89,7 +89,8 @@ def retryable(stderr: bytes) -> bool:
         text))
 
 
-def signal_group(pgid: int, sig: signal.Signals) -> None:
+def signal_group(process: subprocess.Popen, sig: signal.Signals) -> None:
+    pgid = process.pid
     for attempt in range(21):
         try:
             os.killpg(pgid, sig)
@@ -97,6 +98,9 @@ def signal_group(pgid: int, sig: signal.Signals) -> None:
         except ProcessLookupError:
             return
         except PermissionError as error:
+            # Reap the exited leader, then signal the same group for descendants.
+            if attempt == 0 and process.poll() is not None:
+                continue
             if sys.platform != "darwin":
                 raise
             # Retry the exit race before inspecting any remaining group members.
@@ -115,13 +119,13 @@ def signal_group(pgid: int, sig: signal.Signals) -> None:
 
 
 def stop(process: subprocess.Popen) -> None:
-    signal_group(process.pid, signal.SIGTERM)
+    signal_group(process, signal.SIGTERM)
     try:
         process.wait(timeout=1)
     except subprocess.TimeoutExpired:
         pass
     # The group can still contain descendants after its leader exits.
-    signal_group(process.pid, signal.SIGKILL)
+    signal_group(process, signal.SIGKILL)
     process.wait()
 
 
