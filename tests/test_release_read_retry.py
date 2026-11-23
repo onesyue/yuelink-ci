@@ -119,7 +119,8 @@ class ReleaseReadRetryTests(unittest.TestCase):
         result = self.verifier("attestation", 1,
                                'unknown proof failure\nGet "https://api.github.com/read": EOF\n')
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(len(self.calls("attestation")), 1)
+        self.assertIn("unknown proof failure", result.stderr)
+        self.assertEqual(len(self.calls("attestation")), 1, result.stderr)
 
     def native_gh_tls_failure(self, certificate_rejection=False):
         """A loopback proxy closes a real gh TLS handshake; no external I/O."""
