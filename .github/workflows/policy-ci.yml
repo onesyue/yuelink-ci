@@ -39,8 +39,9 @@ jobs:
       - name: Run offline policy regression suites
         run: |
           python3 -m venv "$RUNNER_TEMP/policy-tests"
-          "$RUNNER_TEMP/policy-tests/bin/python" -m pip install 'PyYAML==6.0.3'
-          "$RUNNER_TEMP/policy-tests/bin/python" -m unittest discover -s tests -p 'test_*.py' -v
+          export PATH="$RUNNER_TEMP/policy-tests/bin:$PATH"
+          python3 -m pip install 'PyYAML==6.0.3'
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Forbid retired Telegram bot handle
         run: python3 scripts/check_bot_handle.py
