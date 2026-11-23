@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import textwrap
@@ -27,13 +28,10 @@ curl() {
 sha256sum() {
   "$CHECKSUM_TOOL" "$@"
 }
-shellcheck() {
-  echo shellcheck >> "$CALLS"
-  if [ "$FAILURE" = shellcheck ]; then return 42; fi
-}
 """
 
 FAKE_ACTIONLINT = b"""#!/bin/sh
+if [ "$1" = -version ]; then echo 1.7.12; exit 0; fi
 echo actionlint >> "$CALLS"
 if [ "$FAILURE" = actionlint ]; then exit 41; fi
 """
@@ -41,7 +39,7 @@ if [ "$FAILURE" = actionlint ]; then exit 41; fi
 
 class PolicyLintFailurePathTests(unittest.TestCase):
     def run_lint_step(self, failure: str) -> tuple[int, list[str], bool]:
-        step = WORKFLOW.read_text().split("      - name: Lint workflows and shell scripts\n", 1)[1]
+        step = WORKFLOW.read_text().split("      - name: Install pinned actionlint\n", 1)[1]
         block = step.split("        run: |\n", 1)[1].split("\n\n", 1)[0]
         with tempfile.TemporaryDirectory(prefix="policy lint ") as directory:
             root = Path(directory)
@@ -53,9 +51,24 @@ class PolicyLintFailurePathTests(unittest.TestCase):
                 bundle.addfile(member, io.BytesIO(FAKE_ACTIONLINT))
 
             digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+            # Run the installed tools through the real policy entry. Suppress
+            # only recursive discovery inside this isolated test fixture.
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            python = bin_dir / "python3"
+            python.write_text('#!/bin/sh\nif [ "$1" = -m ] && [ "$2" = unittest ]; then exit 0; fi\n'
+                              'exec "$TEST_PYTHON" "$@"\n')
+            python.chmod(0o755)
+            shellcheck = bin_dir / "shellcheck"
+            shellcheck.write_text('#!/bin/sh\necho shellcheck >> "$CALLS"\n'
+                                  'if [ "$FAILURE" = shellcheck ]; then exit 42; fi\n')
+            shellcheck.chmod(0o755)
             calls = root / "calls"
             env = {
-                "PATH": os.environ["PATH"],
+                "PATH": f"{bin_dir}:{os.environ['PATH']}",
+                "TEST_PYTHON": sys.executable,
+                "GITHUB_PATH": str(root / "github-path"),
+                "GITHUB_ACTIONS": "true",
                 "RUNNER_TEMP": directory,
                 "ACTIONLINT_VERSION": "0.0.0-fixture",
                 "ACTIONLINT_ARCHIVE_SHA256": "0" * 64 if failure == "checksum" else digest,
@@ -65,7 +78,8 @@ class PolicyLintFailurePathTests(unittest.TestCase):
                 "FAILURE": failure,
             }
             result = subprocess.run(
-                ["bash", "-c", FAKE_COMMANDS + textwrap.dedent(block)],
+                ["bash", "-c", FAKE_COMMANDS + textwrap.dedent(block)
+                 + '\nexport PATH="$(cat "$GITHUB_PATH"):$PATH"\nscripts/check-policy.sh ci\n'],
                 cwd=ROOT, env=env, capture_output=True, text=True, timeout=10,
             )
             installed = (root / "actionlint-bin/actionlint").exists()
