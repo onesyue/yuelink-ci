@@ -13,7 +13,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from test_release_source_binding_behavior import (
     BUILDER, SOURCE, source_proof, source_run, source_workflow,
@@ -269,6 +269,26 @@ class ReleaseReadRetryTests(unittest.TestCase):
             # Only the descendant held this connection and it ignores SIGTERM.
             self.assertIsNotNone(connection)
             self.assertEqual(connection.recv(1), b"")
+
+    def test_darwin_zombie_only_group_can_finish(self):
+        process = Mock(pid=123)
+        with (
+            patch.object(m.sys, "platform", "darwin"),
+            patch.object(m.os, "killpg", side_effect=PermissionError),
+            patch.object(m.subprocess, "check_output", return_value="123 Z\n456 S\n"),
+        ):
+            m.stop(process)
+        process.wait.assert_called()
+
+    def test_darwin_permission_failure_is_kept_for_a_live_group(self):
+        process = Mock(pid=123)
+        with (
+            patch.object(m.sys, "platform", "darwin"),
+            patch.object(m.os, "killpg", side_effect=PermissionError),
+            patch.object(m.subprocess, "check_output", return_value="123 Z\n123 S\n"),
+            self.assertRaises(PermissionError),
+        ):
+            m.stop(process)
 
     def test_total_deadline_prevents_another_attempt(self):
         argv = ["gh", "api", "repos/onesyue/yuelink-ci/commits/" + BUILDER]

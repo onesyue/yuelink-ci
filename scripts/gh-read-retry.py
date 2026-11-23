@@ -89,20 +89,34 @@ def retryable(stderr: bytes) -> bool:
         text))
 
 
-def stop(process: subprocess.Popen) -> None:
+def signal_group(pid: int, sig: signal.Signals) -> None:
     try:
-        os.killpg(process.pid, signal.SIGTERM)
+        os.killpg(pid, sig)
     except ProcessLookupError:
-        pass
+        return
+    except PermissionError as error:
+        if sys.platform != "darwin":
+            raise
+        # Darwin can report EPERM while the group only has zombie members.
+        try:
+            states = subprocess.check_output(
+                ["/bin/ps", "-ax", "-o", "pgid=,stat="], text=True, timeout=5
+            )
+        except (OSError, subprocess.SubprocessError) as check_error:
+            raise error from check_error
+        for group, state in map(str.split, states.splitlines()):
+            if group == str(pid) and not state.startswith("Z"):
+                raise
+
+
+def stop(process: subprocess.Popen) -> None:
+    signal_group(process.pid, signal.SIGTERM)
     try:
         process.wait(timeout=1)
     except subprocess.TimeoutExpired:
         pass
     # The group can still contain descendants after its leader exits.
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
+    signal_group(process.pid, signal.SIGKILL)
     process.wait()
 
 
@@ -118,10 +132,8 @@ def execute(argv: list[str], timeout: float) -> tuple[int, bytes, bytes]:
         try:
             while process.poll() is None:
                 if time.monotonic() >= deadline:
-                    stop(process)
                     return 124, b"", b"release read deadline exceeded; not retrying\n"
                 if max(os.fstat(out.fileno()).st_size, os.fstat(err.fileno()).st_size) > OUTPUT_LIMIT:
-                    stop(process)
                     return 125, b"", b"release read output limit exceeded; not retrying\n"
                 time.sleep(min(0.05, max(0, deadline - time.monotonic())))
         finally:
