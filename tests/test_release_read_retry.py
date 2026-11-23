@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import socketserver
 import ssl
 import subprocess
@@ -231,18 +232,43 @@ class ReleaseReadRetryTests(unittest.TestCase):
                 self.assertEqual(self.calls(), [])
 
     def test_attempt_deadline_kills_actual_descendant_and_never_returns_partial(self):
-        pidfile = self.path / "child-pid"
-        program = ("import subprocess,sys,time,pathlib; "
-                   "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)']); "
-                   "pathlib.Path(sys.argv[1]).write_text(str(p.pid)); "
-                   "print('partial',flush=True);time.sleep(60)")
-        code, stdout, _ = m.execute([sys.executable, "-c", program, str(pidfile)], 0.5)
-        self.assertEqual(code, 124)
-        self.assertEqual(stdout, b"")
-        self.assertTrue(pidfile.exists())  # prove the descendant actually ran
-        child = subprocess.run(["ps", "-p", pidfile.read_text(), "-o", "stat="],
-                               capture_output=True, text=True)
-        self.assertTrue(child.returncode != 0 or child.stdout.strip().startswith("Z"), child.stdout)
+        descendant = (
+            "import signal, socket, sys; "
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+            "conn = socket.create_connection(('127.0.0.1', int(sys.argv[1])), timeout=20); "
+            "conn.sendall(b'R'); conn.recv(1)"
+        )
+        program = (
+            "import subprocess, sys; "
+            "print('partial', flush=True); "
+            "child = subprocess.Popen([sys.executable, '-c', sys.argv[1], sys.argv[2]]); "
+            "child.wait(timeout=20)"
+        )
+        with socket.create_server(("127.0.0.1", 0)) as listener:
+            listener.settimeout(5)
+            connection = None
+
+            def deadline_ticks():
+                nonlocal connection
+                yield 0.0
+                # Advance the helper's clock only after the real descendant is ready.
+                connection, _ = listener.accept()
+                self.addCleanup(connection.close)
+                connection.settimeout(5)
+                self.assertEqual(connection.recv(1), b"R")
+                yield 1.0
+
+            port = str(listener.getsockname()[1])
+            with patch.object(m, "time") as clock:
+                clock.monotonic.side_effect = deadline_ticks()
+                code, stdout, _ = m.execute(
+                    [sys.executable, "-c", program, descendant, port], 0.5
+                )
+            self.assertEqual(code, 124)
+            self.assertEqual(stdout, b"")
+            # Only the descendant held this connection and it ignores SIGTERM.
+            self.assertIsNotNone(connection)
+            self.assertEqual(connection.recv(1), b"")
 
     def test_total_deadline_prevents_another_attempt(self):
         argv = ["gh", "api", "repos/onesyue/yuelink-ci/commits/" + BUILDER]
