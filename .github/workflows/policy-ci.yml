@@ -95,7 +95,21 @@ jobs:
           ref: ${{ inputs.yuelink_sha }}
           ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
           fetch-depth: 0
+          submodules: recursive
           persist-credentials: false
+      - name: Checkout mihomo upgrade-compat tools
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.sha }}
+          path: .mihomo-upgrade-compat-tools
+          persist-credentials: false
+          sparse-checkout: scripts/check-mihomo-upgrade-compat.py
+          sparse-checkout-cone-mode: false
+
+      - name: Verify mihomo fork ledger upgrade compatibility
+        run: python3 .mihomo-upgrade-compat-tools/scripts/check-mihomo-upgrade-compat.py --source-root .
+
       - name: Require version bump for shipped source changes
         run: bash scripts/check-version-bump.sh --ref HEAD
       - name: Test version gate failure paths

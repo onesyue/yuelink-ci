@@ -97,6 +97,19 @@ jobs:
       - name: Verify signed native QUIC source export
         run: python3 core/mihomo/third_party/verify_quic_source.py
 
+      - name: Checkout mihomo upgrade-compat tools
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink-ci
+          ref: ${{ github.sha }}
+          path: .mihomo-upgrade-compat-tools
+          persist-credentials: false
+          sparse-checkout: scripts/check-mihomo-upgrade-compat.py
+          sparse-checkout-cone-mode: false
+
+      - name: Verify mihomo fork ledger upgrade compatibility
+        run: python3 .mihomo-upgrade-compat-tools/scripts/check-mihomo-upgrade-compat.py --source-root .
+
       - name: Set up Flutter
         uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
         with:

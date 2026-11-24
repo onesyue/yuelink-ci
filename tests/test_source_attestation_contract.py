@@ -26,6 +26,7 @@ WORKFLOW_MARKERS = (
     '[[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]',
     "git show-ref --verify --quiet refs/remotes/origin/master",
     'git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/master',
+    "python3 .mihomo-upgrade-compat-tools/scripts/check-mihomo-upgrade-compat.py --source-root .",
     "bash scripts/ci/test_android_release_signing.sh",
     'dart format --output=none --set-exit-if-changed "${changed_files[@]}"',
     "flutter analyze --no-fatal-infos",
@@ -406,7 +407,7 @@ def contract_issues(
         )
     # Source contracts use exact-builder tools for signed baseline selection;
     # macOS uses the same binding for its machine-test parser. B5 remains intact.
-    for job, expected in (("source_contract", 1), ("macos_integration", 1)):
+    for job, expected in (("source_contract", 2), ("macos_integration", 1)):
         match = re.search(rf"(?ms)^  {job}:\n(.*?)(?=^  [a-z_]+:|\Z)", workflow)
         block = match.group(1) if match else ""
         if block.count("ref: ${{ github.sha }}") != expected:
