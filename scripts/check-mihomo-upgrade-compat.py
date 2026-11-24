@@ -248,9 +248,11 @@ def patch_id_for(repo: Path, sha: str) -> str | None:
         capture_output=True,
         check=False,
         text=True,
+        cwd=str(repo),
     )
     if ident.returncode != 0:
-        raise CompatError(f"git patch-id failed for {sha}")
+        detail = (ident.stderr or ident.stdout).strip() or f"exit {ident.returncode}"
+        raise CompatError(f"git patch-id failed for {sha}: {detail}")
     line = ident.stdout.strip()
     if not line:
         return None

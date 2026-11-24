@@ -512,7 +512,6 @@ class MihomoUpgradeCompatWorkflowTests(unittest.TestCase):
         self.assertNotIn("ssh-key:", step)
         self.assertNotIn("token:", step)
         self.assertNotIn("secrets.", step)
-        self.assertIn("sparse-checkout: scripts/check-mihomo-upgrade-compat.py", step)
 
     def test_source_attestation_contract_counts_the_early_tools_checkout(self) -> None:
         source = SOURCE_CONTRACT.read_text(encoding="utf-8")

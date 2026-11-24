@@ -101,10 +101,16 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink-ci
+          # workflow_dispatch: github.sha is the selected yuelink-ci commit,
+          # the same reviewed public-builder ref whose workflow is running.
+          # The patch-id floor is this commit's fixture, not inputs.source_sha
+          # and not a file from the private source under test.
           ref: ${{ github.sha }}
           path: .mihomo-upgrade-compat-tools
           persist-credentials: false
-          sparse-checkout: scripts/check-mihomo-upgrade-compat.py
+          sparse-checkout: |
+            scripts/check-mihomo-upgrade-compat.py
+            tests/fixtures/mihomo-upgrade-compat/reviewed-patch-floor.json
           sparse-checkout-cone-mode: false
 
       - name: Verify mihomo fork ledger upgrade compatibility
