@@ -41,11 +41,18 @@ class PlatformScopeTests(unittest.TestCase):
         self.assertIs(decision["auth"], False)
 
     def test_android_row_change_runs_only_android(self) -> None:
-        head = self.workflow.replace("sample_timeout: 12s", "sample_timeout: 13s", 1)
-        self.assertNotEqual(head, self.workflow)
-        decision = scope.decide("pull_request", head, _reader, self.workflow, _reader)
+        def head_reader(path: str) -> bytes | None:
+            data = _reader(path)
+            if path == scope.MATRIX_FILE and data is not None:
+                return data.replace(b"sample_timeout: 12s", b"sample_timeout: 13s", 1)
+            return data
+
+        self.assertNotEqual(head_reader(scope.MATRIX_FILE), _reader(scope.MATRIX_FILE))
+        decision = scope.decide(
+            "pull_request", self.workflow, head_reader, self.workflow, _reader
+        )
         self.assertEqual(decision["names"], ["android"])
-        self.assertNotIn("android", decision["skipped"])
+        self.assertEqual([row["name"] for row in decision["rows"]], ["android"])
         self.assertIs(decision["ios"], False)
         self.assertIs(decision["auth"], False)
 

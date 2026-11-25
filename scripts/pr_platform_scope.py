@@ -24,6 +24,7 @@ from pathlib import Path
 DIAL_PLATFORMS = ("windows", "macos", "linux", "android")
 CALLER = ".github/workflows/build.yml"
 SCOPE_SCRIPT = "scripts/pr_platform_scope.py"
+MATRIX_FILE = "scripts/dial_platform_matrix.yml"
 Reader = Callable[[str], bytes | None]
 
 
@@ -41,27 +42,37 @@ def _job(workflow: str, name: str) -> str:
     return match.group(1)
 
 
-def _matrix_rows(job: str) -> dict[str, str]:
-    match = re.search(r"(?ms)^        include:\n(.*?)(?=^    steps:\n)", job)
-    if match is None:
-        raise ScopeError("dial matrix include is missing")
+def _matrix_rows(text: str) -> tuple[dict[str, str], dict[str, dict[str, object]]]:
     rows: dict[str, str] = {}
+    records: dict[str, dict[str, object]] = {}
     current: str | None = None
     buf: list[str] = []
-    for line in match.group(1).splitlines(keepends=True):
-        row = re.match(r"          - name: (\w+)\n", line)
+    record: dict[str, object] = {}
+
+    def flush() -> None:
+        if current is not None:
+            rows[current] = "".join(buf)
+            records[current] = record
+
+    for line in text.splitlines(keepends=True):
+        row = re.match(r"- name: (\w+)\n", line)
         if row:
-            if current is not None:
-                rows[current] = "".join(buf)
+            flush()
             current = row.group(1)
             buf = [line]
-        elif current is not None:
+            record = {"name": current}
+            continue
+        field = re.match(r"  ([A-Za-z0-9_]+): (.+)\n", line)
+        if current is not None and field:
+            value: object = field.group(2)
+            if isinstance(value, str) and re.fullmatch(r"\d+", value):
+                value = int(value)
+            record[field.group(1)] = value
             buf.append(line)
-    if current is not None:
-        rows[current] = "".join(buf)
+    flush()
     if set(rows) != set(DIAL_PLATFORMS):
         raise ScopeError(f"dial platforms are {sorted(rows)}")
-    return rows
+    return rows, records
 
 
 def _steps(job: str) -> list[str]:
@@ -110,13 +121,20 @@ def _digest(text: str, reader: Reader) -> str:
     return hashlib.sha256(b"\n".join(chunk)).hexdigest()
 
 
+def _load_matrix(reader: Reader) -> tuple[dict[str, str], dict[str, dict[str, object]]]:
+    raw = reader(MATRIX_FILE)
+    if raw is None:
+        raise ScopeError(f"missing {MATRIX_FILE}")
+    return _matrix_rows(raw.decode())
+
+
 def unit_digests(workflow: str, reader: Reader) -> dict[str, str]:
     dial = _job(workflow, "dial_gate")
-    rows = _matrix_rows(dial)
-    include_at = dial.find("\n        include:\n")
-    if include_at < 0:
-        raise ScopeError("dial matrix include is missing")
-    shared = dial[:include_at] + "\n" + _job(workflow, "baseline_binding")
+    rows, _records = _load_matrix(reader)
+    steps_at = dial.find("\n    steps:\n")
+    if steps_at < 0:
+        raise ScopeError("job has no steps")
+    shared = dial[:steps_at] + "\n" + _job(workflow, "baseline_binding")
     shared += "\n" + _job(workflow, "platform_scope")
     steps = _steps(dial)
     digests: dict[str, str] = {}
@@ -128,12 +146,13 @@ def unit_digests(workflow: str, reader: Reader) -> dict[str, str]:
     return digests
 
 
-def _all(digests: Mapping[str, str]) -> dict[str, object]:
+def _all(digests: Mapping[str, str], rows: list[dict[str, object]]) -> dict[str, object]:
     return {
         "names": list(DIAL_PLATFORMS),
         "skipped": [],
         "ios": True,
         "auth": True,
+        "rows": rows,
         "digests": dict(digests),
     }
 
@@ -147,18 +166,21 @@ def decide(
 ) -> dict[str, object]:
     """Return the platforms to run. Unproved comparisons run every platform."""
     head = unit_digests(head_workflow, head_reader)
+    _texts, records = _load_matrix(head_reader)
+    every = [records[name] for name in DIAL_PLATFORMS]
     if event != "pull_request" or base_workflow is None or base_reader is None:
-        return _all(head)
+        return _all(head, every)
     try:
         base = unit_digests(base_workflow, base_reader)
     except ScopeError:
-        return _all(head)
+        return _all(head, every)
     names = [platform for platform in DIAL_PLATFORMS if head[platform] != base[platform]]
     return {
         "names": names,
         "skipped": [platform for platform in DIAL_PLATFORMS if platform not in names],
         "ios": head["ios"] != base["ios"],
         "auth": head["auth"] != base["auth"],
+        "rows": [records[name] for name in names],
         "digests": head,
     }
 
@@ -196,6 +218,7 @@ def emit(scope: Mapping[str, object], destination: Path | None) -> None:
         "names=" + json.dumps(names, separators=(",", ":")),
         "ios=" + ("true" if payload["ios"] else "false"),
         "auth=" + ("true" if payload["auth"] else "false"),
+        "rows=" + json.dumps(scope["rows"], separators=(",", ":")),
     ]
     text = "\n".join(lines) + "\n"
     github = os.environ.get("GITHUB_OUTPUT")

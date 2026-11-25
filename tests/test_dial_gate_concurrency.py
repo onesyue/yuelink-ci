@@ -107,7 +107,12 @@ def validate_dial_gate_concurrency(workflow: str) -> None:
         raise DialConcurrencyError(
             "other platforms must stay on separate groups"
         )
-    macos_rows = re.findall(r"(?m)^            os: macos-26$", job)
+    inline = re.findall(r"(?m)^            os: .*$", job)
+    if inline:
+        macos_rows = [row for row in inline if row.strip() == "os: macos-26"]
+    else:
+        matrix = (ROOT / "scripts" / "dial_platform_matrix.yml").read_text(encoding="utf-8")
+        macos_rows = re.findall(r"(?m)^  os: macos-26$", matrix)
     if len(macos_rows) != 1:
         raise DialConcurrencyError(
             f"expected one macos-26 dial leg, found {len(macos_rows)}"
@@ -372,10 +377,14 @@ class DialGateConcurrencyTests(unittest.TestCase):
             validate_dial_gate_concurrency(mutated)
 
     def test_missing_macos_leg_is_rejected(self) -> None:
-        needle = "            os: macos-26\n"
+        needle = "include: ${{ fromJSON(needs.platform_scope.outputs.rows) }}"
         self.assertEqual(self.workflow.count(needle), 1)
-        mutated = self.workflow.replace(needle, "            os: macos-14\n", 1)
-        self.assertEqual(mutated.count(needle), 0)
+        mutated = self.workflow.replace(
+            needle,
+            "include:\n          - name: linux\n            os: ubuntu-24.04",
+            1,
+        )
+        self.assertNotIn("os: macos-26", mutated)
         with self.assertRaises(DialConcurrencyError):
             validate_dial_gate_concurrency(mutated)
 

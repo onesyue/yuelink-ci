@@ -75,10 +75,11 @@ def one_dial_issues(build: str, dial: str, sync: str, ios: str) -> list[str]:
         issues.append("release no longer blocks on the dial summary")
     if TABLE not in build:
         issues.append("dial table shape changed")
+    matrix = (ROOT / "scripts" / "dial_platform_matrix.yml").read_text(encoding="utf-8")
     for name in ("windows", "macos", "linux", "android"):
-        if f"\n          - name: {name}\n" not in dial:
+        if f"\n- name: {name}\n" not in "\n" + matrix:
             issues.append(f"missing platform {name}")
-    if "\n          - name: ios\n" in dial:
+    if "\n- name: ios\n" in "\n" + matrix or "\n          - name: ios\n" in dial:
         issues.append("iOS dial must not block the gate")
     if "ios_unsigned_compile:" not in dial:
         issues.append("unsigned iOS compilation is missing")

@@ -89,6 +89,7 @@ jobs:
       names: ${{ steps.scope.outputs.names }}
       ios: ${{ steps.scope.outputs.ios }}
       auth: ${{ steps.scope.outputs.auth }}
+      rows: ${{ steps.scope.outputs.rows }}
     steps:
       - name: Checkout this builder revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -132,7 +133,7 @@ jobs:
           retention-days: 14
   dial_gate:
     needs: [baseline_binding, platform_scope]
-    if: contains(fromJSON(needs.platform_scope.outputs.names), matrix.name)
+    if: needs.platform_scope.outputs.names != '[]'
     name: Dial gate (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.timeout_minutes }}
@@ -156,43 +157,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: windows
-            os: windows-latest
-            kind: host
-            platform: windows
-            goos: windows
-            goarch: amd64
-            singbox: sing-box-1.14.4-windows-amd64.zip
-            timeout_minutes: 45
-            sample_timeout: 8s
-          - name: macos
-            os: macos-26
-            kind: host
-            platform: macos
-            goos: darwin
-            goarch: arm64
-            singbox: sing-box-1.14.4-darwin-arm64.tar.gz
-            timeout_minutes: 45
-            sample_timeout: 8s
-          - name: linux
-            os: ubuntu-24.04
-            kind: host
-            platform: linux
-            goos: linux
-            goarch: amd64
-            singbox: sing-box-1.14.4-linux-amd64.tar.gz
-            timeout_minutes: 45
-            sample_timeout: 8s
-          - name: android
-            os: ubuntu-24.04
-            kind: android
-            platform: android
-            goos: android
-            goarch: amd64
-            singbox: sing-box-1.14.4-android-amd64.tar.gz
-            timeout_minutes: 90
-            sample_timeout: 12s
+        include: ${{ fromJSON(needs.platform_scope.outputs.rows) }}
 
     steps:
       - name: Checkout dial-gate candidate
