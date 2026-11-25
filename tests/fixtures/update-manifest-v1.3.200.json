@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "keyId": "update-manifest-2026-01",
+  "version": "1.3.200",
+  "channel": "stable",
+  "publishedAt": "2026-11-25T03:05:47Z",
+  "expiresAt": "2026-12-30T03:05:47Z",
+  "releaseUrl": "https://yue.to/download.html",
+  "notes": "- 连续切换节点时，即使前一次切换的响应较慢，新的连接也会使用最后一次成功选中的节点。\n",
+  "notesEn": "- Rapid node switching now keeps the selected node and new connections in sync, including when an earlier switch takes longer to acknowledge.\n",
+  "sourceCommit": "438ab32c8b61d20924fd49b63044d2d223e34afa",
+  "sha256SumsSha256": "47d9895f04ae9c9cf2b59d4bc86afd51f35773d4c7d8520f8b0dd22a5fe314b2",
+  "platforms": {
+    "android-arm64-v8a": {
+      "url": "https://yuetong.app/v1.3.200/YueLink-1.3.200-android-arm64-v8a.apk",
+      "sha256": "595a0a5de3cc73d54a585f552be52baea5491005ca4fa2ecdbd9d46bfba09728"
+    },
+    "android-armeabi-v7a": {
+      "url": "https://yuetong.app/v1.3.200/YueLink-1.3.200-android-armeabi-v7a.apk",
+      "sha256": "e93ae5faf7ac55c6449146f24d350063906b27ff0921aa343c56ece48d110443"
+    },
+    "android-x86_64": {
+      "url": "https://yuetong.app/v1.3.200/YueLink-1.3.200-android-x86_64.apk",
+      "sha256": "8a1bffb885cb31c9daea8adb89d011bc5cb9716edcf1da07df6450ceb6f3b0e7"
+    },
+    "android-universal": {
+      "url": "https://yuetong.app/v1.3.200/YueLink-1.3.200-android-universal.apk",
+      "sha256": "f4f92d467149c8c8634ae8d262c71ae7f103e8153bca00495fbd3d4c96449bb8"
+    },
+    "ios": {
+      "url": "https://yuetong.app/v1.3.200/YueLink-1.3.200-ios.ipa",
+      "sha256": "37c44c970a64cdc8a0ef250ae4a8e0c88812dd7554fe00074d9a85df7c2aef67"
+    },
+    "macos-universal": {
+      "url": "https://yuetong.app/v1.3.200/YueLink-1.3.200-macos-universal.dmg",
+      "sha256": "e991a206ca06b542e5ae63b7a2f81974d5c1ef38929ebe471010baba582d9098",
+      "minimumSystemVersion": "13.0"
+    },
+    "windows-amd64-setup": {
+      "url": "https://yuetong.app/v1.3.200/YueLink-1.3.200-windows-amd64-setup.exe",
+      "sha256": "1090aefc435fd1c7f12a9afa2bc386cfa3eaf04ef7c7d5a33e2c4faf7485da3b"
+    },
+    "windows-amd64-portable": {
+      "url": "https://yuetong.app/v1.3.200/YueLink-1.3.200-windows-amd64-portable.zip",
+      "sha256": "d8762dd72ae9cf2877e2a6e8d8274e202b9a7263aa1c060c9c1be48fe8df5262"
+    },
+    "linux-amd64-appimage": {
+      "url": "https://yuetong.app/v1.3.200/YueLink-1.3.200-linux-amd64.AppImage",
+      "sha256": "14edf64f5b1c66b26b96531f9fe489e977a1cfe2957e89aa38e2e9769efcd03c"
+    }
+  },
+  "compatibility": {
+    "schemaVersion": 1,
+    "policyRevision": 1,
+    "effectiveAt": "2026-10-15T00:00:00Z",
+    "transitionDays": 90,
+    "enforcement": "observe",
+    "unknownClient": "unverified",
+    "releases": [
+      {
+        "product": "sing-box",
+        "version": "1.13.21",
+        "releasedAt": "2026-08-30T11:24:04Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.13.21/sing-box-1.13.21-linux-arm64.tar.gz",
+          "sha256": "3e30b876c9a93c19e503e2a2d6249cf05e6a26766553d4b61e1daf48223f304f"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      },
+      {
+        "product": "sing-box",
+        "version": "1.14.3",
+        "releasedAt": "2026-10-09T05:35:00Z",
+        "evidence": {
+          "url": "https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-linux-arm64.tar.gz",
+          "sha256": "29dae24d76bea3bc62d07dd3e60cfc12003de7debbd6b768df9be9c68360174e"
+        },
+        "certifications": [],
+        "maintainedLatest": null
+      }
+    ],
+    "policySourceSha256": "f1a12d625595963fb3c16b69ac216101c733fd21f18aad8b95c7ccdefada58b4"
+  },
+  "promotionEvidence": {
+    "schemaVersion": 1,
+    "candidateSha256": "3dfc7c12f9a8a9e434b0273b1a4b91f19ed51dce6426dfd2a73c08a20a015308",
+    "sha256SumsSha256": "47d9895f04ae9c9cf2b59d4bc86afd51f35773d4c7d8520f8b0dd22a5fe314b2",
+    "payloadBundleSha256": "1a68fc24ff9272000a422ea2ed881a49b3e53e3293b29e831b66d9938ae48c2d",
+    "payloadCount": 19
+  },
+  "sig": "ed25519:nKBDDeulWTZwRLOTEzoHwZ2S5l4GHkQViCaQRF1iiI48IcjW3wAoVrazM5uXeKV8AEcytu5rrV9hnWWbxnG+AQ=="
+}
