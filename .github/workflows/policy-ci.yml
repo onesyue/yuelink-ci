@@ -113,7 +113,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Verify mihomo fork ledger upgrade compatibility
-        run: python3 .mihomo-upgrade-compat-tools/scripts/check-mihomo-upgrade-compat.py --source-root .
+        run: python3 .mihomo-upgrade-compat-tools/scripts/check-mihomo-upgrade-compat.py --source-root . --fetch-ci-history
 
       - name: Require version bump for shipped source changes
         run: bash scripts/check-version-bump.sh --ref HEAD

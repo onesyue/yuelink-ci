@@ -26,7 +26,7 @@ WORKFLOW_MARKERS = (
     '[[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]',
     "git show-ref --verify --quiet refs/remotes/origin/master",
     'git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/master',
-    "python3 .mihomo-upgrade-compat-tools/scripts/check-mihomo-upgrade-compat.py --source-root .",
+    "python3 .mihomo-upgrade-compat-tools/scripts/check-mihomo-upgrade-compat.py --source-root . --fetch-ci-history",
     "bash scripts/ci/test_android_release_signing.sh",
     'dart format --output=none --set-exit-if-changed "${changed_files[@]}"',
     "flutter analyze --no-fatal-infos",

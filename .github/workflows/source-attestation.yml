@@ -114,7 +114,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Verify mihomo fork ledger upgrade compatibility
-        run: python3 .mihomo-upgrade-compat-tools/scripts/check-mihomo-upgrade-compat.py --source-root .
+        run: python3 .mihomo-upgrade-compat-tools/scripts/check-mihomo-upgrade-compat.py --source-root . --fetch-ci-history
 
       - name: Set up Flutter
         uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1

@@ -19,7 +19,7 @@ SOURCE_CONTRACT = ROOT / "tests/test_source_attestation_contract.py"
 DEFAULT_FLOOR = ROOT / "tests/fixtures/mihomo-upgrade-compat/reviewed-patch-floor.json"
 COMMAND = (
     "python3 .mihomo-upgrade-compat-tools/scripts/"
-    "check-mihomo-upgrade-compat.py --source-root ."
+    "check-mihomo-upgrade-compat.py --source-root . --fetch-ci-history"
 )
 TOOLS_CHECKOUT_PATH = "path: .mihomo-upgrade-compat-tools"
 
@@ -343,6 +343,65 @@ class MihomoHistoryAndFloorTests(unittest.TestCase):
         with self.assertRaisesRegex(self.checker.CompatError, "history unavailable"):
             self.checker.check_source_root(parent, floor_path=self.floor_path())
 
+    def ci_source(self, *, shallow: bool = False) -> Path:
+        parent = populated_source(self.root / "ci", self.fork)
+        checkout = parent / "core/mihomo"
+        donor = self.fork["mihomo"].as_uri()
+        shutil.rmtree(checkout)
+        depth = ["--depth", "1"] if shallow else []
+        git(parent, "clone", "--no-tags", *depth, donor, str(checkout))
+        for authority in (self.checker.UPSTREAM_URL, self.checker.FORK_URL):
+            git(checkout, "config", "--add", f"url.{donor}.insteadOf", authority)
+        return parent
+
+    def test_ci_checks_an_annotated_upstream_tag_and_exact_shallow_fork_history(self) -> None:
+        repo = self.fork["mihomo"]
+        git(repo, "tag", "-d", "v1.19.31")
+        git(repo, "tag", "-a", "v1.19.31", self.fork["base"], "-m", "upstream stable")
+        parent = self.ci_source(shallow=True)
+        checkout = parent / "core/mihomo"
+        self.assertEqual(git(checkout, "rev-parse", "--is-shallow-repository").stdout.strip(), "true")
+        self.assertEqual(git(checkout, "tag", "--list").stdout.strip(), "")
+        self.checker.check_source_root(parent, floor_path=self.floor_path(), fetch_ci_history=True)
+        self.assertEqual(git(checkout, "rev-parse", "--is-shallow-repository").stdout.strip(), "false")
+        self.assertEqual(git(checkout, "rev-parse", "HEAD").stdout.strip(), self.fork["pin"])
+        self.assertEqual(git(checkout, "tag", "--list").stdout.strip(), "v1.19.31")
+        self.assertEqual(git(checkout, "cat-file", "-t", "refs/tags/v1.19.31").stdout.strip(), "tag")
+        self.assertEqual(git(checkout, "rev-parse", "v1.19.31^{commit}").stdout.strip(), self.fork["base"])
+
+    def test_ci_rejects_missing_upstream_tag_even_with_matching_cached_tag(self) -> None:
+        parent = self.ci_source()
+        git(parent / "core/mihomo", "tag", "v1.19.31", self.fork["base"])
+        git(self.fork["mihomo"], "tag", "-d", "v1.19.31")
+        with self.assertRaisesRegex(self.checker.CompatError, "git fetch"):
+            self.checker.check_source_root(parent, floor_path=self.floor_path(), fetch_ci_history=True)
+
+    def test_ci_rejects_wrong_canonical_tag_target(self) -> None:
+        parent = self.ci_source()
+        git(self.fork["mihomo"], "tag", "-f", "v1.19.31", self.fork["assessed"])
+        with self.assertRaisesRegex(self.checker.CompatError, "does not point at the declared base"):
+            self.checker.check_source_root(parent, floor_path=self.floor_path(), fetch_ci_history=True)
+
+    def test_ci_does_not_replace_a_conflicting_cached_tag(self) -> None:
+        parent = self.ci_source()
+        checkout = parent / "core/mihomo"
+        git(checkout, "tag", "v1.19.31", self.fork["pin"])
+        with self.assertRaisesRegex(self.checker.CompatError, "git fetch"):
+            self.checker.check_source_root(parent, floor_path=self.floor_path(), fetch_ci_history=True)
+        self.assertEqual(git(checkout, "rev-parse", "v1.19.31^{commit}").stdout.strip(), self.fork["pin"])
+
+    def test_reused_stable_tag_must_match_the_independently_reviewed_base(self) -> None:
+        parent = self.ci_source()
+        floor = {**self.fork["floor"], "stable_tag": "v1.19.31", "base": self.fork["assessed"]}
+        with self.assertRaisesRegex(self.checker.CompatError, "differs from the reviewed floor"):
+            self.checker.check_source_root(parent, floor_path=self.floor_path(floor), fetch_ci_history=True)
+
+    def test_ci_rejects_wrong_checkout_before_fetching(self) -> None:
+        parent = self.ci_source()
+        git(parent / "core/mihomo", "checkout", "--detach", self.fork["base"])
+        with self.assertRaisesRegex(self.checker.CompatError, "checked-out mihomo HEAD"):
+            self.checker.check_source_root(parent, floor_path=self.floor_path(), fetch_ci_history=True)
+
     def test_missing_stable_tag_is_rejected(self) -> None:
         git(self.fork["mihomo"], "tag", "-d", "v1.19.31")
         parent = populated_source(self.root / "notag", self.fork)
@@ -497,7 +556,7 @@ class MihomoHistoryAndFloorTests(unittest.TestCase):
 
 
 class MihomoUpgradeCompatWorkflowTests(unittest.TestCase):
-    def test_source_attestation_runs_the_offline_checker_before_flutter(self) -> None:
+    def test_source_attestation_fetches_provenance_for_the_checker_before_flutter(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn(TOOLS_CHECKOUT_PATH, workflow)
         self.assertIn(COMMAND, workflow)

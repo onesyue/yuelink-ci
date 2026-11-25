@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Read-only mihomo ledger and patch-preserving upgrade checks.
+"""Mihomo ledger and patch-preserving upgrade checks.
 
 Default mode never writes, never fetches, and never treats a newer assessed
 stable tag as an adopted runtime pin. Ancestry is judged only against the
 ledger's declared base. When --source-root is used, a reviewed patch-id floor
 shipped in this repository is applied even if --previous-ledger is omitted.
 Source-ledger retired_backports alone cannot drop a floor patch-id.
+CI uses --fetch-ci-history to acquire the declared tag from canonical upstream.
 """
 from __future__ import annotations
 
@@ -17,6 +18,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+UPSTREAM_URL = "https://github.com/MetaCubeX/mihomo.git"
+FORK_URL = "https://github.com/onesyue/mihomo.git"
 LEDGER_RELATIVE = Path("docs/governance/mihomo-fork-ledger.json")
 MIHOMO_RELATIVE = Path("core/mihomo")
 DEFAULT_FLOOR = (
@@ -323,6 +326,8 @@ def check_source_root(
     source_root: Path,
     previous: dict[str, Any] | None = None,
     floor_path: Path | None = DEFAULT_FLOOR,
+    *,
+    fetch_ci_history: bool = False,
 ) -> None:
     ledger = load_ledger(source_root / LEDGER_RELATIVE)
     inspect(ledger)
@@ -332,14 +337,31 @@ def check_source_root(
         "client gitlink differs from governed pinned_head",
     )
     repo = mihomo_repository(source_root)
+    floor = load_floor(floor_path) if floor_path is not None else None
+    if fetch_ci_history:
+        _require(
+            resolve_commit(repo, "HEAD", "checked-out fork") == gitlink,
+            "checked-out mihomo HEAD differs from the signed source gitlink",
+        )
+        # The fork need not publish upstream release tags. A non-forcing,
+        # explicit refspec rejects missing upstream or conflicting local tags.
+        ref = f"refs/tags/{ledger['upstream']['stable_tag']}"
+        git(repo, "fetch", "--no-tags", "--no-recurse-submodules", UPSTREAM_URL, f"{ref}:{ref}")
+        if git(repo, "rev-parse", "--is-shallow-repository").stdout.strip() == "true":
+            git(repo, "fetch", "--no-tags", "--no-recurse-submodules", "--unshallow", FORK_URL, gitlink)
     verify_declared_base_ancestry(repo, ledger)
     computed = non_merge_patch_ids(
         repo,
         ledger["upstream"]["base"],
         ledger["fork"]["pinned_head"],
     )
-    if floor_path is not None:
-        enforce_floor(computed, load_floor(floor_path))
+    if floor is not None:
+        enforce_floor(computed, floor)
+        if floor.get("stable_tag") == ledger["upstream"]["stable_tag"]:
+            _require(
+                floor.get("base") == ledger["upstream"]["base"],
+                "declared base differs from the reviewed floor for this stable tag",
+            )
     if previous is not None:
         validate_transition(ledger, previous)
 
@@ -347,6 +369,11 @@ def check_source_root(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, help="YueLink checkout containing the ledger and gitlink")
+    parser.add_argument(
+        "--fetch-ci-history",
+        action="store_true",
+        help="fetch the exact upstream tag and any missing fork history before verification",
+    )
     parser.add_argument("--ledger", type=Path, help="ledger JSON to inspect without a checkout")
     parser.add_argument("--gitlink", help="optional 40-character gitlink SHA when using --ledger")
     parser.add_argument(
@@ -361,6 +388,8 @@ def main(argv: list[str] | None = None) -> int:
         help="reviewed patch-id floor (default: the shipped fixture when using --source-root)",
     )
     args = parser.parse_args(argv)
+    if args.fetch_ci_history and args.source_root is None:
+        parser.error("--fetch-ci-history requires --source-root")
     if args.source_root is None and args.ledger is None:
         parser.print_usage(sys.stderr)
         return 2
@@ -368,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
         previous = load_ledger(args.previous_ledger) if args.previous_ledger else None
         if args.source_root is not None:
             floor = args.floor if args.floor is not None else DEFAULT_FLOOR
-            check_source_root(args.source_root, previous, floor_path=floor)
+            check_source_root(args.source_root, previous, floor_path=floor, fetch_ci_history=args.fetch_ci_history)
         else:
             assert args.ledger is not None
             ledger = load_ledger(args.ledger)

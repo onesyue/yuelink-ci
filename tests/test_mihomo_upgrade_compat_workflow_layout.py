@@ -98,7 +98,8 @@ def materialize_tools_checkout(dest: Path, paths: tuple[str, ...], *, source: Pa
         shutil.copy2(src, target)
 
 
-def official_checker_command() -> list[str]:
+def offline_checker_command() -> list[str]:
+    """Exercise the chain after source history is present, without changing donor refs."""
     return ["python3", *COMMAND.split()[1:]]
 
 
@@ -255,7 +256,7 @@ class ToolsCheckoutLayoutSimulationTests(unittest.TestCase):
             materialize_tools_checkout(tools, (SCRIPT_RELATIVE,))
             self.assertEqual(listed_tools_files(tools), [SCRIPT_RELATIVE])
             result = subprocess.run(
-                official_checker_command(),
+                offline_checker_command(),
                 cwd=workspace,
                 capture_output=True,
                 text=True,
@@ -277,7 +278,7 @@ class ToolsCheckoutLayoutSimulationTests(unittest.TestCase):
             materialize_tools_checkout(tools, paths)
             self.assertEqual(set(listed_tools_files(tools)), set(paths))
             result = subprocess.run(
-                official_checker_command(),
+                offline_checker_command(),
                 cwd=workspace,
                 capture_output=True,
                 text=True,
@@ -306,7 +307,7 @@ class ToolsCheckoutLayoutSimulationTests(unittest.TestCase):
                 materialize_tools_checkout(tools, paths)
                 self.assertEqual(set(listed_tools_files(tools)), set(paths))
                 result = subprocess.run(
-                    official_checker_command(),
+                    offline_checker_command(),
                     cwd=workspace,
                     capture_output=True,
                     text=True,
