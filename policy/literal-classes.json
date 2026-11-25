@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "area": "scripts",
+  "classes": ["tunable", "host-path", "domain", "port"],
+  "files": {
+    "scripts/check-mihomo-upgrade-compat.py": {
+      "domain": 2
+    },
+    "scripts/select-ubuntu-https-mirror.py": {
+      "host-path": 1
+    }
+  }
+}

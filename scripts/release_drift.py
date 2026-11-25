@@ -2,6 +2,7 @@
 """Report source/channel drift. Requires the version-gate-enabled source checkout."""
 import argparse
 import importlib.util
+import runpy
 import json
 from pathlib import Path
 import subprocess
@@ -24,6 +25,7 @@ def _load_brand_literals():
 
 _BRAND = _load_brand_literals()
 CHANNEL_URL = _BRAND.URL_UPDATE_MANIFEST
+_LIMITS = runpy.run_path(str(Path(__file__).resolve().with_name("constants.py")))
 
 
 def main():
@@ -47,7 +49,7 @@ def main():
         if args.manifest_file:
             manifest = json.loads(args.manifest_file.read_text())
         else:
-            with urllib.request.urlopen(CHANNEL_URL, timeout=30) as response:
+            with urllib.request.urlopen(CHANNEL_URL, timeout=_LIMITS["CHANNEL_FETCH_TIMEOUT_SECONDS"]) as response:
                 manifest = json.load(response)
         channel = manifest['version']
         if not isinstance(channel, str):

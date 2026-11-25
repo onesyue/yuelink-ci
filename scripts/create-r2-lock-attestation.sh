@@ -14,7 +14,10 @@ OUTPUT="${7:?output path is required}"
 REPOSITORY=onesyue/yuelink-ci
 BUCKET=yuelink-dist
 R2_ACCOUNT_ID=1e192a89cfaab399d211bb1dfe77a5cd
-PROOF_LIFETIME_SECONDS=1800
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROOF_LIFETIME_SECONDS="$(command -p python3 "$SCRIPT_DIR/constants.py" R2_PROOF_LIFETIME_SECONDS)"
+CURL_CONNECT_TIMEOUT_SECONDS="$(command -p python3 "$SCRIPT_DIR/constants.py" CURL_CONNECT_TIMEOUT_SECONDS)"
+CLOUDFLARE_API_ORIGIN="$(command -p python3 "$SCRIPT_DIR/constants.py" CLOUDFLARE_API_ORIGIN)"
 
 : "${GH_TOKEN:?GitHub token is required}"
 : "${CLOUDFLARE_R2_CONFIG_TOKEN:?Cloudflare R2 configuration-read token is required}"
@@ -107,7 +110,7 @@ fetch_with_budget() {
     printf -v timeout '%d.%03d' "$((timeout_ms / 1000))" "$((timeout_ms % 1000))"
     rc=0
     metadata=$(curl --fail --silent --show-error \
-      --connect-timeout 10 --max-time "$timeout" --retry 0 \
+      --connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS" --max-time "$timeout" --retry 0 \
       --max-redirs 0 --max-filesize 262144 \
       --write-out '%{http_code} %{url_effective}' --output "$output" "$@") || rc=$?
     now=$(monotonic_ms) || return 1
@@ -217,7 +220,7 @@ lock_response="$work_dir/lock-response.json"
 fetch_with_budget 30 3 10 "$lock_response" \
   --proto '=https' --tlsv1.2 \
   -H "Authorization: Bearer $CLOUDFLARE_R2_CONFIG_TOKEN" \
-  "https://api.cloudflare.com/client/v4/accounts/$R2_ACCOUNT_ID/r2/buckets/$BUCKET/lock" \
+  "${CLOUDFLARE_API_ORIGIN}/client/v4/accounts/$R2_ACCOUNT_ID/r2/buckets/$BUCKET/lock" \
   > /dev/null
 jq -e '
   .success == true and (.errors | length) == 0 and

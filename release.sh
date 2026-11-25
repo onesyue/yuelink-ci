@@ -173,9 +173,14 @@ PUBLIC_TAG_MESSAGE="$(printf \
 fetch_private_source_snapshot() {
   # Git measures this in bytes/s. Its numeric value matches the advertised
   # Infinity cap (YueBoard speedpolicy.InfinityCapMbps), with different units.
-  local -r SOURCE_FETCH_LOW_SPEED_BYTES_PER_SECOND=1000
-  local -r SOURCE_FETCH_LOW_SPEED_SECONDS=60
-  local -r SOURCE_FETCH_ATTEMPTS=3
+  local _ci_constants="scripts/constants.py"
+  if [ -n "${SCRIPT_DIR:-}" ] && [ -f "$SCRIPT_DIR/scripts/constants.py" ]; then
+    _ci_constants="$SCRIPT_DIR/scripts/constants.py"
+  fi
+  local -r SOURCE_FETCH_LOW_SPEED_BYTES_PER_SECOND="$(python3 "$_ci_constants" SOURCE_FETCH_LOW_SPEED_BYTES_PER_SECOND)"
+  local -r SOURCE_FETCH_LOW_SPEED_SECONDS="$(python3 "$_ci_constants" SOURCE_FETCH_LOW_SPEED_SECONDS)"
+  local -r SOURCE_FETCH_ATTEMPTS="$(python3 "$_ci_constants" SOURCE_FETCH_ATTEMPTS)"
+  local -r YUELINK_PRIVATE_REPOSITORY="$(python3 "$_ci_constants" YUELINK_PRIVATE_REPOSITORY)"
   local attempt
   FETCH_ERR="$(mktemp "${TMPDIR:-/tmp}/yuelink-ci-source-fetch.XXXXXX")"
   for ((attempt = 1; attempt <= SOURCE_FETCH_ATTEMPTS; attempt++)); do
@@ -196,7 +201,7 @@ fetch_private_source_snapshot() {
       -c "http.lowSpeedLimit=$SOURCE_FETCH_LOW_SPEED_BYTES_PER_SECOND" \
       -c "http.lowSpeedTime=$SOURCE_FETCH_LOW_SPEED_SECONDS" \
       fetch --depth=1 --quiet --no-tags \
-      https://github.com/onesyue/yuelink.git \
+      "$YUELINK_PRIVATE_REPOSITORY" \
       "refs/tags/$TAG:refs/tags/$TAG" 2>"$FETCH_ERR"; then
       if [[ "$FETCH_ERR" == */yuelink-ci-source-fetch.* ]]; then
         rm -f -- "$FETCH_ERR"
@@ -233,7 +238,11 @@ bash scripts/verify-source-version.sh "$SOURCE_SNAPSHOT" "$TAG" "$SOURCE_COMMIT"
 echo "✓ 工作区、公开构建器自检和 tag 状态均已验证"
 
 remote_public_tag_state() {
-  local -r PUBLIC_TAG_LOOKUP_ATTEMPTS=3
+  local _ci_constants="scripts/constants.py"
+  if [ -n "${SCRIPT_DIR:-}" ] && [ -f "$SCRIPT_DIR/scripts/constants.py" ]; then
+    _ci_constants="$SCRIPT_DIR/scripts/constants.py"
+  fi
+  local -r PUBLIC_TAG_LOOKUP_ATTEMPTS="$(python3 "$_ci_constants" PUBLIC_TAG_LOOKUP_ATTEMPTS)"
   local status attempt
   # Only this read is replayed. A transient transport failure does not prove
   # absence, and an uncertain push must still be resolved by remote readback.
@@ -321,8 +330,14 @@ inspect_remote_public_tag() {
 }
 
 wait_for_verified_remote_public_tag() {
+  local _ci_constants="scripts/constants.py"
+  if [ -n "${SCRIPT_DIR:-}" ] && [ -f "$SCRIPT_DIR/scripts/constants.py" ]; then
+    _ci_constants="$SCRIPT_DIR/scripts/constants.py"
+  fi
+  local -r PUBLIC_TAG_VERIFY_ATTEMPTS="$(python3 "$_ci_constants" PUBLIC_TAG_VERIFY_ATTEMPTS)"
+  local -r PUBLIC_TAG_VERIFY_INTERVAL_SECONDS="$(python3 "$_ci_constants" PUBLIC_TAG_VERIFY_INTERVAL_SECONDS)"
   local attempt status
-  for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  for ((attempt = 1; attempt <= PUBLIC_TAG_VERIFY_ATTEMPTS; attempt++)); do
     set +e
     inspect_remote_public_tag
     status=$?
@@ -335,7 +350,7 @@ wait_for_verified_remote_public_tag() {
       1) ;; # Explicitly pending/not visible only.
       *) return 1 ;;
     esac
-    [ "$attempt" -eq 12 ] || sleep 5
+    [ "$attempt" -eq "$PUBLIC_TAG_VERIFY_ATTEMPTS" ] || sleep "$PUBLIC_TAG_VERIFY_INTERVAL_SECONDS"
   done
   echo "::error::远端 $TAG 已进入不可变命名空间，但 GitHub 在 60 秒内未确认 verified/valid。" >&2
   echo "::error::绝不删除、覆盖或重打该 tag；停止发版并按签名/远端 ref 事故处理，人工核对 GitHub tag verification。" >&2

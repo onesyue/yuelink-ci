@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import re
+import runpy
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,8 @@ SCRIPTS = Path(__file__).resolve().parent
 ARCHIVE = SCRIPTS.parent / "docs/release-proofs"
 PROOF = "source-attestation.json"
 BUNDLE = "source-attestation.sigstore.jsonl"
+
+_LIMITS = runpy.run_path(str(Path(__file__).resolve().with_name("constants.py")))
 
 
 def read(*args: str) -> bytes:
@@ -111,7 +114,7 @@ def acquire(binding: dict, release_id: int, directory: Path) -> str:
             subprocess.run(
                 ["gh", "attestation", "download", str(proof), "--repo", REPO],
                 cwd=directory,
-                timeout=150,
+                timeout=_LIMITS["ATTESTATION_DOWNLOAD_TIMEOUT_SECONDS"],
                 check=True,
                 stdout=subprocess.DEVNULL,
             )

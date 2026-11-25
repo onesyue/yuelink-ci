@@ -20,7 +20,14 @@ if [ -z "$TRIGGER_COMMIT" ]; then
   [[ "$TRIGGER_COMMIT" =~ ^[0-9a-f]{40}$ ]] || exit 1
 fi
 tag_json=''
-for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+_ci_constants="scripts/constants.py"
+_ci_source="${BASH_SOURCE:-}"
+if [ -n "$_ci_source" ] && [ -f "$_ci_source" ] && [ -f "$(dirname "$_ci_source")/constants.py" ]; then
+  _ci_constants="$(cd "$(dirname "$_ci_source")" && pwd)/constants.py"
+fi
+PUBLIC_TAG_VERIFY_ATTEMPTS="$(python3 "$_ci_constants" PUBLIC_TAG_VERIFY_ATTEMPTS)"
+PUBLIC_TAG_VERIFY_INTERVAL_SECONDS="$(python3 "$_ci_constants" PUBLIC_TAG_VERIFY_INTERVAL_SECONDS)"
+for ((attempt = 1; attempt <= PUBLIC_TAG_VERIFY_ATTEMPTS; attempt++)); do
   tag_json="$(gh api "repos/$REPOSITORY/git/tags/$tag_object_sha")"
   if jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
       .tag == $tag and .object.type == "commit" and
@@ -38,7 +45,7 @@ for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
     echo "::error::public tag content or signature rejected"
     exit 1
   }
-  [ "$attempt" -eq 12 ] || sleep 5
+  [ "$attempt" -eq "$PUBLIC_TAG_VERIFY_ATTEMPTS" ] || sleep "$PUBLIC_TAG_VERIFY_INTERVAL_SECONDS"
 done
 jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
   .tag == $tag and .object.type == "commit" and

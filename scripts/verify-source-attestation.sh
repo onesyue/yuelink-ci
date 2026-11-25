@@ -331,10 +331,12 @@ jq -e \
   exit 1
 }
 
+ACTIONS_OIDC_ISSUER="$(python3 "$SCRIPT_DIR/constants.py" ACTIONS_OIDC_ISSUER)"
+SLSA_PROVENANCE_PREDICATE="$(python3 "$SCRIPT_DIR/constants.py" SLSA_PROVENANCE_PREDICATE)"
 verification_args=(gh attestation verify "$proof"
   --repo "$REPOSITORY"
-  --cert-oidc-issuer https://token.actions.githubusercontent.com
-  --predicate-type https://slsa.dev/provenance/v1
+  --cert-oidc-issuer "$ACTIONS_OIDC_ISSUER"
+  --predicate-type "$SLSA_PROVENANCE_PREDICATE"
   --signer-workflow "$WORKFLOW_IDENTITY"
   --source-ref refs/heads/master
   --source-digest "$BUILDER_COMMIT"

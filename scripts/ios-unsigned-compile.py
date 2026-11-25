@@ -17,7 +17,10 @@ from pathlib import Path
 
 from constants import (
     IOS_COMPILER_DISCOVERY_TIMEOUT_SECONDS,
+    IOS_GIT_REV_PARSE_TIMEOUT_SECONDS,
     IOS_NATIVE_BUILD_TIMEOUT_SECONDS,
+    IOS_OTOOL_PROBE_TIMEOUT_SECONDS,
+    IOS_SIMCTL_LIST_TIMEOUT_SECONDS,
 )
 
 TARGETS = ("Runner", "PacketTunnel")
@@ -189,7 +192,7 @@ def build_simulator_kernel(source: Path, log) -> None:
     ).returncode
     if code != 0:
         raise ValueError("kernel")
-    probe = _capture(["xcrun", "otool", "-l", str(archive)], source, 120)
+    probe = _capture(["xcrun", "otool", "-l", str(archive)], source, IOS_OTOOL_PROBE_TIMEOUT_SECONDS)
     log.write(probe.stdout + probe.stderr)
     if probe.returncode != 0 or simulator_archive_issues(probe.stdout):
         raise ValueError("kernel")
@@ -206,7 +209,7 @@ def _head(checkout: Path) -> str:
         ["git", "-C", str(checkout), "rev-parse", "HEAD"],
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=IOS_GIT_REV_PARSE_TIMEOUT_SECONDS,
         check=False,
     )
     head = proc.stdout.strip()
@@ -244,7 +247,7 @@ def verify(args: argparse.Namespace) -> int:
             cwd=source,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=IOS_SIMCTL_LIST_TIMEOUT_SECONDS,
             check=False,
         )
         if listing.returncode != 0:

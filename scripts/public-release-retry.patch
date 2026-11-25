@@ -1,6 +1,6 @@
 --- resolve-release-tag.sh
 +++ resolve-release-tag.sh
-@@ -29,6 +29,15 @@
+@@ -36,6 +36,15 @@
      ' <<<"$tag_json" >/dev/null; then
      break
    fi
@@ -13,7 +13,7 @@
 +    echo "::error::public tag content or signature rejected"
 +    exit 1
 +  }
-   [ "$attempt" -eq 12 ] || sleep 5
+   [ "$attempt" -eq "$PUBLIC_TAG_VERIFY_ATTEMPTS" ] || sleep "$PUBLIC_TAG_VERIFY_INTERVAL_SECONDS"
  done
  jq -e --arg tag "$REF_NAME" --arg builder "$TRIGGER_COMMIT" '
 --- publish.yml

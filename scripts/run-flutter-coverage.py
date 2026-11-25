@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import runpy
 import json
 import os
 import platform
@@ -23,9 +24,10 @@ REQUIRED_TESTS = {
     "test/core/storage/persisted_schema_test.dart",
     "test/core/storage/settings_service_schema_test.dart",
 }
-MINIMUM_FILES = 500
-MINIMUM_TESTS = 2044
-WORKERS = 4
+_LIMITS = runpy.run_path(str(Path(__file__).resolve().with_name("constants.py")))
+MINIMUM_FILES = _LIMITS["MINIMUM_FILES"]
+MINIMUM_TESTS = _LIMITS["MINIMUM_TESTS"]
+WORKERS = _LIMITS["WORKERS"]
 MACOS_TEST = "test/core/storage/secure_storage_macos_keychain_test.dart"
 ISOLATED = REQUIRED_TESTS | {
     "test/governance/mihomo_fork_ledger_test.dart",
@@ -43,12 +45,12 @@ GIB = 1024 ** 3
 # Scheduling headroom above the observed 1.53 GiB sample maximum, not a
 # full-corpus peak-memory claim. Unknown capacity admits only one worker.
 WORKER_MEMORY = 5 * GIB // 2
-GROUP_FILE_CAP = 8
+GROUP_FILE_CAP = _LIMITS["GROUP_FILE_CAP"]
 # A declaration is the cost unit. Eight small files still share a group.
 # A file with many tests is not packed beside them, which is what made
 # group 53 spend 300s and then split. Missing declarations and callers
 # without a tree keep weight 1.
-GROUP_WEIGHT_BUDGET = 8
+GROUP_WEIGHT_BUDGET = _LIMITS["GROUP_WEIGHT_BUDGET"]
 
 
 
@@ -77,7 +79,7 @@ def run_flutter_worker(command: list[str], worker: Path, log):
     # Keep the trusted workflow baseline in the real Flutter process, including
     # detached workers and split retries. Git worktrees share the fetched object.
     return subprocess.run(command, cwd=worker, env=os.environ.copy(),
-                          stdout=log, stderr=subprocess.STDOUT, timeout=350, check=False)
+                          stdout=log, stderr=subprocess.STDOUT, timeout=_LIMITS["COVERAGE_WORKER_TIMEOUT_SECONDS"], check=False)
 
 
 def digest(value) -> str:
@@ -303,8 +305,8 @@ ENGINE_SHUTDOWN_ERRORS = {
 # hangs until `timeout` fires (124) or exits with its generic test failure code
 # (1). Both are admitted only together with an `engine_shutdown_fault` report;
 # any failed test terminal, unknown error or other exit code still refuses.
-ENGINE_FAULT_EXIT_CODES = frozenset({1, 124})
-TIMEOUT_EXIT_CODE = 124
+TIMEOUT_EXIT_CODE = _LIMITS["TIMEOUT_EXIT_CODE"]
+ENGINE_FAULT_EXIT_CODES = frozenset({1, TIMEOUT_EXIT_CODE})
 
 
 def recoverable(exit_code: int, classification: str) -> bool:
@@ -412,7 +414,7 @@ def resource_snapshot() -> dict:
             available = int(match[1]) * 1024
     elif system == "Darwin":
         try:
-            vm = subprocess.check_output(["vm_stat"], text=True, timeout=5)
+            vm = subprocess.check_output(["vm_stat"], text=True, timeout=_LIMITS["COVERAGE_VM_STAT_TIMEOUT_SECONDS"])
             page = int(re.search(r"page size of (\d+) bytes", vm)[1])
             available = sum(int(re.search(rf"^{label}:\s+(\d+)\.", vm, re.MULTILINE)[1])
                             for label in ("Pages free", "Pages inactive")) * page
@@ -508,7 +510,7 @@ def add_gitlinks(source: Path, worker: Path, revision: str,
             raise ValueError("initialized Gitlink does not match its source pin")
         target = worker / path
         subprocess.run(["git", "worktree", "add", "--detach", str(target), pin],
-                       cwd=original, check=True, timeout=120)
+                       cwd=original, check=True, timeout=_LIMITS["COVERAGE_GITLINK_TIMEOUT_SECONDS"])
         owned.append((original, target))
         add_gitlinks(original, target, pin, owned, depth + 1)
 
@@ -561,7 +563,7 @@ def main() -> None:
     coverage_union = set()
     union_lock = threading.Lock()
     receipt["source_sha"] = source
-    receipt["sdk"] = json.loads(subprocess.check_output(["flutter", "--version", "--machine"], cwd=root, text=True, timeout=30))
+    receipt["sdk"] = json.loads(subprocess.check_output(["flutter", "--version", "--machine"], cwd=root, text=True, timeout=_LIMITS["COVERAGE_FLUTTER_VERSION_TIMEOUT_SECONDS"]))
     if any(receipt["sdk"].get(key) != value for key, value in plan["sdk"].items()):
         raise ValueError("grouping SDK differs from reviewed baseline")
     receipt["counter_sha256"] = hashlib.sha256(Path(spec.origin).read_bytes()).hexdigest()
@@ -582,7 +584,9 @@ def main() -> None:
             if len(tests) == 1 and tests[0] in ISOLATED:
                 clear_compiler_cache()
             command = [
-                "timeout", "--signal=TERM", "--kill-after=30s", "300",
+                "timeout", "--signal=TERM",
+                f"--kill-after={_LIMITS['COVERAGE_GROUP_KILL_AFTER_SECONDS']}s",
+                str(_LIMITS["COVERAGE_GROUP_DEADLINE_SECONDS"]),
                 "flutter", "test", "--no-pub", "--coverage", "--machine",
                 "--concurrency=1", "--coverage-path", str(lcov), *tests,
             ]
@@ -809,7 +813,7 @@ def main() -> None:
                 workers.append(worker)
                 add_gitlinks(root, worker, source, gitlinks)
                 subprocess.run(["flutter", "pub", "get", "--offline", "--enforce-lockfile"],
-                               cwd=worker, check=True, timeout=120)
+                               cwd=worker, check=True, timeout=_LIMITS["COVERAGE_PUB_GET_TIMEOUT_SECONDS"])
             assignments = selected
             with ThreadPoolExecutor(max_workers=capacity) as pool:
                 futures = [pool.submit(execute, worker, assignments[index::capacity])
@@ -867,7 +871,7 @@ def main() -> None:
             for original, target in [*reversed(gitlinks), *((root, worker) for worker in workers)]:
                 try:
                     subprocess.run(["git", "worktree", "remove", "--force", str(target)],
-                                   cwd=original, check=True, timeout=60)
+                                   cwd=original, check=True, timeout=_LIMITS["COVERAGE_WORKTREE_REMOVE_TIMEOUT_SECONDS"])
                 except (OSError, subprocess.SubprocessError) as error:
                     cleanup_errors.append(str(error))
             receipt["cleanup_complete"] = not cleanup_errors

@@ -24,6 +24,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+_LIMITS = runpy.run_path(str(Path(__file__).resolve().with_name("constants.py")))
+
 HEX64 = re.compile(r"\b[0-9a-f]{64}\b")
 TUPLE_PIN = re.compile(r"\(\s*\d+\s*,\s*['\"][0-9a-f]{7,64}['\"]\s*\)")
 LEN_EQ = re.compile(
@@ -37,8 +39,8 @@ FILE_LINE = re.compile(r"[\w./-]+\.(?:yml|yaml):\d{2,}")
 STRINGS = re.compile(r"""['"]([^'"]+)['"]""")
 COLLECTION = re.compile(r"[\{\[\(]([^{}\[\]]{0,4000})[\}\]\)]", re.S)
 SKIP_PREFIXES = ("core/mihomo/", ".git/", "build/", ".dart_tool/")
-MIN_TEST_FILES = 8
-MIN_HASHED_FILES = 20
+MIN_TEST_FILES = _LIMITS["MIN_TEST_FILES"]
+MIN_HASHED_FILES = _LIMITS["MIN_HASHED_FILES"]
 BASELINE_NAME = "tests/antifreeze_baseline.txt"
 
 
@@ -273,9 +275,7 @@ def issues(root: Path) -> list[str]:
 def source_snapshot(root: Path, destination: Path, env: dict[str, str]) -> Path:
     """Scan current root-owned bytes without ignored siblings or evidence trees."""
     # The isolated CLI (-I) does not put this script's directory on sys.path.
-    git_timeout = runpy.run_path(str(Path(__file__).with_name("constants.py")))[
-        "ANTIFREEZE_GIT_TIMEOUT_SECONDS"
-    ]
+    git_timeout = _LIMITS["ANTIFREEZE_GIT_TIMEOUT_SECONDS"]
     master = subprocess.check_output(
         ["git", "-C", str(root), "rev-parse", "origin/master^{commit}"],
         env=env, text=True, timeout=git_timeout,

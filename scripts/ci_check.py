@@ -14,10 +14,14 @@ import re
 import subprocess
 import sys
 import time
+import runpy
+from pathlib import Path
 
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 RUN_URL_RE = re.compile(r"https://[^/]+/([^/]+/[^/]+)/actions/runs/([1-9][0-9]*)")
+
+_LIMITS = runpy.run_path(str(Path(__file__).resolve().with_name("constants.py")))
 PASSING = {"success", "skipped"}
 
 
@@ -26,7 +30,7 @@ def _gh(args: list[str]) -> subprocess.CompletedProcess[str]:
         ["gh", *args],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=_LIMITS["GH_COMMAND_TIMEOUT_SECONDS"],
         check=False,
     )
 
@@ -101,6 +105,13 @@ def wait_for(repo: str, label: str, run_id: str | None, attempts: int, interval:
     return failing
 
 
+def attempt_budget() -> tuple[int, float]:
+    """Deploy-specific attempt count and interval, with the reviewed defaults."""
+    attempts = int(os.environ.get("CI_CHECK_ATTEMPTS", str(_LIMITS["CI_CHECK_ATTEMPTS"])))
+    interval = float(os.environ.get("CI_CHECK_INTERVAL", str(_LIMITS["CI_CHECK_INTERVAL_SECONDS"])))
+    return attempts, interval
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if len(args) != 1 or SHA_RE.fullmatch(args[0]) is None:
@@ -110,8 +121,7 @@ def main(argv: list[str] | None = None) -> int:
     repo = os.environ.get("CI_CHECK_REPO", "onesyue/yuelink-ci")
     ref = os.environ.get("CI_CHECK_REF", "master")
     try:
-        attempts = int(os.environ.get("CI_CHECK_ATTEMPTS", "30"))
-        interval = float(os.environ.get("CI_CHECK_INTERVAL", "20"))
+        attempts, interval = attempt_budget()
     except ValueError:
         print("usage: ci-check.sh <40-hex-sha>", file=sys.stderr)
         return 2

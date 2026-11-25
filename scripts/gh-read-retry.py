@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import runpy
 from pathlib import Path
 import re
 import signal
@@ -12,10 +13,12 @@ import sys
 import tempfile
 import time
 
-ATTEMPTS = 3
-ATTEMPT_SECONDS = 60
-TOTAL_SECONDS = 150
-OUTPUT_LIMIT = 16 * 1024 * 1024
+_LIMITS = runpy.run_path(str(Path(__file__).resolve().with_name("constants.py")))
+ATTEMPTS = _LIMITS["GH_READ_ATTEMPTS"]
+ATTEMPT_SECONDS = _LIMITS["GH_READ_ATTEMPT_SECONDS"]
+TOTAL_SECONDS = _LIMITS["GH_READ_TOTAL_SECONDS"]
+OUTPUT_LIMIT = _LIMITS["GH_READ_OUTPUT_LIMIT"]
+TIMEOUT_EXIT_CODE = _LIMITS["TIMEOUT_EXIT_CODE"]
 REPOSITORY = "onesyue/yuelink-ci"
 
 
@@ -53,8 +56,8 @@ def validate(argv: list[str]) -> Path | None:
             raise ValueError("proof destination must be an empty private owned directory")
         return target
     if (argv[:3] == ["gh", "attestation", "verify"] and
-            argv[6:10] == ["--cert-oidc-issuer", "https://token.actions.githubusercontent.com",
-                           "--predicate-type", "https://slsa.dev/provenance/v1"]):
+            argv[6:10] == ["--cert-oidc-issuer", _LIMITS["ACTIONS_OIDC_ISSUER"],
+                           "--predicate-type", _LIMITS["SLSA_PROVENANCE_PREDICATE"]]):
         return validate(argv[:6] + argv[10:])
     if (len(argv) == 17 and argv[:3] == ["gh", "attestation", "verify"]
             and not argv[3].startswith("-")
@@ -107,7 +110,7 @@ def signal_group(process: subprocess.Popen, sig: signal.Signals) -> None:
             if attempt == 20:
                 try:
                     members = subprocess.check_output(
-                        ["/bin/ps", "-axo", "pgid=,stat="], text=True, timeout=2
+                        ["/bin/ps", "-axo", "pgid=,stat="], text=True, timeout=_LIMITS["GH_PROCESS_LIST_TIMEOUT_SECONDS"]
                     )
                 except (OSError, subprocess.SubprocessError) as check_error:
                     raise error from check_error
@@ -115,7 +118,7 @@ def signal_group(process: subprocess.Popen, sig: signal.Signals) -> None:
                            for group, state in map(str.split, members.splitlines())):
                     return
                 raise
-            time.sleep(0.05)
+            time.sleep(_LIMITS["GH_PROCESS_GROUP_POLL_SECONDS"])
 
 
 def stop(process: subprocess.Popen) -> None:
@@ -141,10 +144,10 @@ def execute(argv: list[str], timeout: float) -> tuple[int, bytes, bytes]:
         try:
             while process.poll() is None:
                 if time.monotonic() >= deadline:
-                    return 124, b"", b"release read deadline exceeded; not retrying\n"
+                    return TIMEOUT_EXIT_CODE, b"", b"release read deadline exceeded; not retrying\n"
                 if max(os.fstat(out.fileno()).st_size, os.fstat(err.fileno()).st_size) > OUTPUT_LIMIT:
                     return 125, b"", b"release read output limit exceeded; not retrying\n"
-                time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+                time.sleep(min(_LIMITS["GH_PROCESS_GROUP_POLL_SECONDS"], max(0, deadline - time.monotonic())))
         finally:
             stop(process)
         out.seek(0)
@@ -162,7 +165,7 @@ def run(argv: list[str]) -> int:
     for attempt in range(1, ATTEMPTS + 1):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            return 124
+            return TIMEOUT_EXIT_CODE
         # Failed downloads never leave a partial proof in the next attempt.
         with tempfile.TemporaryDirectory(dir=target.parent if target else None,
                                          prefix="gh-release-read-") as temporary:
@@ -187,7 +190,7 @@ def run(argv: list[str]) -> int:
             return code if code > 0 else 1
         pause = attempt
         if time.monotonic() + pause >= deadline:
-            return 124
+            return TIMEOUT_EXIT_CODE
         print(f"release read transport failure; retry {attempt}/{ATTEMPTS}", file=sys.stderr)
         time.sleep(pause)
     return 1
