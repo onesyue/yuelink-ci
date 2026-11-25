@@ -150,7 +150,11 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
         self.tools = self.root / "tools"
         (self.tools / "scripts").mkdir(parents=True)
         (self.tools / "tests/fixtures").mkdir(parents=True)
-        for name in ("run-flutter-coverage.py", "count-flutter-machine-tests.py"):
+        for name in (
+            "run-flutter-coverage.py",
+            "count-flutter-machine-tests.py",
+            "constants.py",
+        ):
             shutil.copyfile(ROOT / "scripts" / name, self.tools / "scripts" / name)
         self.plan_path = self.tools / "tests/fixtures/flutter-coverage-groups-20261028.json"
         self.refresh_plan()

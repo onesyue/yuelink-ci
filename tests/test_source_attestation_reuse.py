@@ -54,7 +54,7 @@ class SharedVerifierBehaviorTests(unittest.TestCase):
             'head_branch': 'master', 'workflow_id': 789,
             'created_at': '2026-11-12T00:00:00Z', 'head_sha': BUILDER}]})
         self.env['SIGNED_DIGEST'] = hashlib.sha256((self.root / 'proof.json').read_bytes()).hexdigest()
-        for name in ['verify-source-attestation.sh', 'gh-read-retry.py']:
+        for name in ['verify-source-attestation.sh', 'gh-read-retry.py', 'constants.py']:
             shutil.copyfile(ROOT / 'scripts' / name, self.root / name)
         gh = self.bin / 'gh'
         gh.write_text('#!' + sys.executable + '\n' + r'''
@@ -195,15 +195,24 @@ sys.exit(9)
         self.assertFalse((self.root/'export.json').exists())
 
     def test_wrong_issuer_or_workflow_policy_is_not_an_approved_read(self):
-        verifier=self.root/'verify-source-attestation.sh'; original=verifier.read_text()
-        for old,new in [('https://token.actions.githubusercontent.com','https://wrong.example'),
-                        ('WORKFLOW_IDENTITY=onesyue/yuelink-ci/.github/workflows/source-attestation.yml',
-                         'WORKFLOW_IDENTITY=onesyue/yuelink-ci/.github/workflows/build.yml'),
-                        ('--deny-self-hosted-runners','--allow-self-hosted-runners')]:
+        verifier = self.root / 'verify-source-attestation.sh'
+        original = verifier.read_text()
+        constants = self.root / 'constants.py'
+        original_constants = constants.read_text()
+        with self.subTest(new='https://wrong.example'):
+            constants.write_text(original_constants.replace(
+                'https://token.actions.githubusercontent.com', 'https://wrong.example'))
+            self.assertNotEqual(self.verify().returncode, 0)
+            self.assertFalse((self.root / 'export.json').exists())
+            constants.write_text(original_constants)
+        for old, new in [
+                ('WORKFLOW_IDENTITY=onesyue/yuelink-ci/.github/workflows/source-attestation.yml',
+                 'WORKFLOW_IDENTITY=onesyue/yuelink-ci/.github/workflows/build.yml'),
+                ('--deny-self-hosted-runners', '--allow-self-hosted-runners')]:
             with self.subTest(new=new):
-                verifier.write_text(original.replace(old,new))
-                self.assertNotEqual(self.verify().returncode,0)
-                self.assertFalse((self.root/'export.json').exists())
+                verifier.write_text(original.replace(old, new))
+                self.assertNotEqual(self.verify().returncode, 0)
+                self.assertFalse((self.root / 'export.json').exists())
         verifier.write_text(original)
 
     def test_same_run_earlier_receipt_attempt_is_exported(self):

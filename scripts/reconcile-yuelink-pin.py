@@ -8,6 +8,7 @@ import hashlib
 import importlib.util
 import json
 import re
+import runpy
 import shlex
 import sys
 from datetime import datetime, timedelta, timezone
@@ -18,7 +19,9 @@ SPEC = importlib.util.spec_from_file_location(
 )
 verifier = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(verifier)
-MAX_BYTES = 1024 * 1024
+_LIMITS = runpy.run_path(str(Path(__file__).resolve().with_name("constants.py")))
+MAX_BYTES = _LIMITS["MAX_UPDATE_MANIFEST_BYTES"]
+_PUBLISH_CLOCK_SKEW = timedelta(seconds=_LIMITS["MAX_PUBLISH_CLOCK_SKEW_SECONDS"])
 
 
 def plan(raw: bytes, version: str, source: str) -> dict:
@@ -28,7 +31,7 @@ def plan(raw: bytes, version: str, source: str) -> dict:
     now = datetime.now(timezone.utc)
     expires = datetime.fromisoformat(manifest["expiresAt"].replace("Z", "+00:00"))
     published = datetime.fromisoformat(manifest["publishedAt"].replace("Z", "+00:00"))
-    if expires <= now or published > now + timedelta(hours=6):
+    if expires <= now or published > now + _PUBLISH_CLOCK_SKEW:
         raise ValueError("manifest expired or published in the future")
     if manifest["version"] != version:
         raise ValueError("manifest differs from expected release version")

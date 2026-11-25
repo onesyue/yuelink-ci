@@ -9,8 +9,11 @@ import json
 import os
 import re
 import subprocess
+import runpy
 import tempfile
 from pathlib import Path
+
+_LIMITS = runpy.run_path(str(Path(__file__).resolve().with_name("constants.py")))
 
 TEST_PATHS = (
     "test/modules/auth_sync_subscription_test.dart",
@@ -200,7 +203,7 @@ def summarize(log: Path, source: Path, exit_code: int) -> dict:
 
 
 def capture(
-    command: list[str], cwd: Path, destination: Path, *, env: dict, timeout: int = 1200
+    command: list[str], cwd: Path, destination: Path, *, env: dict, timeout: int = _LIMITS["AUTH_STORAGE_COMMAND_TIMEOUT_SECONDS"]
 ) -> int:
     with destination.open("wb") as output:
         return subprocess.run(

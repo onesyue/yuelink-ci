@@ -23,13 +23,16 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import re
+import runpy
 import sys
 import urllib.request
 from pathlib import Path
+
+_LIMITS = runpy.run_path(str(Path(__file__).resolve().with_name("constants.py")))
 from urllib.parse import urljoin
 
 CHUNK = 1 << 20
-MAX_SUMS_BYTES = 65536
+MAX_SUMS_BYTES = _LIMITS["MAX_SUMS_BYTES"]
 
 _spec = importlib.util.spec_from_file_location(
     "verify_update_manifest", Path(__file__).with_name("verify-update-manifest.py")
@@ -47,7 +50,7 @@ _UA = "yuelink-ci-release-closure-verifier/1"
 
 def _open(url: str):
     req = urllib.request.Request(url, headers={"User-Agent": _UA})
-    return urllib.request.urlopen(req, timeout=120)
+    return urllib.request.urlopen(req, timeout=_LIMITS["RELEASE_CLOSURE_FETCH_TIMEOUT_SECONDS"])
 
 
 def _read_url(url: str) -> bytes:

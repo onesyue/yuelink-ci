@@ -13,6 +13,7 @@ import argparse
 import json
 import re
 import subprocess
+import runpy
 import sys
 from pathlib import Path
 
@@ -20,7 +21,8 @@ REPOSITORY = "onesyue/yuelink-ci"
 KINDS = ("flutter", "service")
 RUN_ID_RE = re.compile(r"[1-9][0-9]{0,19}")
 ATTEMPT_RE = re.compile(r"[1-9][0-9]{0,5}")
-PAGE_LIMIT = 20
+_LIMITS = runpy.run_path(str(Path(__file__).resolve().with_name("constants.py")))
+PAGE_LIMIT = _LIMITS["PAGE_LIMIT"]
 
 
 class SelectionError(ValueError):
@@ -117,7 +119,7 @@ def fetch_pages(run_id: str) -> list[dict[str, object]]:
             check=False,
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=_LIMITS["ARTIFACT_LIST_TIMEOUT_SECONDS"],
         )
         if completed.returncode != 0:
             raise SelectionError("artifact list request failed")

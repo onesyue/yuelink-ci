@@ -14,9 +14,12 @@ A missing root, an empty walk, an unreadable file, or a symlink fails closed.
 
 from __future__ import annotations
 
+import runpy
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+_LIMITS = runpy.run_path(str(Path(__file__).resolve().with_name("constants.py")))
 
 # Split so this file does not itself contain the retired handle.
 RETIRED_HANDLE = "yue" + "_to_bot"
@@ -25,7 +28,7 @@ NEEDLES = (
     ("retired-url", RETIRED_URL),
     ("retired-handle", RETIRED_HANDLE),
 )
-MIN_FILES = 80
+MIN_FILES = _LIMITS["MIN_FILES"]
 SUFFIXES = frozenset({
     ".py",
     ".sh",

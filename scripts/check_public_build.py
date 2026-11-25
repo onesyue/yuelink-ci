@@ -11,10 +11,13 @@ key fails closed.
 from __future__ import annotations
 
 import re
+import runpy
 import sys
 from pathlib import Path
 
-MIN_PRIVATE_CHECKOUTS = 7
+_LIMITS = runpy.run_path(str(Path(__file__).resolve().with_name("constants.py")))
+
+MIN_PRIVATE_CHECKOUTS = _LIMITS["MIN_PRIVATE_CHECKOUTS"]
 CALLED = {
     "plan": "plan.yml",
     "validate": "validate.yml",

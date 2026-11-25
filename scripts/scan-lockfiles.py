@@ -2,6 +2,7 @@
 """Scan the YueLink lockfiles and enforce the CI advisory policy."""
 
 import json
+import runpy
 import os
 from pathlib import Path
 import re
@@ -9,6 +10,8 @@ import subprocess
 import sys
 import tempfile
 from urllib.parse import quote
+
+_LIMITS = runpy.run_path(str(Path(__file__).resolve().with_name("constants.py")))
 
 
 def go_sbom(core):
@@ -26,8 +29,8 @@ def go_sbom(core):
     # go.sum includes historical versions and modules needed only to resolve
     # the dependency graph. In a tidy Go 1.17+ module, go.mod lists the modules
     # that provide imported packages, including tests and platform build tags.
-    go("mod", "tidy", "-diff", timeout=120)
-    manifest = json.loads(go("mod", "edit", "-json", timeout=10))
+    go("mod", "tidy", "-diff", timeout=_LIMITS["GO_MOD_TIDY_TIMEOUT_SECONDS"])
+    manifest = json.loads(go("mod", "edit", "-json", timeout=_LIMITS["GO_MOD_EDIT_TIMEOUT_SECONDS"]))
     required = [module["Path"] for module in manifest["Require"]]
     if not required:
         raise ValueError("empty Go requirements")
@@ -37,7 +40,7 @@ def go_sbom(core):
     coordinates = (
         r'{{with or .Replace .}}{{if .Version}}{{printf "%s\t%s" .Path .Version}}{{end}}{{end}}'
     )
-    selected = go("list", "-m", "-mod=readonly", "-f", coordinates, *required, timeout=30)
+    selected = go("list", "-m", "-mod=readonly", "-f", coordinates, *required, timeout=_LIMITS["GO_LIST_TIMEOUT_SECONDS"])
     modules = {tuple(line.split("\t")) for line in selected.splitlines() if line}
     if not modules:
         raise ValueError("empty Go scan inventory")
@@ -148,7 +151,7 @@ def main(scanner, source):
             scan = subprocess.run(
                 [str(scanner), "scan", "source", option, f"--config={config}",
                  "--no-resolve", "--no-call-analysis", "--all-vulns", "--format=json"],
-                cwd=work, capture_output=True, text=True, timeout=105, check=False,
+                cwd=work, capture_output=True, text=True, timeout=_LIMITS["OSV_SCAN_TIMEOUT_SECONDS"], check=False,
             )
             # OSV returns 1 for findings. Other failures leave the scan unverified.
             # Raw output can contain dependency names from the private repository.
