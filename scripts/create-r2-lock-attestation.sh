@@ -18,6 +18,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROOF_LIFETIME_SECONDS="$(command -p python3 "$SCRIPT_DIR/constants.py" R2_PROOF_LIFETIME_SECONDS)"
 CURL_CONNECT_TIMEOUT_SECONDS="$(command -p python3 "$SCRIPT_DIR/constants.py" CURL_CONNECT_TIMEOUT_SECONDS)"
 CLOUDFLARE_API_ORIGIN="$(command -p python3 "$SCRIPT_DIR/constants.py" CLOUDFLARE_API_ORIGIN)"
+R2_LOCK_FETCH_BUDGET_SECONDS="$(command -p python3 "$SCRIPT_DIR/constants.py" R2_LOCK_FETCH_BUDGET_SECONDS)"
+R2_LOCK_FETCH_ATTEMPTS="$(command -p python3 "$SCRIPT_DIR/constants.py" R2_LOCK_FETCH_ATTEMPTS)"
+R2_LOCK_FETCH_ATTEMPT_CAP_SECONDS="$(command -p python3 "$SCRIPT_DIR/constants.py" R2_LOCK_FETCH_ATTEMPT_CAP_SECONDS)"
+R2_PROOF_MAX_RESPONSE_BYTES="$(command -p python3 "$SCRIPT_DIR/constants.py" R2_PROOF_MAX_RESPONSE_BYTES)"
 
 : "${GH_TOKEN:?GitHub token is required}"
 : "${CLOUDFLARE_R2_CONFIG_TOKEN:?Cloudflare R2 configuration-read token is required}"
@@ -111,7 +115,7 @@ fetch_with_budget() {
     rc=0
     metadata=$(curl --fail --silent --show-error \
       --connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS" --max-time "$timeout" --retry 0 \
-      --max-redirs 0 --max-filesize 262144 \
+      --max-redirs 0 --max-filesize "$R2_PROOF_MAX_RESPONSE_BYTES" \
       --write-out '%{http_code} %{url_effective}' --output "$output" "$@") || rc=$?
     now=$(monotonic_ms) || return 1
     if ((now >= deadline)); then
@@ -217,7 +221,11 @@ jq -e \
 # The scoped token is not used until every public release coordinate above has
 # been authenticated; its value is never copied into the proof or logs.
 lock_response="$work_dir/lock-response.json"
-fetch_with_budget 30 3 10 "$lock_response" \
+fetch_with_budget \
+  "$R2_LOCK_FETCH_BUDGET_SECONDS" \
+  "$R2_LOCK_FETCH_ATTEMPTS" \
+  "$R2_LOCK_FETCH_ATTEMPT_CAP_SECONDS" \
+  "$lock_response" \
   --proto '=https' --tlsv1.2 \
   -H "Authorization: Bearer $CLOUDFLARE_R2_CONFIG_TOKEN" \
   "${CLOUDFLARE_API_ORIGIN}/client/v4/accounts/$R2_ACCOUNT_ID/r2/buckets/$BUCKET/lock" \

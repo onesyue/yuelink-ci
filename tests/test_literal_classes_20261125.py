@@ -336,6 +336,12 @@ class LiteralClassRatchetTest(unittest.TestCase):
             "PUBLIC_TAG_VERIFY_ATTEMPTS": 12,
             "PUBLIC_TAG_VERIFY_INTERVAL_SECONDS": 5,
             "R2_PROOF_LIFETIME_SECONDS": 1800,
+            "MAX_MANIFEST_LIFETIME_SECONDS": 45 * 24 * 60 * 60,
+            "MAX_PUBLISH_CLOCK_SKEW_SECONDS": 6 * 60 * 60,
+            "UNTAGGED_SHIPPED_SOURCE_SECONDS": 24 * 60 * 60,
+            "R2_LOCK_FETCH_BUDGET_SECONDS": 30,
+            "R2_LOCK_FETCH_ATTEMPTS": 3,
+            "R2_LOCK_FETCH_ATTEMPT_CAP_SECONDS": 10,
             "MIN_TEST_FILES": 8,
             "MIN_HASHED_FILES": 20,
             "MIN_FILES": 80,
@@ -347,6 +353,8 @@ class LiteralClassRatchetTest(unittest.TestCase):
             "MAX_ENVELOPE_BYTES": 64 * 1024,
             "MIN_BODY_BYTES": 1024,
             "MAX_BODY_BYTES": 1024 * 1024,
+            "MAX_UPDATE_MANIFEST_BYTES": 1024 * 1024,
+            "R2_PROOF_MAX_RESPONSE_BYTES": 256 * 1024,
             "MAX_LATENCY_MS": 20_000,
             "MINIMUM_FILES": 500,
             "MINIMUM_TESTS": 2044,
@@ -451,6 +459,77 @@ class LiteralClassRatchetTest(unittest.TestCase):
                 os.environ["YUELINK_COVERAGE_MAX_WORKERS"] = saved
 
 
+    def test_call_sites_import_the_moved_literals(self) -> None:
+        constants = _load(CONSTANTS_PATH, "moved_literal_constants")
+        manifest_source = (ROOT / "scripts" / "verify-update-manifest.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("timedelta(days=45)", manifest_source)
+        self.assertNotIn("timedelta(hours=6)", manifest_source)
+        self.assertIn(
+            'timedelta(seconds=_LIMITS["MAX_MANIFEST_LIFETIME_SECONDS"])',
+            manifest_source,
+        )
+        self.assertIn(
+            'timedelta(seconds=_LIMITS["MAX_PUBLISH_CLOCK_SKEW_SECONDS"])',
+            manifest_source,
+        )
+        manifest = _load(
+            ROOT / "scripts" / "verify-update-manifest.py", "moved_manifest"
+        )
+        self.assertEqual(
+            manifest.MAX_MANIFEST_LIFETIME.total_seconds(),
+            constants.MAX_MANIFEST_LIFETIME_SECONDS,
+        )
+        self.assertEqual(
+            manifest.MAX_PUBLISH_CLOCK_SKEW.total_seconds(),
+            constants.MAX_PUBLISH_CLOCK_SKEW_SECONDS,
+        )
+
+        pin_source = (ROOT / "scripts" / "reconcile-yuelink-pin.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("1024 * 1024", pin_source)
+        self.assertNotIn("timedelta(hours=6)", pin_source)
+        self.assertIn('MAX_BYTES = _LIMITS["MAX_UPDATE_MANIFEST_BYTES"]', pin_source)
+        self.assertIn(
+            'timedelta(seconds=_LIMITS["MAX_PUBLISH_CLOCK_SKEW_SECONDS"])',
+            pin_source,
+        )
+        pin = _load(ROOT / "scripts" / "reconcile-yuelink-pin.py", "moved_pin")
+        self.assertEqual(pin.MAX_BYTES, constants.MAX_UPDATE_MANIFEST_BYTES)
+        self.assertEqual(
+            pin._PUBLISH_CLOCK_SKEW.total_seconds(),
+            constants.MAX_PUBLISH_CLOCK_SKEW_SECONDS,
+        )
+
+        drift_source = (ROOT / "scripts" / "release_drift.py").read_text(encoding="utf-8")
+        self.assertNotIn("24 * 60 * 60", drift_source)
+        self.assertIn('_LIMITS["UNTAGGED_SHIPPED_SOURCE_SECONDS"]', drift_source)
+
+        shell = (ROOT / "scripts" / "create-r2-lock-attestation.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("fetch_with_budget 30 3 10", shell)
+        self.assertNotIn("--max-filesize 262144", shell)
+        self.assertIn("fetch_with_budget 60 4 15", shell)
+        for name in (
+            "R2_LOCK_FETCH_BUDGET_SECONDS",
+            "R2_LOCK_FETCH_ATTEMPTS",
+            "R2_LOCK_FETCH_ATTEMPT_CAP_SECONDS",
+            "R2_PROOF_MAX_RESPONSE_BYTES",
+        ):
+            self.assertIn(f'constants.py" {name}', shell)
+            self.assertIn(f'"${name}"', shell)
+            self.assertEqual(
+                int(getattr(constants, name)),
+                {
+                    "R2_LOCK_FETCH_BUDGET_SECONDS": 30,
+                    "R2_LOCK_FETCH_ATTEMPTS": 3,
+                    "R2_LOCK_FETCH_ATTEMPT_CAP_SECONDS": 10,
+                    "R2_PROOF_MAX_RESPONSE_BYTES": 262144,
+                }[name],
+            )
 if __name__ == "__main__":
     current = scan()
     print(json.dumps(current, indent=2, sort_keys=True))

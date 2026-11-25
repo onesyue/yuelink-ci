@@ -63,6 +63,15 @@ PUBLIC_TAG_LOOKUP_ATTEMPTS = 3
 PUBLIC_TAG_VERIFY_ATTEMPTS = 12
 PUBLIC_TAG_VERIFY_INTERVAL_SECONDS = 5
 R2_PROOF_LIFETIME_SECONDS = 1800
+# Signed update.json lifetime and publish skew. Not the page-health age window.
+MAX_MANIFEST_LIFETIME_SECONDS = 45 * 24 * 60 * 60
+MAX_PUBLISH_CLOCK_SKEW_SECONDS = 6 * 60 * 60
+# Shipped source on master may stay untagged for one day.
+UNTAGGED_SHIPPED_SOURCE_SECONDS = 24 * 60 * 60
+# Lock-endpoint fetch_with_budget arguments. Not the candidate fetch.
+R2_LOCK_FETCH_BUDGET_SECONDS = 30
+R2_LOCK_FETCH_ATTEMPTS = 3
+R2_LOCK_FETCH_ATTEMPT_CAP_SECONDS = 10
 
 # --- Counts, floors and read bounds. ---
 
@@ -77,6 +86,10 @@ MAX_FUTURE_SKEW_SECONDS = 2 * 60
 MAX_ENVELOPE_BYTES = 64 * 1024
 MIN_BODY_BYTES = 1024
 MAX_BODY_BYTES = 1024 * 1024
+# Signed update.json read bound. Same count as MAX_BODY_BYTES, different body.
+MAX_UPDATE_MANIFEST_BYTES = 1024 * 1024
+# Curl --max-filesize shared by R2 proof fetches.
+R2_PROOF_MAX_RESPONSE_BYTES = 256 * 1024
 MAX_LATENCY_MS = 20_000
 MINIMUM_FILES = 500
 MINIMUM_TESTS = 2044

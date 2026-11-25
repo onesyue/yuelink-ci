@@ -13,6 +13,7 @@ import binascii
 import importlib.util
 import json
 import re
+import runpy
 import urllib.parse
 import subprocess
 import sys
@@ -124,8 +125,9 @@ def _load_brand_literals():
 _BRAND = _load_brand_literals()
 ASSET_HOST = _BRAND.ASSET_HOST
 RELEASE_URL = _BRAND.URL_DOWNLOAD
-MAX_MANIFEST_LIFETIME = timedelta(days=45)
-MAX_PUBLISH_CLOCK_SKEW = timedelta(hours=6)
+_LIMITS = runpy.run_path(str(Path(__file__).resolve().with_name("constants.py")))
+MAX_MANIFEST_LIFETIME = timedelta(seconds=_LIMITS["MAX_MANIFEST_LIFETIME_SECONDS"])
+MAX_PUBLISH_CLOCK_SKEW = timedelta(seconds=_LIMITS["MAX_PUBLISH_CLOCK_SKEW_SECONDS"])
 MINIMUM_MANIFEST = (
     Path(__file__).resolve().parents[1]
     / "tests/fixtures/update-manifest-v1.json"

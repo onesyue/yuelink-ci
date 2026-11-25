@@ -59,7 +59,7 @@ def main():
         if channel != data['tag'][1:]:
             failures.append('update channel differs from latest release tag')
         first = data['first_shipped_at']
-        if first is not None and time.time() - first > 24 * 60 * 60:
+        if first is not None and time.time() - first > _LIMITS["UNTAGGED_SHIPPED_SOURCE_SECONDS"]:
             failures.append('master has shipped-source changes untagged for more than 24h')
         for failure in failures:
             print('release drift: FAIL: ' + failure, file=sys.stderr)
