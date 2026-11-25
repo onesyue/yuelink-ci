@@ -116,6 +116,14 @@ jobs:
       - name: Verify mihomo fork ledger upgrade compatibility
         run: python3 .mihomo-upgrade-compat-tools/scripts/check-mihomo-upgrade-compat.py --source-root . --fetch-ci-history
 
+      - name: Move verified builder tools out of the source worktree
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools=.mihomo-upgrade-compat-tools
+          test "$(git status --porcelain -- "$tools")" = "?? $tools/"
+          mv -- "$tools" "$(mktemp -d "$RUNNER_TEMP/mihomo-compat.XXXXXXXX")/"
+
       - name: Set up Flutter
         uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
         with:

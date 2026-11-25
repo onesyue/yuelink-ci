@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -199,6 +200,44 @@ def plant_untrusted_source_floor(workspace: Path) -> None:
 
 
 class ToolsCheckoutWhitelistTests(unittest.TestCase):
+    def test_attestation_moves_only_the_untracked_builder_checkout(self) -> None:
+        workflow = WORKFLOW.read_text()
+        move = "      - name: Move verified builder tools out of the source worktree\n"
+        before, after = workflow.split(move)
+        self.assertIn("Verify mihomo fork ledger upgrade compatibility", before)
+        self.assertIn("Release metadata guard", after)
+        step = after.split("\n      - name:", 1)[0]
+        command = ["bash", "-c", textwrap.dedent(step.split("        run: |\n", 1)[1])]
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            source = root / "source"
+            subprocess.run(["git", "init", "-q", str(source)], check=True)
+            tools = source / ".mihomo-upgrade-compat-tools"
+            subprocess.run(["git", "init", "-q", str(tools)], check=True)
+            (tools / "reviewed.py").write_text("# checked builder input\n")
+            self.assertEqual(
+                subprocess.check_output(["git", "status", "--porcelain"], cwd=source, text=True),
+                "?? .mihomo-upgrade-compat-tools/\n",
+            )
+            (source / "tracked.txt").write_text("original\n")
+            subprocess.run(["git", "add", "tracked.txt"], cwd=source, check=True)
+            (source / "tracked.txt").write_text("unexpected change\n")
+            (source / "unexpected.txt").touch()
+            runner_temp = root / "runner temp"
+            runner_temp.mkdir()
+            env = {**os.environ, "RUNNER_TEMP": str(runner_temp)}
+            subprocess.run(command, cwd=source, env=env, check=True)
+            status = subprocess.check_output(["git", "status", "--porcelain"], cwd=source, text=True)
+            self.assertEqual(status.splitlines(), ["AM tracked.txt", "?? unexpected.txt"])
+            self.assertEqual(len(list(runner_temp.rglob("reviewed.py"))), 1)
+
+            tools.mkdir()
+            (tools / "source-owned").touch()
+            subprocess.run(["git", "add", ".mihomo-upgrade-compat-tools"], cwd=source, check=True)
+            self.assertNotEqual(subprocess.run(command, cwd=source, env=env).returncode, 0)
+            self.assertTrue((tools / "source-owned").is_file())
+
     def test_attestation_and_policy_share_the_reviewed_script_and_floor(self) -> None:
         attestation_paths = assert_minimal_tools_checkout(
             self, tools_checkout_step(WORKFLOW.read_text(encoding="utf-8"))
