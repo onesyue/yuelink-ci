@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from constants import (
+    GO_KERNEL_BUILD_TAGS,
     IOS_COMPILER_DISCOVERY_TIMEOUT_SECONDS,
     IOS_GIT_REV_PARSE_TIMEOUT_SECONDS,
     IOS_NATIVE_BUILD_TIMEOUT_SECONDS,
@@ -178,7 +179,7 @@ def build_simulator_kernel(source: Path, log) -> None:
             "-trimpath",
             "-ldflags=-s -w -X github.com/metacubex/mihomo/constant.Version=yuelink",
             "-tags",
-            "with_gvisor",
+            GO_KERNEL_BUILD_TAGS,
             "-o",
             str(archive),
             ".",
