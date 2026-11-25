@@ -84,8 +84,10 @@ def one_dial_issues(build: str, dial: str, sync: str, ios: str) -> list[str]:
         issues.append("unsigned iOS compilation is missing")
     if "ios_unsigned_compile:" in dial:
         unsigned = dial.split("  ios_unsigned_compile:", 1)[1]
-        if "if: always() && inputs.run_pr_checks && needs.dial_gate.result != 'cancelled'" not in unsigned:
+        if "inputs.run_pr_checks && needs.platform_scope.outputs.ios == 'true'" not in unsigned:
             issues.append("unsigned iOS compilation must retain its required PR check")
+        if "needs: [dial_gate]" in unsigned.split("steps:", 1)[0]:
+            issues.append("unsigned iOS compilation must run with platform scope, not after the dial gate")
     if "linux_auth_storage:" not in dial:
         issues.append("auth and storage verification is missing")
     if dial.count("ssh-key:") < 4:

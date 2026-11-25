@@ -235,6 +235,10 @@ jobs:
         with:
           pattern: dial-gate-*
           path: dial-reports
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: dial-platform-scope
+          path: dial-scope
       - name: Write the platform table
         env:
           EXPECTED_SOURCE_COMMIT: ${{ needs.plan.outputs.source_commit }}
@@ -246,6 +250,20 @@ jobs:
           import json, os, re, sys
           from pathlib import Path
           want = ["windows", "macos", "linux", "android"]
+          skipped = set()
+          if os.environ.get("REQUIRE_SOURCE_COMMIT") == "false":
+              scope_path = Path("dial-scope/scope.json")
+              if not scope_path.is_file():
+                  sys.exit("missing pull request platform scope")
+              scope = json.loads(scope_path.read_text(encoding="utf-8"))
+              raw = scope.get("skipped") if isinstance(scope, dict) else None
+              if (
+                  not isinstance(raw, list)
+                  or len(set(raw)) != len(raw)
+                  or any(not isinstance(item, str) or item not in want for item in raw)
+              ):
+                  sys.exit("invalid pull request platform scope")
+              skipped = set(raw)
           protocols = {"vless-reality-tfo", "vless-reality", "vless-ws-tls", "hysteria2"}
           found = {}
           identities = None
@@ -320,10 +338,16 @@ jobs:
                       if item.get("success_pass") is not True:
                           sys.exit(f"failed dial round success gate for {platform}")
               found[platform] = data
+          if skipped & set(found):
+              sys.exit("skipped platform also produced dial evidence")
+          required = [platform for platform in want if platform not in skipped]
           lines = ["| platform | protocol | baseline | candidate | baseline p95 ms | candidate p95 ms | pass |",
                    "|---|---|---:|---:|---:|---:|:---:|"]
-          ok = True
           for platform in want:
+              if platform in skipped:
+                  lines.append(f"| {platform} | unchanged inputs | | | | | skip |")
+          ok = True
+          for platform in required:
               data = found.get(platform)
               if data is None:
                   ok = False
