@@ -927,12 +927,12 @@ class SourceAttestationContractTests(unittest.TestCase):
                     self.assertNotIn("${{", script)
 
     def test_r2_prune_runs_are_serialized(self) -> None:
-        prune = (ROOT / ".github/workflows/prune-r2.yml").read_text(encoding="utf-8")
+        prune = (ROOT / ".github/workflows/nightly.yml").read_text(encoding="utf-8")
         self.assertIn("group: yuelink-r2-prune", prune)
         self.assertIn("cancel-in-progress: false", prune)
 
     def test_workflow_run_prune_validates_source_without_consuming_artifacts(self) -> None:
-        prune = (ROOT / ".github/workflows/prune-r2.yml").read_text(encoding="utf-8")
+        prune = (ROOT / ".github/workflows/nightly.yml").read_text(encoding="utf-8")
         markers = (
             "zizmor: ignore[dangerous-triggers] no upstream artifacts/code",
             "Validate trusted Build workflow_run identity",
@@ -957,7 +957,7 @@ class SourceAttestationContractTests(unittest.TestCase):
         self.assertNotIn("actions/download-artifact", prune)
 
     def test_manifest_failure_reporting_without_ticket_permissions(self) -> None:
-        manifest = (ROOT / ".github/workflows/manifest-health.yml").read_text()
+        manifest = (ROOT / ".github/workflows/nightly.yml").read_text()
         self.assertNotIn("issues: write", manifest)
         self.assertNotIn("gh issue", manifest)
         report = manifest.split("Report manifest failure", 1)[1]

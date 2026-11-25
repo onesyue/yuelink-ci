@@ -193,7 +193,7 @@ jobs:
 
   # ───────────────────────────────────────────────────────────────────────────
   # 2026-08-21: Cloudflare bucket lock permanently protects every object below
-  # prefix `v`. The mirror's historical prune-r2.yml is now a read-only lock /
+  # prefix `v`. The mirror's nightly.yml archive audit is a read-only lock /
   # signed-archive audit. No release prefix is deleted or overwritten; storage
   # growth is an intentional supply-chain retention decision.
   # ───────────────────────────────────────────────────────────────────────────

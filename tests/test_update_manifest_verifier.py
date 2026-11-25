@@ -10,8 +10,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/update-manifest-v1.json"
-MANIFEST_HEALTH = ROOT / ".github/workflows/manifest-health.yml"
-PRUNE_R2 = ROOT / ".github/workflows/prune-r2.yml"
+MANIFEST_HEALTH = ROOT / ".github/workflows/nightly.yml"
+PRUNE_R2 = ROOT / ".github/workflows/nightly.yml"
 # 归档的旧签名根，用来证明「签名合法但版本更旧」会被单调地板拒绝。
 # 指向**最近**的那一个而不是最老的：上一版真正在 CDN 上服役过的根
 # 是最现实的回放样本。更早的那些仍留在仓里。

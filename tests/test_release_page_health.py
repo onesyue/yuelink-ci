@@ -14,7 +14,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/verify-release-page-health.py"
-WORKFLOW = ROOT / ".github/workflows/manifest-health.yml"
+WORKFLOW = ROOT / ".github/workflows/nightly.yml"
 REAL_FIXTURE = ROOT / "tests/fixtures/yue-to-download-health.json"
 REAL_PUBLIC_KEY = ROOT / "security/yue-to-download-health-ed25519.pem"
 SPEC = importlib.util.spec_from_file_location("release_page_health", SCRIPT)

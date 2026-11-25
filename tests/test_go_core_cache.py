@@ -130,7 +130,7 @@ def contract_issues(workflow: str) -> list[str]:
             issues.append(f"identity script lost {required}")
 
     # A tag run's cache scope is unreachable from the next tag, so the release
-    # build only restores; warm-release-caches.yml saves on master.
+    # build only restores; nightly.yml saves on master.
     if "uses: actions/cache/restore@" not in cache:
         issues.append("go core cache must only restore in the tag-scoped release build")
     if "continue-on-error: true" not in cache:
