@@ -439,7 +439,7 @@ class LiteralClassRatchetTest(unittest.TestCase):
                     os.environ[name] = value
 
     def test_coverage_worker_cap_reads_the_named_default(self) -> None:
-        module = _load(ROOT / "scripts" / "run-flutter-coverage.py", "coverage_literals")
+        module = _load(ROOT / "scripts" / "flutter_coverage" / "runner.py", "coverage_literals")
         snapshot = {
             "effective_cpus": 8,
             "available_memory_bytes": 64 * 1024 ** 3,

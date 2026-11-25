@@ -22,7 +22,7 @@ def load(name, filename):
 
 
 BASELINE = load("baseline", "contract-baseline.py")
-RUNNER = load("runner", "run-flutter-coverage.py")
+RUNNER = load("runner", "flutter_coverage/runner.py")
 
 
 class ContractBaselineTests(unittest.TestCase):
