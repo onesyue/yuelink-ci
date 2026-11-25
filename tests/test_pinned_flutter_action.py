@@ -536,7 +536,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
             and block not in media and block not in dial_saves
         ]
         assert dial and output_caches and dependency_caches
-        assert len(dependency_caches) == 9
+        assert len(dependency_caches) == 11
         for block in dial:
             assert "steps.dial_kernel.outputs.key" in block
             assert "${{ env.GO_VERSION }}" in block
@@ -594,6 +594,7 @@ class LinkPlatformCacheTests(unittest.TestCase):
             "${{ runner.os == 'macOS' && '~/Library/Caches/go-build' || '~/.cache/go-build' }}",
             r"~\AppData\Local\go-build", "~/.pub-cache", r"~\AppData\Local\Pub\Cache",
             "~/.gradle/caches", "~/.gradle/wrapper",
+            "ios/Pods", "macos/Pods", "~/Library/Caches/CocoaPods",
             "core/build", "service/build",
             "${{ runner.temp }}/linux-media/prefix",
         }

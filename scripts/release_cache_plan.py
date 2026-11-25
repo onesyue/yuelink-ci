@@ -34,8 +34,14 @@ CACHES = {
     "gocache": "Restore Go compiler cache",
     "pub": "Restore pub cache (lockfile-verified",
 }
-PLATFORM_CACHES = {"gradle": ("android", "Restore Gradle dependency caches"),
-                   "linux_media": ("linux", "Restore Linux native media")}
+PLATFORM_CACHES = {
+    "gradle": ("android", "Restore Gradle dependency caches"),
+    "linux_media": ("linux", "Restore Linux native media"),
+    "cocoapods_ios": ("ios", "Restore CocoaPods cache (iOS)"),
+    "cocoapods_macos": ("macos", "Restore CocoaPods cache (macOS)"),
+    "xcode_ios": ("ios", "Restore Xcode compilation cache"),
+    "xcode_macos": ("macos", "Restore Xcode compilation cache"),
+}
 IDENTITY_STEP = "Record Go core cache identity"
 SOURCE_TITLE = re.compile(r"Source attestation ([0-9a-f]{40})")
 EXPR = re.compile(r"\$\{\{\s*(.*?)\s*\}\}")
@@ -104,14 +110,25 @@ def evaluate(text: str, ctx: dict[str, str], workspace: Path) -> str:
     return EXPR.sub(one, text)
 
 
-def condition(expr: str | None, ctx: dict[str, str]) -> bool:
-    if expr is None:
-        return True
+def _condition_atom(expr: str, ctx: dict[str, str]) -> bool:
     match = re.fullmatch(r"(runner\.os|matrix\.platform) (==|!=) '(\w+)'", expr.strip())
     if not match:
         raise PlanError(f"unsupported cache step condition: {expr}")
     equal = ctx[match.group(1)] == match.group(3)
     return equal if match.group(2) == "==" else not equal
+
+
+def condition(expr: str | None, ctx: dict[str, str]) -> bool:
+    if expr is None:
+        return True
+    text = expr.strip()
+    if "||" in text and "&&" in text:
+        raise PlanError(f"unsupported cache step condition: {expr}")
+    if "||" in text:
+        return any(_condition_atom(part, ctx) for part in text.split("||"))
+    if "&&" in text:
+        return all(_condition_atom(part, ctx) for part in text.split("&&"))
+    return _condition_atom(text, ctx)
 
 
 def env_pin(text: str, name: str) -> str:
@@ -233,7 +250,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("identity-script", help="print build-matrix.yml's Go core identity script")
     recipe = sub.add_parser("step-script", help="print a canonical warm-up recipe")
     recipe.add_argument("name", choices=("Install Linux build dependencies",
-                        "Record Linux media identity", "Build source-locked Linux native media"))
+                        "Record Linux media identity", "Build source-locked Linux native media",
+                        "Select Xcode 26.6 for Apple builds",
+                        "Decide Xcode compilation cache save"))
     k = sub.add_parser("keys", help="evaluate build-matrix cache paths/keys for this runner")
     k.add_argument("--platform", required=True)
     k.add_argument("--workspace", type=Path, default=Path.cwd())

@@ -215,14 +215,15 @@ class WarmUpWorkflowBoundary(unittest.TestCase):
                     for nonmaster in ("refs/pull/1/merge", "refs/tags/v1.3.178", "refs/heads/feature"):
                         mutated = guard.replace("refs/heads/master", nonmaster)
                         self.assertFalse(mutated.startswith("github.ref == 'refs/heads/master' && "))
-        self.assertEqual(count, 5)
+        self.assertEqual(count, 10)
         self.assertNotRegex(dial, r"uses: actions/cache@")
         self.assertIn("key: ${{ steps.dial_kernel_cache.outputs.cache-primary-key }}", dial)
 
     def test_gradle_warms_even_when_core_was_cached(self) -> None:
-        for name in ("Set up Flutter", "Restore shared pub dependencies"):
-            block = next(b for n, b in plan.steps(WARM) if n == name)
-            self.assertIn("steps.gradle.outputs.cache-hit != 'true'", plan.field(block, "if"))
+        flutter = next(b for n, b in plan.steps(WARM) if n == "Set up Flutter")
+        self.assertIn("steps.gradle.outputs.cache-hit != 'true'", plan.field(flutter, "if"))
+        pub = next(b for n, b in plan.steps(WARM) if n == "Restore shared pub dependencies")
+        self.assertIsNone(plan.field(pub, "if"))
         init = (ROOT / "scripts/warm_gradle.init.gradle").read_text()
         self.assertIn("tasks.register('warmDependencyCache')", init)
         self.assertIn("'releaseCompileClasspath', 'releaseRuntimeClasspath'", init)

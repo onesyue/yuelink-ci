@@ -50,7 +50,7 @@ jobs:
     name: Warm caches (${{ matrix.platform }})
     needs: [plan]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -122,25 +122,55 @@ jobs:
         with:
           path: ${{ steps.cache_plan.outputs.linux_media_path }}
           key: ${{ steps.cache_plan.outputs.linux_media_key }}
+      - name: Restore iOS Xcode compilation cache from master
+        id: xcode_ios
+        if: matrix.platform == 'ios'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.xcode_ios_path }}
+          key: ${{ steps.cache_plan.outputs.xcode_ios_key }}
+          restore-keys: ${{ steps.cache_plan.outputs.xcode_ios_restore_keys }}
+      - name: Restore macOS Xcode compilation cache from master
+        id: xcode_macos
+        if: matrix.platform == 'macos'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.xcode_macos_path }}
+          key: ${{ steps.cache_plan.outputs.xcode_macos_key }}
+          restore-keys: ${{ steps.cache_plan.outputs.xcode_macos_restore_keys }}
+      - name: Restore iOS CocoaPods cache from master
+        id: cocoapods_ios
+        if: matrix.platform == 'ios'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.cocoapods_ios_path }}
+          key: ${{ steps.cache_plan.outputs.cocoapods_ios_key }}
+      - name: Restore macOS CocoaPods cache from master
+        id: cocoapods_macos
+        if: matrix.platform == 'macos'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.cocoapods_macos_path }}
+          key: ${{ steps.cache_plan.outputs.cocoapods_macos_key }}
       - name: Set up Go
         if: steps.core.outputs.cache-hit != 'true'
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ needs.plan.outputs.go_version }}
           cache: false
-      - name: Set up Flutter
-        id: flutter
-        if: steps.core.outputs.cache-hit != 'true' || (matrix.platform == 'android' && steps.gradle.outputs.cache-hit != 'true')
-        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
-        with:
-          flutter-version: ${{ needs.plan.outputs.flutter_version }}
-          cache: true
       - name: Restore shared pub dependencies
-        if: steps.core.outputs.cache-hit != 'true' || (matrix.platform == 'android' && steps.gradle.outputs.cache-hit != 'true')
+        id: pub
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.cache_plan.outputs.pub_path }}
           key: ${{ steps.cache_plan.outputs.pub_key }}
+      - name: Set up Flutter
+        id: flutter
+        if: steps.core.outputs.cache-hit != 'true' || (matrix.platform == 'android' && steps.gradle.outputs.cache-hit != 'true') || steps.pub.outputs.cache-hit != 'true' || (matrix.platform == 'ios' && (steps.xcode_ios.outputs.cache-hit != 'true' || steps.cocoapods_ios.outputs.cache-hit != 'true')) || (matrix.platform == 'macos' && (steps.xcode_macos.outputs.cache-hit != 'true' || steps.cocoapods_macos.outputs.cache-hit != 'true'))
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
+        with:
+          flutter-version: ${{ needs.plan.outputs.flutter_version }}
+          cache: true
       - name: Setup Android NDK tools
         if: matrix.platform == 'android' && (steps.core.outputs.cache-hit != 'true' || steps.gradle.outputs.cache-hit != 'true')
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
@@ -180,6 +210,96 @@ jobs:
             test "$CORE_ARCH_SCOPE" = all
             dart setup.dart build -p "$PLATFORM"
           fi
+      - name: Resolve pub packages for the master cache
+        if: steps.pub.outputs.cache-hit != 'true'
+        run: flutter pub get --enforce-lockfile
+      - name: Save pub cache in master scope
+        if: github.ref == 'refs/heads/master' && steps.pub.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.pub_path }}
+          key: ${{ steps.cache_plan.outputs.pub_key }}
+      - name: Compile iOS to fill the Xcode and CocoaPods caches
+        if: matrix.platform == 'ios' && (steps.xcode_ios.outputs.cache-hit != 'true' || steps.cocoapods_ios.outputs.cache-hit != 'true')
+        shell: bash
+        env:
+          PLATFORM: ios
+          DEVELOPER_DIR: ${{ format('/Applications/Xcode_{0}.app/Contents/Developer', needs.plan.outputs.xcode) }}
+        run: |
+          set -euo pipefail
+          python3 .cache-tools/scripts/release_cache_plan.py step-script 'Select Xcode 26.6 for Apple builds' > "$RUNNER_TEMP/xcode-select.sh"
+          bash "$RUNNER_TEMP/xcode-select.sh"
+          export XCODE_XCCONFIG_FILE="$RUNNER_TEMP/yuelink-compilation-cache.xcconfig"
+          flutter config --enable-swift-package-manager
+          flutter pub get --enforce-lockfile
+          dart run slang
+          dart setup.dart install -p "$PLATFORM"
+          flutter build ios --release --no-codesign \
+            --obfuscate --split-debug-info="$RUNNER_TEMP/flutter-symbols/ios" \
+            --build-name=0.0.0 --build-number=1
+      - name: Decide iOS Xcode compilation cache save
+        id: xcode_ios_save
+        if: matrix.platform == 'ios' && steps.xcode_ios.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          XCODE_CACHE_HIT: ${{ steps.xcode_ios.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          python3 .cache-tools/scripts/release_cache_plan.py step-script 'Decide Xcode compilation cache save' > "$RUNNER_TEMP/xcode-save.sh"
+          bash "$RUNNER_TEMP/xcode-save.sh"
+      - name: Save iOS Xcode compilation cache in master scope
+        if: github.ref == 'refs/heads/master' && matrix.platform == 'ios' && steps.xcode_ios_save.outputs.save == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.xcode_ios_path }}
+          key: ${{ steps.cache_plan.outputs.xcode_ios_key }}
+      - name: Save iOS CocoaPods cache in master scope
+        if: github.ref == 'refs/heads/master' && matrix.platform == 'ios' && steps.cocoapods_ios.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.cocoapods_ios_path }}
+          key: ${{ steps.cache_plan.outputs.cocoapods_ios_key }}
+      - name: Compile macOS to fill the Xcode and CocoaPods caches
+        if: matrix.platform == 'macos' && (steps.xcode_macos.outputs.cache-hit != 'true' || steps.cocoapods_macos.outputs.cache-hit != 'true')
+        shell: bash
+        env:
+          PLATFORM: macos
+          DEVELOPER_DIR: ${{ format('/Applications/Xcode_{0}.app/Contents/Developer', needs.plan.outputs.xcode) }}
+        run: |
+          set -euo pipefail
+          python3 .cache-tools/scripts/release_cache_plan.py step-script 'Select Xcode 26.6 for Apple builds' > "$RUNNER_TEMP/xcode-select.sh"
+          bash "$RUNNER_TEMP/xcode-select.sh"
+          export XCODE_XCCONFIG_FILE="$RUNNER_TEMP/yuelink-compilation-cache.xcconfig"
+          flutter config --enable-swift-package-manager
+          flutter config --enable-macos-desktop
+          flutter pub get --enforce-lockfile
+          dart run slang
+          dart setup.dart install -p "$PLATFORM"
+          flutter build macos --release \
+            --obfuscate --split-debug-info="$RUNNER_TEMP/flutter-symbols/macos" \
+            --build-name=0.0.0 --build-number=1
+      - name: Decide macOS Xcode compilation cache save
+        id: xcode_macos_save
+        if: matrix.platform == 'macos' && steps.xcode_macos.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          XCODE_CACHE_HIT: ${{ steps.xcode_macos.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          python3 .cache-tools/scripts/release_cache_plan.py step-script 'Decide Xcode compilation cache save' > "$RUNNER_TEMP/xcode-save.sh"
+          bash "$RUNNER_TEMP/xcode-save.sh"
+      - name: Save macOS Xcode compilation cache in master scope
+        if: github.ref == 'refs/heads/master' && matrix.platform == 'macos' && steps.xcode_macos_save.outputs.save == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.xcode_macos_path }}
+          key: ${{ steps.cache_plan.outputs.xcode_macos_key }}
+      - name: Save macOS CocoaPods cache in master scope
+        if: github.ref == 'refs/heads/master' && matrix.platform == 'macos' && steps.cocoapods_macos.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.cocoapods_macos_path }}
+          key: ${{ steps.cache_plan.outputs.cocoapods_macos_key }}
       - name: Set up Java for dependency resolution
         if: matrix.platform == 'android' && steps.gradle.outputs.cache-hit != 'true'
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
