@@ -73,6 +73,10 @@ R2_LOCK_FETCH_BUDGET_SECONDS = 30
 R2_LOCK_FETCH_ATTEMPTS = 3
 R2_LOCK_FETCH_ATTEMPT_CAP_SECONDS = 10
 
+# Kernel build identity. Callers import these; the bytes stay the current tag.
+GO_KERNEL_BUILD_TAGS = "with_gvisor"
+GO_RUNTIME_VERSION_PREFIX = "go"
+
 # --- Counts, floors and read bounds. ---
 
 MIN_TEST_FILES = 8
