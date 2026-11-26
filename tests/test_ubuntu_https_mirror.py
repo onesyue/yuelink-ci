@@ -23,10 +23,16 @@ class UbuntuMirrorTest(unittest.TestCase):
             path.write_text(original)
             for codes in ([0, 0], [22, 0, 0], [22, 28]):
                 with self.subTest(codes=codes), patch.object(
+                    selector, "PROBE_TIMEOUT_SECONDS", "3",
+                ), patch.object(
                     selector.subprocess, "run",
                     side_effect=[CompletedProcess([], status) for status in codes],
                 ) as run:
                     selector.configure(path)
+                    for call in run.call_args_list:
+                        argv = call.args[0]
+                        if argv[0] == "curl":
+                            self.assertEqual(argv[argv.index("--max-time") + 1], "3")
                     if codes[-1]:
                         self.assertTrue(all(c.args[0][0] == "curl" for c in run.call_args_list))
                         continue

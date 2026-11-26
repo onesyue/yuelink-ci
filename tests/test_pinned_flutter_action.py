@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -228,6 +229,48 @@ class PinnedFlutterActionTests(unittest.TestCase):
         assert installer.valid_cached_sdk(
             target, {**expected, "runner_arch": "ARM64"}, "Linux"
         ) is False
+
+    def test_sdk_download_bounds(self) -> None:
+        installer = _installer_module()
+        self.assertEqual(installer.SDK_DOWNLOAD_TIMEOUT_SECONDS, 60)
+        self.assertEqual(installer.SDK_DOWNLOAD_CHUNK_BYTES, 1024 * 1024)
+        url = "https://example.test/sdk"
+        digest = hashlib.sha256(b"abcdef").hexdigest()
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            mock.patch.multiple(
+                installer, SDK_DOWNLOAD_TIMEOUT_SECONDS=7, SDK_DOWNLOAD_CHUNK_BYTES=4
+            ),
+            mock.patch.object(installer.urllib.request, "urlopen") as urlopen,
+        ):
+            response = urlopen.return_value.__enter__.return_value
+            response.geturl.return_value = url
+            response.read.side_effect = [b"abcd", b"ef", b""]
+            destination = Path(directory) / "sdk"
+            installer.download(url, destination, digest)
+            self.assertEqual(destination.read_bytes(), b"abcdef")
+        urlopen.assert_called_once_with(mock.ANY, timeout=7)
+        self.assertEqual(response.read.call_args_list, [mock.call(4)] * 3)
+
+    def test_runtime_diagnostic_tail_bounds(self) -> None:
+        installer = _installer_module()
+        self.assertEqual(installer.RUNTIME_DIAGNOSTIC_TAIL_CHARS, 500)
+        result = subprocess.CompletedProcess(
+            [], 0, stdout="prefixäbc\n", stderr="prefix界yz\r"
+        )
+        with (
+            mock.patch.object(installer, "RUNTIME_DIAGNOSTIC_TAIL_CHARS", 4),
+            mock.patch.object(installer.subprocess, "run", return_value=result),
+            self.assertRaises(SystemExit) as failure,
+        ):
+            installer.verify_runtime(Path("sdk"), "3.47.2", "Linux")
+        stdout_tail = "äbc\\n"
+        stderr_tail = "界yz\\r"
+        self.assertTrue(
+            str(failure.exception).endswith(
+                f"stdout_tail={stdout_tail!r}; stderr_tail={stderr_tail!r}"
+            )
+        )
 
     def test_windows_runtime_probe_uses_command_processor_and_call(self) -> None:
         installer = _installer_module()

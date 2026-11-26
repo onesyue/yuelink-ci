@@ -19,6 +19,9 @@ import tarfile
 
 
 BASE_URL = "https://storage.googleapis.com/flutter_infra_release/releases/"
+SDK_DOWNLOAD_TIMEOUT_SECONDS = 60
+SDK_DOWNLOAD_CHUNK_BYTES = 1024 * 1024
+RUNTIME_DIAGNOSTIC_TAIL_CHARS = 500
 RELEASES = {
     ("3.47.2", "Linux"): (
         "stable/linux/flutter_linux_3.47.2-stable.tar.xz",
@@ -206,12 +209,12 @@ def inspect_archive(archive: Path) -> None:
 def download(url: str, destination: Path, expected_sha256: str) -> None:
     digest = hashlib.sha256()
     request = urllib.request.Request(url, headers={"User-Agent": "yuelink-ci/1"})
-    with urllib.request.urlopen(request, timeout=60) as response, destination.open(
-        "wb"
-    ) as output:
+    with urllib.request.urlopen(
+        request, timeout=SDK_DOWNLOAD_TIMEOUT_SECONDS
+    ) as response, destination.open("wb") as output:
         if response.geturl() != url:
             fail(f"unexpected SDK redirect to {response.geturl()!r}")
-        while chunk := response.read(1024 * 1024):
+        while chunk := response.read(SDK_DOWNLOAD_CHUNK_BYTES):
             digest.update(chunk)
             output.write(chunk)
         output.flush()
@@ -316,8 +319,16 @@ def verify_runtime(target: Path, version: str, system: str) -> None:
     try:
         document = parse_machine_document(result.stdout)
     except ValueError as exc:
-        stdout = result.stdout[-500:].replace("\r", "\\r").replace("\n", "\\n")
-        stderr = result.stderr[-500:].replace("\r", "\\r").replace("\n", "\\n")
+        stdout = (
+            result.stdout[-RUNTIME_DIAGNOSTIC_TAIL_CHARS:]
+            .replace("\r", "\\r")
+            .replace("\n", "\\n")
+        )
+        stderr = (
+            result.stderr[-RUNTIME_DIAGNOSTIC_TAIL_CHARS:]
+            .replace("\r", "\\r")
+            .replace("\n", "\\n")
+        )
         fail(
             "Flutter version probe was not JSON: "
             f"{exc}; stdout_tail={stdout!r}; stderr_tail={stderr!r}"

@@ -18,6 +18,7 @@ ATTEMPTS = _LIMITS["GH_READ_ATTEMPTS"]
 ATTEMPT_SECONDS = _LIMITS["GH_READ_ATTEMPT_SECONDS"]
 TOTAL_SECONDS = _LIMITS["GH_READ_TOTAL_SECONDS"]
 OUTPUT_LIMIT = _LIMITS["GH_READ_OUTPUT_LIMIT"]
+OUTPUT_LIMIT_EXIT_CODE = _LIMITS["OUTPUT_LIMIT_EXIT_CODE"]
 TIMEOUT_EXIT_CODE = _LIMITS["TIMEOUT_EXIT_CODE"]
 REPOSITORY = "onesyue/yuelink-ci"
 
@@ -148,7 +149,7 @@ def execute(argv: list[str], timeout: float) -> tuple[int, bytes, bytes]:
                 if time.monotonic() >= deadline:
                     return TIMEOUT_EXIT_CODE, b"", b"release read deadline exceeded; not retrying\n"
                 if max(os.fstat(out.fileno()).st_size, os.fstat(err.fileno()).st_size) > OUTPUT_LIMIT:
-                    return 125, b"", b"release read output limit exceeded; not retrying\n"
+                    return OUTPUT_LIMIT_EXIT_CODE, b"", b"release read output limit exceeded; not retrying\n"
                 time.sleep(min(_LIMITS["GH_PROCESS_GROUP_POLL_SECONDS"], max(0, deadline - time.monotonic())))
         finally:
             stop(process)
@@ -156,7 +157,7 @@ def execute(argv: list[str], timeout: float) -> tuple[int, bytes, bytes]:
         err.seek(0)
         stdout, stderr = out.read(OUTPUT_LIMIT + 1), err.read(OUTPUT_LIMIT + 1)
         if max(len(stdout), len(stderr)) > OUTPUT_LIMIT:
-            return 125, b"", b"release read output limit exceeded; not retrying\n"
+            return OUTPUT_LIMIT_EXIT_CODE, b"", b"release read output limit exceeded; not retrying\n"
         return process.returncode, stdout, stderr
 
 

@@ -371,6 +371,7 @@ class LiteralClassRatchetTest(unittest.TestCase):
             "GROUP_FILE_CAP": 8,
             "GROUP_WEIGHT_BUDGET": 8,
             "TIMEOUT_EXIT_CODE": 124,
+            "OUTPUT_LIMIT_EXIT_CODE": 125,
             "GH_READ_OUTPUT_LIMIT": 16 * 1024 * 1024,
             "GITLEAKS_VERSION": "8.30.1",
             "GITLEAKS_LINUX_X64_SHA256": (
@@ -437,11 +438,12 @@ class LiteralClassRatchetTest(unittest.TestCase):
             checker.UPSTREAM_URL, "https://github.com/MetaCubeX/mihomo.git"
         )
         self.assertEqual(checker.FORK_URL, "https://github.com/onesyue/mihomo.git")
-        mirror = (ROOT / "scripts" / "select-ubuntu-https-mirror.py").read_text(
-            encoding="utf-8"
+        mirror = _load(
+            ROOT / "scripts" / "select-ubuntu-https-mirror.py",
+            "ubuntu_mirror_literals",
         )
-        self.assertIn('Path("/etc/apt/apt-mirrors.txt")', mirror)
-        self.assertIn('"--max-time", "8"', mirror)
+        self.assertEqual(mirror.MIRROR_LIST_PATH, Path("/etc/apt/apt-mirrors.txt"))
+        self.assertEqual(mirror.PROBE_TIMEOUT_SECONDS, "8")
 
     def test_ci_check_env_override_reads_the_named_defaults(self) -> None:
         module = _load(ROOT / "scripts" / "ci_check.py", "ci_check_literals")
