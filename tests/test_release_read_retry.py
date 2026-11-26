@@ -296,6 +296,16 @@ class ReleaseReadRetryTests(unittest.TestCase):
                         m.stop(process)
                 self.assertEqual(killpg.call_count, attempts)
 
+    def test_stop_waits_for_configured_term_grace_before_kill(self):
+        process = Mock(pid=123)
+        grace = 0.25
+        process.wait.side_effect = [subprocess.TimeoutExpired("gh", grace), None]
+        with patch.dict(m._LIMITS, GH_PROCESS_TERM_GRACE_SECONDS=grace), \
+                patch.object(m.os, "killpg") as kill:
+            m.stop(process)
+        self.assertEqual(process.wait.call_args_list, [call(timeout=grace), call()])
+        self.assertEqual(kill.call_args_list, [call(123, signal.SIGTERM), call(123, signal.SIGKILL)])
+
     def test_deadline_closes_the_descendant_socket_after_sigkill(self):
         descendant = (
             "import signal, socket, sys; "
@@ -380,12 +390,23 @@ class ReleaseReadRetryTests(unittest.TestCase):
 
     def test_darwin_live_group_permission_error_stays_fatal(self):
         process = Mock(pid=123)
-        with patch.object(m.sys, "platform", "darwin"), patch.object(m.time, "sleep"), \
-                patch.object(m.subprocess, "check_output", return_value="123 S\n"):
+        process.poll.return_value = None
+        with (
+            patch.dict(m._LIMITS, GH_PROCESS_GROUP_SIGNAL_ATTEMPTS=3,
+                       GH_DARWIN_PROCESS_LIST_EXECUTABLE="/test-tools/ps"),
+            patch.object(m.sys, "platform", "darwin"),
+            patch.object(m.time, "sleep") as sleep,
+            patch.object(m.subprocess, "check_output", return_value="123 S\n") as inspect,
+        ):
             with patch.object(m.os, "killpg", side_effect=PermissionError) as kill:
                 with self.assertRaises(PermissionError):
                     m.stop(process)
-        self.assertEqual(kill.call_count, 21)
+        self.assertEqual(kill.call_count, 3)
+        self.assertEqual(sleep.call_count, 2)
+        inspect.assert_called_once_with(
+            ["/test-tools/ps", "-axo", "pgid=,stat="],
+            text=True, timeout=m._LIMITS["GH_PROCESS_LIST_TIMEOUT_SECONDS"],
+        )
 
     def test_total_deadline_prevents_another_attempt(self):
         argv = ["gh", "api", "repos/onesyue/yuelink-ci/commits/" + BUILDER]
