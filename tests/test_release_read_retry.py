@@ -397,7 +397,10 @@ class ReleaseReadRetryTests(unittest.TestCase):
             execute.assert_called_once()
             clock.sleep.assert_not_called()
 
-    def test_oversized_stdout_or_stderr_discards_all_output(self):
+    def test_output_limit_exit_code(self):
+        self.assertEqual(m.OUTPUT_LIMIT_EXIT_CODE, 125)
+
+    def test_output_limit_while_running_discards_both_streams(self):
         program = (
             "import os,signal,sys; "
             "fd=int(sys.argv[1]); "
@@ -407,11 +410,11 @@ class ReleaseReadRetryTests(unittest.TestCase):
         for stream, fd in (("stdout", 1), ("stderr", 2)):
             with self.subTest(stream=stream), patch.object(m, "OUTPUT_LIMIT", 64):
                 code, stdout, stderr = m.execute([sys.executable, "-c", program, str(fd)], 10)
-                self.assertEqual(code, 125)
+                self.assertEqual(code, m.OUTPUT_LIMIT_EXIT_CODE)
                 self.assertEqual(stdout, b"")
                 self.assertEqual(stderr, b"release read output limit exceeded; not retrying\n")
 
-    def test_output_limit_discards_both_streams(self):
+    def test_output_limit_after_exit_discards_both_streams(self):
         for oversized_stream in ("stdout", "stderr"):
             with self.subTest(stream=oversized_stream), patch.object(m, "OUTPUT_LIMIT", 64):
                 program = (
@@ -420,10 +423,12 @@ class ReleaseReadRetryTests(unittest.TestCase):
                     "sys.stderr.write('partial diagnostic'); "
                     "getattr(sys, sys.argv[1]).write('x' * 65)"
                 )
-                code, stdout, stderr = m.execute(
-                    [sys.executable, "-c", program, oversized_stream], 5
-                )
-                self.assertEqual(code, 125)
+                # Observe the child only after it exits so this exercises the final size check.
+                with patch.object(subprocess.Popen, "poll", lambda child: child.wait(timeout=5)):
+                    code, stdout, stderr = m.execute(
+                        [sys.executable, "-c", program, oversized_stream], 5
+                    )
+                self.assertEqual(code, m.OUTPUT_LIMIT_EXIT_CODE)
                 self.assertEqual(stdout, b"")
                 self.assertEqual(stderr, b"release read output limit exceeded; not retrying\n")
 
