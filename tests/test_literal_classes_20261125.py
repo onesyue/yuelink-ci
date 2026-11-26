@@ -76,9 +76,9 @@ def _call_name(func: ast.expr) -> str:
     return ""
 
 
-def _number(node: ast.expr) -> int | float | None:
+def _number(node: ast.expr, *, include_unit_values: bool = False) -> int | float | None:
     if isinstance(node, ast.Constant) and type(node.value) in (int, float):
-        if node.value in SKIP_NUMBERS:
+        if node.value in SKIP_NUMBERS and not include_unit_values:
             return None
         return node.value
     return None
@@ -107,7 +107,8 @@ class _Scanner(ast.NodeVisitor):
         self.notes.append(f"L{line} {kind} {detail!r}"[:180])
 
     def _tunable(self, node: ast.expr, line: int, detail: str) -> None:
-        if _number(node) is not None:
+        # Even a one-second timeout sets an operational deadline.
+        if _number(node, include_unit_values=(detail == "timeout")) is not None:
             self._add("tunable", line, detail)
 
     def _port_number(self, node: ast.expr, line: int, detail: str) -> None:
@@ -260,6 +261,11 @@ def _head_baseline() -> dict[str, dict[str, int]] | None:
 
 
 class LiteralClassRatchetTest(unittest.TestCase):
+    def test_one_second_timeout_is_a_tunable(self) -> None:
+        scanner = _Scanner()
+        scanner.visit(ast.parse("proc.wait(timeout=1)\nproc.wait(timeout=grace)"))
+        self.assertEqual(scanner.hits["tunable"], 1)
+
     def test_current_counts_match_baseline(self) -> None:
         current = scan()
         payload = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
@@ -308,6 +314,9 @@ class LiteralClassRatchetTest(unittest.TestCase):
             "CI_CHECK_INTERVAL_SECONDS": 20,
             "GH_PROCESS_LIST_TIMEOUT_SECONDS": 2,
             "GH_PROCESS_GROUP_POLL_SECONDS": 0.05,
+            "GH_PROCESS_GROUP_SIGNAL_ATTEMPTS": 21,
+            "GH_PROCESS_TERM_GRACE_SECONDS": 1,
+            "GH_DARWIN_PROCESS_LIST_EXECUTABLE": "/bin/ps",
             "GH_READ_ATTEMPTS": 3,
             "GH_READ_ATTEMPT_SECONDS": 60,
             "GH_READ_TOTAL_SECONDS": 150,

@@ -94,7 +94,8 @@ def retryable(stderr: bytes) -> bool:
 
 def signal_group(process: subprocess.Popen, sig: signal.Signals) -> None:
     pgid = process.pid
-    for attempt in range(21):
+    signal_attempts = _LIMITS["GH_PROCESS_GROUP_SIGNAL_ATTEMPTS"]
+    for attempt in range(1, signal_attempts + 1):
         try:
             os.killpg(pgid, sig)
             return
@@ -102,15 +103,16 @@ def signal_group(process: subprocess.Popen, sig: signal.Signals) -> None:
             return
         except PermissionError as error:
             # Reap the exited leader, then signal the same group for descendants.
-            if attempt == 0 and process.poll() is not None:
+            if attempt == 1 and process.poll() is not None:
                 continue
             if sys.platform != "darwin":
                 raise
             # Retry the exit race before inspecting any remaining group members.
-            if attempt == 20:
+            if attempt == signal_attempts:
                 try:
                     members = subprocess.check_output(
-                        ["/bin/ps", "-axo", "pgid=,stat="], text=True, timeout=_LIMITS["GH_PROCESS_LIST_TIMEOUT_SECONDS"]
+                        [_LIMITS["GH_DARWIN_PROCESS_LIST_EXECUTABLE"], "-axo", "pgid=,stat="],
+                        text=True, timeout=_LIMITS["GH_PROCESS_LIST_TIMEOUT_SECONDS"],
                     )
                 except (OSError, subprocess.SubprocessError) as check_error:
                     raise error from check_error
@@ -124,7 +126,7 @@ def signal_group(process: subprocess.Popen, sig: signal.Signals) -> None:
 def stop(process: subprocess.Popen) -> None:
     signal_group(process, signal.SIGTERM)
     try:
-        process.wait(timeout=1)
+        process.wait(timeout=_LIMITS["GH_PROCESS_TERM_GRACE_SECONDS"])
     except subprocess.TimeoutExpired:
         pass
     # The group can still contain descendants after its leader exits.
