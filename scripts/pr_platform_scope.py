@@ -3,10 +3,11 @@
 
 Release and dispatch runs always run every platform. A pull request reruns a
 platform only when that platform's dial inputs changed relative to the base
-commit: its matrix row, the steps that apply to it, the shared dial header,
-the baseline job, and the script bytes those steps name. Unchanged platforms
-are omitted so the pull request does not repeat a dial whose inputs match the
-base. A comparison that cannot be proved reruns every platform.
+commit: its matrix row, the steps that apply to it, workflow-wide settings,
+the shared dial header, the baseline job, and the script bytes those steps
+name. Unchanged platforms are omitted so the pull request does not repeat a
+dial whose inputs match the base. A comparison that cannot be proved reruns
+every platform.
 """
 
 from __future__ import annotations
@@ -129,20 +130,28 @@ def _load_matrix(reader: Reader) -> tuple[dict[str, str], dict[str, dict[str, ob
 
 
 def unit_digests(workflow: str, reader: Reader) -> dict[str, str]:
-    dial = _job(workflow, "dial_gate")
+    # Top-level settings may appear on either side of the jobs mapping.
+    section = re.search(
+        r"(?ms)^jobs:[ \t]*(?:#[^\n]*)?\n(.*?)(?=^[^\s#]|\Z)", workflow
+    )
+    if section is None:
+        raise ScopeError("missing jobs mapping")
+    jobs = section.group(1)
+    settings = workflow[:section.start()] + workflow[section.end():]
+    dial = _job(jobs, "dial_gate")
     rows, _records = _load_matrix(reader)
     steps_at = dial.find("\n    steps:\n")
     if steps_at < 0:
         raise ScopeError("job has no steps")
-    shared = dial[:steps_at] + "\n" + _job(workflow, "baseline_binding")
-    shared += "\n" + _job(workflow, "platform_scope")
+    shared = settings + "\n" + dial[:steps_at] + "\n" + _job(jobs, "baseline_binding")
+    shared += "\n" + _job(jobs, "platform_scope")
     steps = _steps(dial)
     digests: dict[str, str] = {}
     for platform in DIAL_PLATFORMS:
         applied = "".join(step for step in steps if _step_applies(step, platform))
         digests[platform] = _digest(shared + "\n" + rows[platform] + applied, reader)
-    digests["ios"] = _digest(_job(workflow, "ios_unsigned_compile") + shared, reader)
-    digests["auth"] = _digest(_job(workflow, "linux_auth_storage") + shared, reader)
+    digests["ios"] = _digest(_job(jobs, "ios_unsigned_compile") + shared, reader)
+    digests["auth"] = _digest(_job(jobs, "linux_auth_storage") + shared, reader)
     return digests
 
 

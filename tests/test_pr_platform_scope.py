@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -60,6 +61,29 @@ class PlatformScopeTests(unittest.TestCase):
         head = self.workflow.replace("timeout-minutes: 15\n", "timeout-minutes: 16\n", 1)
         self.assertNotEqual(head, self.workflow)
         decision = scope.decide("pull_request", head, _reader, self.workflow, _reader)
+        self.assertEqual(decision["names"], list(scope.DIAL_PLATFORMS))
+        self.assertIs(decision["ios"], True)
+        self.assertIs(decision["auth"], True)
+
+    def test_workflow_settings_rerun_dial_ios_and_auth(self) -> None:
+        for pin in ("GO_VERSION", "FLUTTER_VERSION"):
+            with self.subTest(pin=pin):
+                head, changes = re.subn(
+                    rf"(?m)^  {pin}: '[^']+'$", f"  {pin}: '1.2.3'", self.workflow
+                )
+                self.assertEqual(changes, 1)
+                decision = scope.decide(
+                    "pull_request", head, _reader, self.workflow, _reader
+                )
+                self.assertEqual(decision["names"], list(scope.DIAL_PLATFORMS))
+                self.assertIs(decision["ios"], True)
+                self.assertIs(decision["auth"], True)
+
+    def test_shared_defaults_after_jobs_rerun_dial_ios_and_auth(self) -> None:
+        defaults = "\ndefaults:\n  run:\n    shell: "
+        base = self.workflow + defaults + "bash\n"
+        head = self.workflow + defaults + "sh\n"
+        decision = scope.decide("pull_request", head, _reader, base, _reader)
         self.assertEqual(decision["names"], list(scope.DIAL_PLATFORMS))
         self.assertIs(decision["ios"], True)
         self.assertIs(decision["auth"], True)
