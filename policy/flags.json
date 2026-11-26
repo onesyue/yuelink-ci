@@ -1,0 +1,93 @@
+{
+  "workflows": {
+    "build-matrix.yml": {
+      "env": {
+        "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24": "true",
+        "YUELINK_DART_PIPE_INTEROP": "1",
+        "YUELINK_SERVICE_INSTALL_E2E": "1"
+      },
+      "xcconfig": {
+        "CLANG_ENABLE_PREFIX_MAPPING": "YES",
+        "CLANG_ENABLE_PROJECT_PREFIX_MAPPING": "YES",
+        "COMPILATION_CACHE_ENABLE_CACHING": "YES",
+        "SWIFT_ENABLE_PREFIX_MAPPING": "YES",
+        "SWIFT_ENABLE_PROJECT_PREFIX_MAPPING": "YES"
+      }
+    },
+    "build.yml": {
+      "env": {
+        "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24": "true",
+        "REQUIRE_SOURCE_COMMIT": "${{ github.event_name != 'pull_request' }}"
+      }
+    },
+    "nightly.yml": {
+      "shell_defaults": {
+        "CORE_HIT": "false"
+      }
+    },
+    "plan.yml": {
+      "env": {
+        "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24": "true"
+      }
+    },
+    "publish.yml": {
+      "env": {
+        "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24": "true"
+      },
+      "shell_defaults": {
+        "RELEASE_COMPLETE": "0",
+        "SKIP_MANIFEST": "0"
+      }
+    },
+    "source-attestation.yml": {
+      "env": {
+        "CGO_ENABLED": "1",
+        "YUELINK_REQUIRE_ROOT_PREFS": "1"
+      }
+    },
+    "validate.yml": {
+      "env": {
+        "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24": "true"
+      }
+    }
+  },
+  "variables": {
+    "CLIENT_CONFIG_ED25519_PUBLIC_KEY_B64": {
+      "env_workflows": ["backup-critical-workstation-keys.yml"],
+      "workflow_default": ""
+    },
+    "UPDATE_MANIFEST_ED25519_PUBLIC_KEY_B64": {
+      "env_workflows": ["backup-critical-workstation-keys.yml"],
+      "workflow_default": ""
+    },
+    "YUELINK_UPDATE_FORCE_PLATFORMS": {
+      "env_workflows": ["publish.yml"],
+      "workflow_default": "",
+      "script": "scripts/apply-update-rollout.py",
+      "constant": "FORCE_PLATFORMS_DEFAULT",
+      "script_default": ""
+    },
+    "YUELINK_UPDATE_ROLLOUT_PERCENT": {
+      "env_workflows": ["publish.yml"],
+      "workflow_default": "",
+      "script": "scripts/apply-update-rollout.py",
+      "constant": "ROLLOUT_PERCENT_DEFAULT",
+      "script_default": null
+    },
+    "YUELINK_UPDATE_ROLLOUT_SALT": {
+      "env_workflows": ["publish.yml"],
+      "workflow_default": "",
+      "script": "scripts/apply-update-rollout.py",
+      "constant": "ROLLOUT_SALT_DEFAULT",
+      "script_default": null
+    },
+    "YUEOPS_KEYVAULT_BREAKGLASS_RECIPIENT": {
+      "env_workflows": ["backup-critical-workstation-keys.yml", "build-matrix.yml"],
+      "workflow_default": ""
+    },
+    "YUEOPS_KEYVAULT_VERIFIER_RECIPIENT": {
+      "env_workflows": ["backup-critical-workstation-keys.yml", "build-matrix.yml"],
+      "workflow_default": ""
+    }
+  }
+}
