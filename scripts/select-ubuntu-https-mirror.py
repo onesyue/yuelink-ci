@@ -5,7 +5,9 @@ import re
 import subprocess
 from pathlib import Path
 
-MIRRORS = Path("/etc/apt/apt-mirrors.txt")
+# The Ubuntu jobs check out this script on its own.
+MIRROR_LIST_PATH = Path("/etc/apt/apt-mirrors.txt")
+PROBE_TIMEOUT_SECONDS = "8"
 HTTP_ARCHIVE = re.compile(
     r"^([ \t]*)http://(?:[a-z0-9.-]+\.)?(?:archive|security)\.ubuntu\.com"
     r"/ubuntu(?=/|[ \t\r\n]|$)", re.MULTILINE,
@@ -13,7 +15,7 @@ HTTP_ARCHIVE = re.compile(
 ARCHIVES = ("archive.ubuntu.com", "azure.archive.ubuntu.com")
 
 
-def configure(path=MIRRORS):
+def configure(path=MIRROR_LIST_PATH):
     if path.is_symlink() or not path.is_file():
         return
     original = path.read_bytes().decode("utf-8")
@@ -24,7 +26,7 @@ def configure(path=MIRRORS):
         # Both affected jobs run on ubuntu-24.04. apt verifies signed metadata
         # against the runner keyring after the ordinary update.
         probe = subprocess.run(["curl", "--fail", "--silent", "--show-error",
-                                "--max-time", "8", "--output", "/dev/null",
+                                "--max-time", PROBE_TIMEOUT_SECONDS, "--output", "/dev/null",
                                 f"{base}/dists/noble/InRelease"])
         if probe.returncode:
             continue

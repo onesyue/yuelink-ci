@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# CI checks out only this script and its patch floor. The checker owns both fetch URLs.
 UPSTREAM_URL = "https://github.com/MetaCubeX/mihomo.git"
 FORK_URL = "https://github.com/onesyue/mihomo.git"
 LEDGER_RELATIVE = Path("docs/governance/mihomo-fork-ledger.json")
