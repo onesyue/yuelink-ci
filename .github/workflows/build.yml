@@ -60,8 +60,6 @@ permissions:
   contents: read
 
 env:
-  # Private template fallback only; public runs use their exact builder SHA.
-  COVERAGE_TOOLS_SHA: '07856de8be832ceed6e4daeff7bf840c2269d8dc'
   # Flutter 3.47.8 / Dart 3.13.7 (2026-10-23): BoringSSL distrusts the
   # compromised eMudhra intermediates (GHSA-frr6-h895-5pxp) and Android 14+
   # reads the updatable Conscrypt root store. Embedder renderer files are

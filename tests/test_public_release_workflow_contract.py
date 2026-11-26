@@ -101,6 +101,28 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
         android = self.build.split("      # ANDROID", 1)[1].split("      # iOS —", 1)[0]
         self.assertIn("Verify APK signature is the pinned release key", android)
 
+    def test_coverage_tools_use_the_public_builder_commit(self) -> None:
+        jobs = yaml.safe_load((BUILD.parent / "validate.yml").read_text())["jobs"]
+        builder_ref = "${{ github.sha }}"
+        for job in ("preflight", "coverage_shard", "coverage_join"):
+            with self.subTest(job=job):
+                checkouts = [
+                    step["with"]
+                    for step in jobs[job]["steps"]
+                    if step.get("uses", "").startswith("actions/checkout@")
+                    and step["with"].get("path") == "coverage/canonical-tools"
+                ]
+                self.assertEqual(len(checkouts), 1)
+                self.assertEqual(checkouts[0]["repository"], "onesyue/yuelink-ci")
+                self.assertEqual(checkouts[0]["ref"], builder_ref)
+
+        verifier = next(
+            step for step in jobs["preflight"]["steps"]
+            if step.get("name") == "Verify non-reused coverage tools"
+        )
+        self.assertEqual(verifier["env"]["EXPECTED_COVERAGE_TOOLS_SHA"], builder_ref)
+        self.assertIsNone(re.search(r"(?m)^\s*COVERAGE_TOOLS_SHA:", self.build))
+
     def test_release_calls_keep_checkout_and_release_secrets_separate(self) -> None:
         jobs = yaml.safe_load(BUILD.read_text())["jobs"]
         self.assertNotIn("secrets", jobs["plan"])
