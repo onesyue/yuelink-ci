@@ -39,8 +39,6 @@ permissions:
   contents: read
 
 env:
-  # Private template fallback only; public runs use their exact builder SHA.
-  COVERAGE_TOOLS_SHA: '07856de8be832ceed6e4daeff7bf840c2269d8dc'
   # Flutter 3.47.8 / Dart 3.13.7 (2026-10-23): BoringSSL distrusts the
   # compromised eMudhra intermediates (GHSA-frr6-h895-5pxp) and Android 14+
   # reads the updatable Conscrypt root store. Embedder renderer files are
@@ -183,7 +181,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink-ci
-          ref: ${{ github.repository == 'onesyue/yuelink-ci' && github.sha || env.COVERAGE_TOOLS_SHA }}
+          ref: ${{ github.sha }}
           path: coverage/canonical-tools
           persist-credentials: false
 
@@ -191,7 +189,7 @@ jobs:
         if: github.repository != 'onesyue/yuelink-ci' || !startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
-          EXPECTED_COVERAGE_TOOLS_SHA: ${{ github.repository == 'onesyue/yuelink-ci' && github.sha || env.COVERAGE_TOOLS_SHA }}
+          EXPECTED_COVERAGE_TOOLS_SHA: ${{ github.sha }}
           YUELINK_CI_TOOLS_DIR: ${{ github.workspace }}/coverage/canonical-tools/scripts
         run: |
           set -Eeuo pipefail
@@ -339,7 +337,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink-ci
-          ref: ${{ github.repository == 'onesyue/yuelink-ci' && github.sha || env.COVERAGE_TOOLS_SHA }}
+          ref: ${{ github.sha }}
           path: coverage/canonical-tools
           persist-credentials: false
 
@@ -416,7 +414,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: onesyue/yuelink-ci
-          ref: ${{ github.repository == 'onesyue/yuelink-ci' && github.sha || env.COVERAGE_TOOLS_SHA }}
+          ref: ${{ github.sha }}
           path: coverage/canonical-tools
           persist-credentials: false
 
