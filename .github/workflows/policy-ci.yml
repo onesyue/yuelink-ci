@@ -45,6 +45,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # This job is the required status check on pull_request and on push
+      # to master. The step scans this repository's tree and, on a pull
+      # request, only the commits unique to that request.
+      - name: Scan secrets with pinned Gitleaks
+        run: python3 scripts/gitleaks_scan.py
+
       - name: Install pinned actionlint
         env:
           ACTIONLINT_VERSION: '1.7.12'
