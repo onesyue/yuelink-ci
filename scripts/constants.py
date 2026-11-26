@@ -100,6 +100,20 @@ GROUP_WEIGHT_BUDGET = 8
 TIMEOUT_EXIT_CODE = 124
 GH_READ_OUTPUT_LIMIT = 16 * 1024 * 1024
 
+# Pinned Gitleaks linux_x64 tarball. Same bytes as source attestation.
+# The absent push parent is GitHub's all-zero before SHA on a new ref.
+GITLEAKS_VERSION = "8.30.1"
+GITLEAKS_LINUX_X64_SHA256 = (
+    "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+)
+GITLEAKS_RELEASE_BASE = "https://github.com/gitleaks/gitleaks/releases/download"
+GITLEAKS_DOCKER_IMAGE = "ubuntu:24.04"
+GITLEAKS_CONTAINER_BIN = "/usr/local/bin/gitleaks"
+GITLEAKS_DOWNLOAD_MAX_SECONDS = 120
+GITLEAKS_DOWNLOAD_ATTEMPTS = 3
+GITLEAKS_SCAN_TIMEOUT_SECONDS = 180
+GITLEAKS_ABSENT_PUSH_BEFORE = "0" * 40
+
 
 def main(argv: list[str]) -> int:
     names = {
