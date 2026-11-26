@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import shutil
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -34,6 +36,42 @@ class KernelBuildIdentityTests(unittest.TestCase):
         self.assertNotIn('"with_gvisor"', workflow)
         compile_script = (ROOT / "scripts" / "ios-unsigned-compile.py").read_text(encoding="utf-8")
         self.assertNotIn('"with_gvisor"', compile_script)
+
+    @unittest.skipIf(shutil.which("shellcheck") is None, "shellcheck not installed")
+    def test_workflow_constant_assignments_are_sc2155_clean(self) -> None:
+        workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+        names = ("GO_KERNEL_BUILD_TAGS", "GO_RUNTIME_VERSION_PREFIX")
+        lines = []
+        for raw in workflow.splitlines():
+            stripped = raw.strip()
+            if any(
+                stripped.startswith(f"{name}=") or stripped == f"export {name}"
+                for name in names
+            ):
+                lines.append(stripped)
+        self.assertEqual(
+            lines,
+            [
+                'GO_KERNEL_BUILD_TAGS="$(python3 scripts/constants.py GO_KERNEL_BUILD_TAGS)"',
+                "export GO_KERNEL_BUILD_TAGS",
+                'GO_RUNTIME_VERSION_PREFIX="$(python3 scripts/constants.py GO_RUNTIME_VERSION_PREFIX)"',
+                "export GO_RUNTIME_VERSION_PREFIX",
+            ],
+        )
+        for name in names:
+            self.assertNotIn(f'export {name}="$', workflow)
+        script = "#!/usr/bin/env bash\nset -euo pipefail\n" + "\n".join(lines) + "\n"
+        proc = subprocess.run(
+            [shutil.which("shellcheck"), "--severity=warning", "--format=gcc", "-"],
+            input=script,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertNotIn("SC2155", proc.stdout + proc.stderr)
 
 
 if __name__ == "__main__":

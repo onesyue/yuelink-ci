@@ -243,8 +243,10 @@ jobs:
           REQUIRE_SOURCE_COMMIT: ${{ github.event_name != 'pull_request' }}
         shell: bash
         run: |
-          export GO_KERNEL_BUILD_TAGS="$(python3 scripts/constants.py GO_KERNEL_BUILD_TAGS)"
-          export GO_RUNTIME_VERSION_PREFIX="$(python3 scripts/constants.py GO_RUNTIME_VERSION_PREFIX)"
+          GO_KERNEL_BUILD_TAGS="$(python3 scripts/constants.py GO_KERNEL_BUILD_TAGS)"
+          export GO_KERNEL_BUILD_TAGS
+          GO_RUNTIME_VERSION_PREFIX="$(python3 scripts/constants.py GO_RUNTIME_VERSION_PREFIX)"
+          export GO_RUNTIME_VERSION_PREFIX
           python3 - <<'PY'
           import json, os, re, sys
           from pathlib import Path
