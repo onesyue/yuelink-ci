@@ -31,6 +31,12 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Final
+
+
+ROLLOUT_SALT_DEFAULT: Final = None
+ROLLOUT_PERCENT_DEFAULT: Final = None
+FORCE_PLATFORMS_DEFAULT: Final = ""
 
 
 def load_verifier(path: Path):
@@ -124,13 +130,16 @@ def main() -> int:
         type=Path,
         default=Path(__file__).with_name("verify-update-manifest.py"),
     )
-    parser.add_argument("--salt", default=os.environ.get("YUELINK_UPDATE_ROLLOUT_SALT"))
     parser.add_argument(
-        "--percent", default=os.environ.get("YUELINK_UPDATE_ROLLOUT_PERCENT")
+        "--salt", default=os.environ.get("YUELINK_UPDATE_ROLLOUT_SALT", ROLLOUT_SALT_DEFAULT)
+    )
+    parser.add_argument(
+        "--percent",
+        default=os.environ.get("YUELINK_UPDATE_ROLLOUT_PERCENT", ROLLOUT_PERCENT_DEFAULT),
     )
     parser.add_argument(
         "--force-platforms",
-        default=os.environ.get("YUELINK_UPDATE_FORCE_PLATFORMS"),
+        default=os.environ.get("YUELINK_UPDATE_FORCE_PLATFORMS", FORCE_PLATFORMS_DEFAULT),
     )
     parser.add_argument(
         "--force-policy",
