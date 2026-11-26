@@ -76,6 +76,12 @@ jobs:
           "$RUNNER_TEMP/policy-tests/bin/python" -m pip install 'PyYAML==6.0.3'
           echo "$RUNNER_TEMP/policy-tests/bin" >> "$GITHUB_PATH"
 
+      - name: Check reviewed CI and release switches
+        timeout-minutes: 5
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_check_flag_manifest.py' -v
+          python3 scripts/check_flag_manifest.py
+
       - name: Run offline policy checks
         run: scripts/check-policy.sh ci
 
