@@ -106,10 +106,10 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" = pull_request ]; then
-            case "$BASE_SHA" in
-              [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
-              *) echo "::error::pull request base is not 40 lowercase hex"; exit 1 ;;
-            esac
+            if [[ ! "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::pull request base is not 40 lowercase hex"
+              exit 1
+            fi
             git fetch --no-tags --depth=1 origin "$BASE_SHA"
           fi
           python3 scripts/pr_platform_scope.py \
