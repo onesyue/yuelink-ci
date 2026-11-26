@@ -371,6 +371,7 @@ class LiteralClassRatchetTest(unittest.TestCase):
             "GROUP_FILE_CAP": 8,
             "GROUP_WEIGHT_BUDGET": 8,
             "TIMEOUT_EXIT_CODE": 124,
+            "OUTPUT_LIMIT_EXIT_CODE": 125,
             "GH_READ_OUTPUT_LIMIT": 16 * 1024 * 1024,
             "GITLEAKS_VERSION": "8.30.1",
             "GITLEAKS_LINUX_X64_SHA256": (

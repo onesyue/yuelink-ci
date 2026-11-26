@@ -105,6 +105,7 @@ GROUP_FILE_CAP = 8
 GROUP_WEIGHT_BUDGET = 8
 # GNU timeout's status when the command exceeds its deadline. Not a knob.
 TIMEOUT_EXIT_CODE = 124
+OUTPUT_LIMIT_EXIT_CODE = 125
 GH_READ_OUTPUT_LIMIT = 16 * 1024 * 1024
 
 # Pinned Gitleaks linux_x64 tarball. Same bytes as source attestation.
