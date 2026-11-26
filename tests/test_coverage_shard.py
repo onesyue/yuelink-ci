@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def load_runner():
-    path = Path(__file__).resolve().parents[1] / "scripts/run-flutter-coverage.py"
+    path = Path(__file__).resolve().parents[1] / "scripts/flutter_coverage/runner.py"
     spec = importlib.util.spec_from_file_location("coverage_runner", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

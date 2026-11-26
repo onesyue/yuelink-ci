@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location("coverage_runner", ROOT / "scripts/run-flutter-coverage.py")
+SPEC = importlib.util.spec_from_file_location("coverage_runner", ROOT / "scripts/flutter_coverage/runner.py")
 RUNNER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RUNNER)
 
@@ -151,11 +151,14 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
         (self.tools / "scripts").mkdir(parents=True)
         (self.tools / "tests/fixtures").mkdir(parents=True)
         for name in (
-            "run-flutter-coverage.py",
             "count-flutter-machine-tests.py",
             "constants.py",
         ):
             shutil.copyfile(ROOT / "scripts" / name, self.tools / "scripts" / name)
+        package = self.tools / "scripts" / "flutter_coverage"
+        package.mkdir()
+        for name in ("__init__.py", "runner.py"):
+            shutil.copyfile(ROOT / "scripts" / "flutter_coverage" / name, package / name)
         self.plan_path = self.tools / "tests/fixtures/flutter-coverage-groups-20261028.json"
         self.refresh_plan()
         # Only the expensive engine and resource capacity are fixture controls.
@@ -163,7 +166,7 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
         self.entry = self.tools / "fixture-entry.py"
         self.entry.write_text("""import importlib.util,json,os
 from pathlib import Path
-p=Path(__file__).parent/'scripts/run-flutter-coverage.py'
+p=Path(__file__).parent/'scripts/flutter_coverage/runner.py'
 s=importlib.util.spec_from_file_location('runner',p)
 m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
 m.resource_snapshot=lambda:json.loads(os.environ['FIXTURE_RESOURCES'])
