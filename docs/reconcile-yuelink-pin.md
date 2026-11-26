@@ -21,19 +21,28 @@ in the public build workflow or add a second promotion/signing ceremony.
      --max-filesize 1048576 -H 'Cache-Control: no-cache' \
      https://yuetong.app/update.json -o "$manifest_file"
    python3 scripts/reconcile-yuelink-pin.py "$manifest_file" \
-     --version X.Y.Z --source-commit RELEASED_SOURCE_40_HEX
+     --checkout /path/to/yuelink
    ```
 
-   Use version and source from the completed release's attested identity, not
-   values copied from unverified JSON. The helper uses the pinned signature,
-   schema and replay-floor verifier, checks freshness and expected identity,
-   and hashes the original bytes without reserializing. PLAN_ONLY is not proof
-   that the live ledger has changed. Never weaken or dynamically learn the floor.
+   The helper derives version and source commit from that YueLink checkout:
+   the HEAD pubspec.yaml version and the annotated tag `vX.Y.Z` whose commit
+   is HEAD. It hashes the original signed bytes for `update_manifest_sha256`.
+   The signed manifest version and sourceCommit must match those derived
+   facts. Optional `--version`, `--source-commit` and
+   `--update-manifest-sha256` copies are refused when they drift. Planning
+   does not read yueto `release.yaml` and does not wait for a ledger bump.
+   The helper uses the pinned signature, schema and replay-floor verifier,
+   checks freshness, and hashes the original bytes without reserializing.
+   PLAN_ONLY is not proof that the live ledger has changed. Never weaken or
+   dynamically learn the floor. Do not copy identity from unverified JSON.
 
 2. The authorized root release owner uses the existing release transaction and
    lock procedure in yueto's release-chain runbook. Refresh origin/master and
    require a clean exact HEAD == origin/master in the participating repositories;
-   require the source HEAD and signed vX.Y.Z tag to resolve to RELEASED_SOURCE_40_HEX.
+   require the source HEAD and signed vX.Y.Z tag to resolve to the derived
+   source commit. Confirm that signature with
+   `scripts/verify-source-version.sh /path/to/yuelink vX.Y.Z DERIVED_SOURCE_40_HEX`
+   before mutation.
    Verify the existing release.yaml signature and retain its generation and
    rollback baseline. Re-read stable immediately before mutation and regenerate
    the plan; abort if it changed. Compare the current authenticated yuelink block
