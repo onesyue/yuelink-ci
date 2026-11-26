@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = ROOT / "scripts/create-r2-lock-attestation.sh"
-WORKFLOW = ROOT / ".github/workflows/r2-lock-attestation.yml"
+WORKFLOW = ROOT / ".github/workflows/nightly.yml"
 SOURCE = "a" * 40
 BUILDER = "b" * 40
 CONTROL = BUILDER
@@ -31,26 +31,28 @@ _BRAND_SPEC.loader.exec_module(BRAND)
 class R2LockAttestationContractTest(unittest.TestCase):
     def test_workflow_is_manual_pinned_and_minimally_privileged(self) -> None:
         text = WORKFLOW.read_text()
+        prove = text.split("\n  prove:\n", 1)[1].split("\n  plan:\n", 1)[0]
         self.assertIn("workflow_dispatch:", text)
         self.assertNotIn("pull_request:", text)
         self.assertNotIn("push:", text)
-        self.assertIn("runs-on: ubuntu-24.04", text)
+        self.assertIn("runs-on: ubuntu-24.04", prove)
         self.assertNotIn("self-hosted", text)
+        self.assertIn("inputs.version != ''", prove)
         self.assertIn(
             "actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32",
-            text,
+            prove,
         )
         self.assertIn(
             "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
-            text,
+            prove,
         )
         self.assertIn(
             "CLOUDFLARE_R2_CONFIG_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}",
-            text,
+            prove,
         )
-        self.assertNotIn("R2_KEY_ID", text)
-        self.assertNotIn("R2_APP_KEY", text)
-        self.assertNotIn("UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64", text)
+        self.assertNotIn("R2_KEY_ID", prove)
+        self.assertNotIn("R2_APP_KEY", prove)
+        self.assertNotIn("UPDATE_MANIFEST_ED25519_PRIVATE_KEY_B64", prove)
 
     def _fixture(self, *, valid_lock: bool = True, run_success: bool = True):
         stack = tempfile.TemporaryDirectory()

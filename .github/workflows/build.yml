@@ -193,7 +193,7 @@ jobs:
 
   # ───────────────────────────────────────────────────────────────────────────
   # 2026-08-21: Cloudflare bucket lock permanently protects every object below
-  # prefix `v`. The mirror's historical prune-r2.yml is now a read-only lock /
+  # prefix `v`. The mirror's nightly.yml archive audit is a read-only lock /
   # signed-archive audit. No release prefix is deleted or overwritten; storage
   # growth is an intentional supply-chain retention decision.
   # ───────────────────────────────────────────────────────────────────────────
@@ -231,6 +231,7 @@ jobs:
       contents: read
       actions: read
     steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           pattern: dial-gate-*
@@ -246,6 +247,10 @@ jobs:
           REQUIRE_SOURCE_COMMIT: ${{ github.event_name != 'pull_request' }}
         shell: bash
         run: |
+          GO_KERNEL_BUILD_TAGS="$(python3 scripts/constants.py GO_KERNEL_BUILD_TAGS)"
+          export GO_KERNEL_BUILD_TAGS
+          GO_RUNTIME_VERSION_PREFIX="$(python3 scripts/constants.py GO_RUNTIME_VERSION_PREFIX)"
+          export GO_RUNTIME_VERSION_PREFIX
           python3 - <<'PY'
           import json, os, re, sys
           from pathlib import Path
@@ -274,8 +279,6 @@ jobs:
           if os.environ.get("REQUIRE_SOURCE_COMMIT") != "false" and not re.fullmatch(r"[0-9a-f]{40}", expected_source):
               sys.exit("missing or invalid planned release source")
           for path in Path("dial-reports").glob("*/gate.json"):
-              if path.parent.name == "dial-gate-ios":
-                  continue  # Optional legacy iOS evidence cannot block the four-platform gate.
               data = json.loads(path.read_text())
               platform = data.get("platform")
               if platform not in want or path.parent.name != f"dial-gate-{platform}" or platform in found:
@@ -300,7 +303,7 @@ jobs:
                   sys.exit(f"mismatched measurement harness for {platform}")
               if expected_source and data["candidate"]["revision"] != expected_source:
                   sys.exit(f"candidate differs from planned source for {platform}")
-              if data.get("go_version") != "go" + os.environ["GO_VERSION"] or data.get("build_tags") != "with_gvisor":
+              if data.get("go_version") != os.environ["GO_RUNTIME_VERSION_PREFIX"] + os.environ["GO_VERSION"] or data.get("build_tags") != os.environ["GO_KERNEL_BUILD_TAGS"]:
                   sys.exit(f"mismatched measurement toolchain for {platform}")
               identity.extend((harness, data["go_version"], data["build_tags"]))
               if identities is not None and identity != identities:

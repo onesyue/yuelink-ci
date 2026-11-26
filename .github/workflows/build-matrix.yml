@@ -500,7 +500,7 @@ jobs:
       # explicitly. Android / iOS / macOS handle their own arch matrices
       # internally (NDK / lipo / static lib).
       # Tag/PR runs only restore: caches written on a tag are unreachable by
-      # the next tag. warm-release-caches.yml populates these exact identities
+      # the next tag. nightly.yml populates these exact identities
       # on master after green source attestation. A hit skips compile. install
       # always copies them into the Flutter tree, including the macOS lipo.
       # Service helpers and the desktop feed overlay are yuelink sources, so

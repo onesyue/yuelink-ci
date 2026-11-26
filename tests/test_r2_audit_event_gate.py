@@ -8,7 +8,7 @@ import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = ROOT / '.github/workflows/prune-r2.yml'
+WORKFLOW = ROOT / '.github/workflows/nightly.yml'
 
 
 def job_condition(workflow: str) -> str:
@@ -19,11 +19,16 @@ def job_condition(workflow: str) -> str:
     return ' '.join(match.group(1).split())
 
 
-def admitted(expression: str, event: str, source: str, conclusion: str) -> bool:
+def admitted(expression: str, event: str, source: str, conclusion: str, *,
+             schedule: str = '', workflow_name: str = 'Build YueLink',
+             version: str = '') -> bool:
     values = {
         'github.event_name': event,
+        'github.event.schedule': schedule,
+        'github.event.workflow_run.name': workflow_name,
         'github.event.workflow_run.event': source,
         'github.event.workflow_run.conclusion': conclusion,
+        'inputs.version': version,
     }
     for key in sorted(values, key=len, reverse=True):
         expression = expression.replace(key, repr(values[key]))
@@ -49,9 +54,12 @@ class R2AuditEventGateTests(unittest.TestCase):
                     source in ('push', 'workflow_dispatch') and conclusion == 'success',
                 )
         # A tag build is a push event; there is no separate "tag" event.
-        for event in ('schedule', 'workflow_dispatch'):
-            with self.subTest(event=event):
-                self.assertTrue(admitted(expression, event, '', ''))
+        self.assertTrue(admitted(expression, 'schedule', '', '', schedule='30 18 * * *'))
+        self.assertFalse(admitted(expression, 'schedule', '', '', schedule='17 2 * * *'))
+        self.assertTrue(admitted(expression, 'workflow_dispatch', '', '', version=''))
+        self.assertFalse(admitted(expression, 'workflow_dispatch', '', '', version='1.2.3'))
+        self.assertFalse(admitted(
+            expression, 'workflow_run', 'push', 'success', workflow_name='Source attestation'))
 
     def test_old_success_only_gate_exposes_regression(self) -> None:
         old = "github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'"

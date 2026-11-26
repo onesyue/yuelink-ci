@@ -10,6 +10,15 @@ on:
         description: Exact yuelink PR commit SHA to validate (optional)
         required: false
         type: string
+  workflow_call:
+    inputs:
+      yuelink_sha:
+        description: Exact yuelink PR commit SHA to validate (optional)
+        required: false
+        type: string
+    secrets:
+      SRC_DEPLOY_KEY:
+        required: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -35,6 +44,12 @@ jobs:
           # Anti-freeze compares the baseline with the master merge-base.
           fetch-depth: 0
           persist-credentials: false
+
+      # This job is the required status check on pull_request and on push
+      # to master. The step scans this repository's tree and, on a pull
+      # request, only the commits unique to that request.
+      - name: Scan secrets with pinned Gitleaks
+        run: python3 scripts/gitleaks_scan.py
 
       - name: Install pinned actionlint
         env:

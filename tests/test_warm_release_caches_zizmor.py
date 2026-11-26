@@ -7,7 +7,7 @@ from pathlib import Path
 from scripts import release_cache_plan as plan
 
 
-WORKFLOW = Path(__file__).resolve().parents[1] / ".github/workflows/warm-release-caches.yml"
+WORKFLOW = Path(__file__).resolve().parents[1] / ".github/workflows/nightly.yml"
 XCODE_PATH = "format('/Applications/Xcode_{0}.app/Contents/Developer', needs.plan.outputs.xcode)"
 
 
@@ -52,13 +52,15 @@ class WarmReleaseCachesZizmorTest(unittest.TestCase):
         self.assertRegex(
             self.workflow,
             r"(?m)^on:\n  workflow_run:[^\n]*\n"
-            r"    workflows: \[Source attestation\]\n    types: \[completed\]\n    branches: \[master\]\n",
+            r"    workflows: \[\"Build YueLink\", \"Source attestation\"\]\n    types: \[completed\]\n",
         )
+        self.assertNotIn("\n    branches:", self.workflow)
         match = re.search(r"(?m)^  plan:\n    if: >-\n((?:      [^\n]+\n)+)", self.workflow)
         self.assertIsNotNone(match)
         self.assertCountEqual(
             [guard.strip() for guard in match[1].split("&&")],
             [
+                "github.event.workflow_run.name == 'Source attestation'",
                 "github.event.workflow_run.conclusion == 'success'",
                 "github.event.workflow_run.event == 'workflow_dispatch'",
                 "github.event.workflow_run.head_branch == 'master'",

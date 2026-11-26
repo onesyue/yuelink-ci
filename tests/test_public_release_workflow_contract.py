@@ -132,10 +132,10 @@ class PublicReleaseWorkflowContractTests(unittest.TestCase):
         composed = composed_workflow(BUILD)
         self.assertEqual(issues(composed), [])
         self.assertNotIn("\n          - name: android\n", caller)
-        self.assertIn("\n          - name: android\n", composed)
+        self.assertIn("\n- name: android\n", composed)
         mutated = composed.replace(
-            "\n          - name: android\n",
-            "\n          - name: android-removed\n",
+            "\n- name: android\n",
+            "\n- name: android-removed\n",
             1,
         )
         self.assertTrue(any("lost android" in item for item in issues(mutated)))

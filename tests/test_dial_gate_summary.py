@@ -13,6 +13,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from constants import GO_KERNEL_BUILD_TAGS, GO_RUNTIME_VERSION_PREFIX  # noqa: E402
 PLATFORMS = ("windows", "macos", "linux", "android")
 PROTOCOLS = ("vless-reality-tfo", "vless-reality", "vless-ws-tls", "hysteria2")
 
@@ -30,8 +32,8 @@ class DialGateSummaryTests(unittest.TestCase):
                 "baseline": {"revision": "a" * 40, "core_revision": "b" * 40},
                 "candidate": {"revision": "c" * 40, "core_revision": "d" * 40},
                 "harness_revision": "c" * 40,
-                "go_version": "go1.27.4",
-                "build_tags": "with_gvisor",
+                "go_version": GO_RUNTIME_VERSION_PREFIX + "1.27.4",
+                "build_tags": GO_KERNEL_BUILD_TAGS,
                 "rows": [
                     {
                         "protocol": protocol,
@@ -78,6 +80,9 @@ class DialGateSummaryTests(unittest.TestCase):
                 path = root / "dial-reports" / ("dial-gate-" + name)
                 path.mkdir(parents=True)
                 (path / "gate.json").write_text(report if isinstance(report, str) else json.dumps(report))
+            scope = root / "dial-scope"
+            scope.mkdir()
+            (scope / "scope.json").write_text(json.dumps({"skipped": []}))
             return subprocess.run(
                 [sys.executable, "-c", script],
                 cwd=root,
@@ -85,6 +90,8 @@ class DialGateSummaryTests(unittest.TestCase):
                     **os.environ,
                     "GITHUB_STEP_SUMMARY": str(root / "summary"),
                     "GO_VERSION": "1.27.4",
+                    "GO_KERNEL_BUILD_TAGS": GO_KERNEL_BUILD_TAGS,
+                    "GO_RUNTIME_VERSION_PREFIX": GO_RUNTIME_VERSION_PREFIX,
                     "EXPECTED_SOURCE_COMMIT": expected_source,
                     "EXPECTED_BASELINE_SOURCE": expected_baseline,
                     "REQUIRE_SOURCE_COMMIT": "true" if require_source else "false",
@@ -114,19 +121,17 @@ class DialGateSummaryTests(unittest.TestCase):
                         reports[platform]["pass"] = False
                     self.assertNotEqual(self.run_summary(reports).returncode, 0)
 
-    def test_legacy_ios_cannot_block_or_be_reported_as_a_pass(self) -> None:
-        for ios in (None, {"platform": "ios", "pass": True},
+    def test_ios_evidence_cannot_authorize_a_pass(self) -> None:
+        for ios in ({"platform": "ios", "pass": True},
                     {"platform": "ios", "pass": False}, "{malformed JSON"):
             with self.subTest(ios=ios):
                 reports = self.reports()
-                if ios is not None:
-                    reports["ios"] = ios
+                reports["ios"] = ios
                 result = self.run_summary(reports)
-                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotEqual(result.returncode, 0)
                 self.assertNotIn("| ios |", result.stdout)
-                self.assertEqual(result.stdout.count("| pass |"), 17)
 
-    def test_only_canonical_ios_directory_is_ignored(self) -> None:
+    def test_noncanonical_ios_directory_is_rejected(self) -> None:
         reports = self.reports()
         reports["optional-ios"] = {"platform": "ios", "pass": False}
         self.assertNotEqual(self.run_summary(reports).returncode, 0)

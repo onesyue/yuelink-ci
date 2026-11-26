@@ -10,7 +10,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = ROOT / '.github/workflows/manifest-health.yml'
+WORKFLOW = ROOT / '.github/workflows/nightly.yml'
 _BRAND_SPEC = importlib.util.spec_from_file_location(
     'brand_literals_for_header_streams', ROOT / 'scripts/brand_literals.py')
 assert _BRAND_SPEC and _BRAND_SPEC.loader

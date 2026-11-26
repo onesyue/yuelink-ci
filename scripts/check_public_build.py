@@ -124,6 +124,13 @@ def composed_workflow(path: Path) -> str:
             add(repo / ".github" / "workflows" / name)
 
     add(path)
+    joined = "\n".join(parts)
+    marker = "scripts/pr_platform_scope.py"
+    if marker in joined:
+        matrix = repo / "scripts" / "dial_platform_matrix.yml"
+        if not matrix.is_file():
+            raise FileNotFoundError(f"dial platform matrix is missing: {matrix}")
+        parts.append(matrix.read_text(encoding="utf-8"))
     return "\n".join(parts)
 
 def expected_secret_mappings(job: str) -> list[str]:
@@ -206,7 +213,7 @@ def issues(text: str) -> list[str]:
     if "needs.build.result" in publish:
         found.append("publish must not require the build job to succeed")
     for platform in DIAL_PLATFORMS:
-        if not re.search(rf"(?m)^[ ]+- name: {platform}\s*$", text):
+        if not re.search(rf"(?m)^[ ]*- name: {platform}\s*$", text):
             found.append(f"dial gate lost {platform}")
     android = re.search(
         r"uses:\s*android-actions/setup-android@\S+.*?(?=\n      - )",

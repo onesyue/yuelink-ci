@@ -48,7 +48,7 @@ def render(template, **context):
 
 class WorkflowQueueIsolationTests(unittest.TestCase):
     def test_groups_isolate_workflow_and_ref(self):
-        for name in ('build', 'source-attestation', 'policy-ci', 'warm-release-caches'):
+        for name in ('build', 'source-attestation', 'policy-ci', 'nightly'):
             with self.subTest(workflow=name):
                 group, _ = concurrency((WORKFLOWS / f'{name}.yml').read_text())
                 contexts = [dict(workflow=name, ref=ref) for ref in (
@@ -67,7 +67,7 @@ class WorkflowQueueIsolationTests(unittest.TestCase):
                                           ('workflow_dispatch', 'refs/heads/master', False)]:
                 with self.subTest(workflow=name, event=event, ref=ref):
                     self.assertEqual(expression(cancel, event=event, ref=ref), expected)
-        for name in ('source-attestation', 'warm-release-caches'):
+        for name in ('source-attestation', 'nightly'):
             _, cancel = concurrency((WORKFLOWS / f'{name}.yml').read_text())
             self.assertFalse(expression(cancel, event='workflow_run'))
 

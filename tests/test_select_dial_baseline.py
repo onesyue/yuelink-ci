@@ -369,7 +369,7 @@ class BaselineWorkflowTests(unittest.TestCase):
     def test_selector_is_single_and_every_platform_consumes_its_sha(self):
         workflow = (ROOT / ".github/workflows/dial-gate.yml").read_text()
         self.assertEqual(workflow.count("python3 scripts/select-dial-baseline.py"), 1)
-        self.assertIn("needs: [baseline_binding]", workflow)
+        self.assertIn("needs: [baseline_binding, platform_scope]", workflow)
         self.assertIn(
             "ref: ${{ needs.baseline_binding.outputs.baseline_source }}", workflow
         )
