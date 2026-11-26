@@ -156,6 +156,11 @@ Path(sys.argv[-1]).write_text('SF:lib/a.dart\\nDA:1,500\\nend_of_record\\n')
             "constants.py",
         ):
             shutil.copyfile(ROOT / "scripts" / name, self.tools / "scripts" / name)
+        shutil.copytree(
+            ROOT / "scripts" / "flutter_coverage",
+            self.tools / "scripts" / "flutter_coverage",
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
         self.plan_path = self.tools / "tests/fixtures/flutter-coverage-groups-20261028.json"
         self.refresh_plan()
         # Only the expensive engine and resource capacity are fixture controls.
