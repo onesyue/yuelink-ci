@@ -1,0 +1,744 @@
+name: Nightly audits
+run-name: Nightly ${{ github.event_name }}
+
+# Isolated audit jobs. One failing job does not skip the others.
+# name: Manifest health
+# name: Audit immutable R2 releases
+# name: R2 lock attestation
+# name: Warm release caches
+#
+# Manifest freshness keeps cron 17 2 * * *. The read-only R2 archive audit
+# keeps cron 30 18 * * * and still follows a successful Build YueLink run.
+# Lock proofs stay manual: set version. Empty manual dispatch runs the
+# manifest check and the R2 archive audit. Cache warming follows a successful
+# manual source attestation on master and never publishes or signs.
+
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers] no upstream artifacts/code; exact run identity + pinned verifier + signed R2 roots. The warm plan accepts only successful same-repo master source attestations dispatched manually and extracts a full source commit ID.
+    workflows: ["Build YueLink", "Source attestation"]
+    types: [completed]
+  schedule:
+    - cron: '17 2 * * *'
+    - cron: '30 18 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Stable version (X.Y.Z). Set only for an R2 lock proof.'
+        required: false
+        type: string
+        default: ''
+      source_commit:
+        description: 'Exact private source commit'
+        required: false
+        type: string
+        default: ''
+      candidate_sha256:
+        description: 'Reviewed immutable candidate SHA-256'
+        required: false
+        type: string
+        default: ''
+      builder_commit:
+        description: 'Exact public candidate builder commit'
+        required: false
+        type: string
+        default: ''
+      build_run_id:
+        description: 'Successful public Build YueLink run id'
+        required: false
+        type: string
+        default: ''
+      challenge:
+        description: 'Fresh 32-byte random challenge as 64 lowercase hex'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+# Keep the historical group name to serialize schedule, manual and workflow_run
+# audits. The workflow and ref keep cache warming from sharing a queue across refs.
+concurrency:
+  group: yuelink-r2-prune-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  HEALTH_CONNECT_SECONDS: '5'
+  HEALTH_PROBE_SECONDS: '20'
+  MANIFEST_FETCH_SECONDS: '30'
+  HEALTH_FETCH_RETRIES: '2'
+  R2_AUDIT_CONNECT_SECONDS: '10'
+  R2_AUDIT_REQUEST_SECONDS: '30'
+  R2_AUDIT_RETRIES: '2'
+  R2_AUDIT_RETRY_BUDGET_SECONDS: '120'
+
+jobs:
+  manifest_check:
+    if: >-
+      ${{ (github.event_name == 'schedule' && github.event.schedule == '17 2 * * *') ||
+          (github.event_name == 'workflow_dispatch' && inputs.version == '') }}
+    name: Updater manifest freshness
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout pinned manifest verifier
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Run offline signature regression suites
+        run: |
+          python3 -m unittest -v \
+            tests/test_update_manifest_verifier.py \
+            tests/test_release_page_health.py \
+            tests/test_manifest_header_streams.py
+
+      - name: Validate live update.json freshness
+        id: check
+        run: |
+          set -euo pipefail
+          manifest_url="$(python3 scripts/brand_literals.py URL_UPDATE_MANIFEST)"
+          tmp="$(mktemp)"
+          release_health="$(mktemp)"
+          https_headers="$(mktemp)"
+          http_headers="$(mktemp)"
+          trap 'rm -f -- "$tmp" "$release_health" "$https_headers" "$http_headers"' EXIT
+
+          # The signed manifest protects object authenticity, but it cannot
+          # repair a plaintext first request or a weakened zone TLS boundary.
+          # Enforce the CDN controls independently before trusting the object.
+          if ! http_code="$(curl --fail --silent --show-error \
+            --proto '=http' --connect-timeout "$HEALTH_CONNECT_SECONDS" --max-time "$HEALTH_PROBE_SECONDS" \
+            --retry "$HEALTH_FETCH_RETRIES" --retry-all-errors \
+            --dump-header "$http_headers" --output /dev/null \
+            --write-out '%{http_code}' \
+            "http://${manifest_url#https://}")"; then
+            echo "detail=plaintext update endpoint could not be checked" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if [ "$http_code" != 301 ] ||
+             ! tr -d '\r' < "$http_headers" | grep -Ei \
+               "^location:[[:space:]]*${manifest_url//./\\.}[[:space:]]*$" >/dev/null; then
+            echo "detail=plaintext update endpoint must 301 to the exact HTTPS URL" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if curl --fail --silent --show-error \
+            --tlsv1.1 --tls-max 1.1 \
+            --connect-timeout "$HEALTH_CONNECT_SECONDS" --max-time "$HEALTH_PROBE_SECONDS" \
+            --output /dev/null "$manifest_url"; then
+            echo "detail=yuetong.app still accepts obsolete TLS 1.1" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if ! code="$(curl --fail --location --silent --show-error \
+            --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --tls-max 1.2 \
+            --connect-timeout "$HEALTH_CONNECT_SECONDS" --max-time "$MANIFEST_FETCH_SECONDS" --retry "$HEALTH_FETCH_RETRIES" --retry-all-errors \
+            --dump-header "$https_headers" \
+            --output "$tmp" --write-out '%{http_code}' \
+            "$manifest_url")"; then
+            echo "detail=root manifest HTTPS fetch failed" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if [ "$code" != "200" ]; then
+            echo "detail=root manifest fetch failed: HTTP $code" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if ! tr -d '\r' < "$https_headers" | grep -Ei \
+               '^strict-transport-security:[[:space:]]*max-age=15552000;[[:space:]]*includeSubDomains[[:space:]]*$' >/dev/null; then
+            echo "detail=HTTPS manifest response lost the reviewed HSTS policy" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if ! tr -d '\r' < "$https_headers" | grep -Ei \
+               '^x-content-type-options:[[:space:]]*nosniff[[:space:]]*$' >/dev/null; then
+            echo "detail=HTTPS manifest response lost X-Content-Type-Options nosniff" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if ! python3 scripts/verify-update-manifest.py "$tmp"; then
+            echo "detail=root manifest failed pinned Ed25519 verification" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          jq -e '.schemaVersion == 1 and .channel == "stable"' "$tmp" >/dev/null || {
+            echo "detail=root manifest shape unexpected (schemaVersion/channel)" >> "$GITHUB_OUTPUT"
+            exit 1
+          }
+          version="$(jq -er '.version' "$tmp")"
+          expires="$(jq -er '.expiresAt' "$tmp")"
+          expires_epoch="$(date -u -d "$expires" +%s)"
+          now_epoch="$(date -u +%s)"
+          days_left=$(( (expires_epoch - now_epoch) / 86400 ))
+          echo "live manifest: version=$version expiresAt=$expires (${days_left}d left)"
+          if [ "$days_left" -lt 7 ]; then
+            echo "detail=update.json v$version expires in ${days_left}d ($expires) — publish a release or re-stamp the manifest before clients reject it" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          # Cloudflare Bot Fight Mode challenges GitHub's ASN and cannot be
+          # skipped by path. A fixed-purpose external probe checks the exact
+          # release page and publishes only a signed, short-lived result. This
+          # runner pins its public key and rejects replays, URL substitution,
+          # failed identity checks, and unknown fields. It has no probe secret.
+          health_url="https://yuetong.app/health/yue-to-download.json"
+          if ! health_code="$(curl --fail --location --silent --show-error \
+            --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --connect-timeout "$HEALTH_CONNECT_SECONDS" --max-time "$HEALTH_PROBE_SECONDS" --retry "$HEALTH_FETCH_RETRIES" --retry-all-errors \
+            --max-filesize 65536 \
+            --output "$release_health" --write-out '%{http_code}' "$health_url")"; then
+            detail="signed release-page health envelope is unreachable: $health_url (HTTP ${health_code:-000})"
+            echo "::error::$detail"
+            echo "detail=$detail" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if [ "$health_code" != "200" ]; then
+            detail="signed release-page health envelope returned HTTP $health_code"
+            echo "::error::$detail"
+            echo "detail=$detail" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          if ! python3 scripts/verify-release-page-health.py "$release_health"; then
+            detail="signed release-page health envelope failed pinned Ed25519/freshness/identity policy"
+            echo "::error::$detail"
+            echo "detail=$detail" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          while IFS= read -r url; do
+            # R2 honors Range and returns one byte (206), avoiding downloads
+            # of the nine large installer payloads.
+            if ! asset_code="$(curl --fail --location --silent --show-error \
+              --proto '=https' --proto-redir '=https' --tlsv1.2 \
+              --connect-timeout "$HEALTH_CONNECT_SECONDS" --max-time "$HEALTH_PROBE_SECONDS" --retry "$HEALTH_FETCH_RETRIES" --retry-all-errors \
+              --range 0-0 --output /dev/null --write-out '%{http_code}' "$url")"; then
+              detail="manifest references an unreachable release URL: $url (HTTP ${asset_code:-000})"
+              echo "::error::$detail"
+              echo "detail=$detail" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+            case "$asset_code" in
+              200|206) ;;
+              *)
+                detail="release asset returned unexpected success status: $url (HTTP $asset_code)"
+                echo "::error::$detail"
+                echo "detail=$detail" >> "$GITHUB_OUTPUT"
+                exit 1
+                ;;
+            esac
+            echo "release asset probe: $url HTTP $asset_code"
+          done < <(jq -r '.platforms[].url' "$tmp")
+          while IFS=$'\t' read -r url expected; do
+            sidecar="$(curl --fail --location --silent --show-error \
+              --proto '=https' --proto-redir '=https' --tlsv1.2 \
+              --connect-timeout "$HEALTH_CONNECT_SECONDS" --max-time "$HEALTH_PROBE_SECONDS" --retry "$HEALTH_FETCH_RETRIES" --retry-all-errors \
+              "${url}.sha256")" || {
+                echo "detail=manifest checksum sidecar is unreachable: ${url}.sha256" >> "$GITHUB_OUTPUT"
+                exit 1
+              }
+            if [ "$sidecar" != "$expected" ]; then
+              echo "detail=manifest checksum sidecar disagrees with signed root: ${url}.sha256" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+          done < <(jq -r '.platforms[] | [.url, .sha256] | @tsv' "$tmp")
+
+      - name: Report manifest failure
+        if: failure()
+        env:
+          DETAIL: ${{ steps.check.outputs.detail }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' '## Updater manifest health check failed' \
+            "${DETAIL:-manifest health check failed (fetch/shape error)}" \
+            "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            >> "$GITHUB_STEP_SUMMARY"
+          echo '::error::Updater manifest health check failed.'
+          exit 1
+  audit:
+    name: Audit permanent versioned releases
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Successful PR builds must skip before the trusted-source validator.
+    # Tag builds use the push event, just like branch pushes.
+    if: >-
+      ${{ (github.event_name == 'schedule' && github.event.schedule == '30 18 * * *') ||
+          (github.event_name == 'workflow_dispatch' && inputs.version == '') ||
+          (github.event_name == 'workflow_run' &&
+           github.event.workflow_run.name == 'Build YueLink' &&
+           github.event.workflow_run.conclusion == 'success' &&
+           (github.event.workflow_run.event == 'push' ||
+            github.event.workflow_run.event == 'workflow_dispatch')) }}
+    steps:
+      - name: Validate trusted Build workflow_run identity
+        if: ${{ github.event_name == 'workflow_run' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPOSITORY: ${{ github.event.workflow_run.repository.full_name }}
+          SOURCE_HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          SOURCE_EVENT: ${{ github.event.workflow_run.event }}
+          SOURCE_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          SOURCE_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_WORKFLOW_PATH: ${{ github.event.workflow_run.path }}
+        run: |
+          set -euo pipefail
+          [ "$SOURCE_REPOSITORY" = "$GITHUB_REPOSITORY" ] || {
+            echo "::error::workflow_run repository is not $GITHUB_REPOSITORY"
+            exit 1
+          }
+          [ "$SOURCE_HEAD_REPOSITORY" = "$GITHUB_REPOSITORY" ] || {
+            echo "::error::workflow_run head repository is not $GITHUB_REPOSITORY"
+            exit 1
+          }
+          case "$SOURCE_EVENT" in
+            push|workflow_dispatch) ;;
+            *) echo "::error::unexpected Build source event: $SOURCE_EVENT"; exit 1 ;;
+          esac
+          [ "$SOURCE_CONCLUSION" = success ] || {
+            echo "::error::Build workflow did not conclude successfully"
+            exit 1
+          }
+          [ "$SOURCE_WORKFLOW_PATH" = .github/workflows/build.yml ] || {
+            echo "::error::unexpected source workflow path: $SOURCE_WORKFLOW_PATH"
+            exit 1
+          }
+          [[ "$SOURCE_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::Build head SHA is not a full lowercase commit id"
+            exit 1
+          }
+          resolved="$(
+            gh api "repos/$GITHUB_REPOSITORY/commits/$SOURCE_HEAD_SHA" --jq .sha
+          )"
+          [ "$resolved" = "$SOURCE_HEAD_SHA" ] || {
+            echo "::error::Build head SHA is not a commit in $GITHUB_REPOSITORY"
+            exit 1
+          }
+
+      - name: Checkout pinned manifest verifier
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Audit live lock and permanent release archive
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_APP_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
+          R2_ACCOUNT_ID: 1e192a89cfaab399d211bb1dfe77a5cd
+          R2_ENDPOINT: https://1e192a89cfaab399d211bb1dfe77a5cd.r2.cloudflarestorage.com
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          BUCKET: yuelink-dist
+          LOCK_RULE_ID: yuelink-release-versioned-indefinite
+        run: |
+          set -euo pipefail
+          for required in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY CLOUDFLARE_API_TOKEN; do
+            [ -n "${!required:-}" ] || {
+              echo "::error::$required is required for the immutable R2 audit"
+              exit 1
+            }
+          done
+          for command_name in aws curl jq python3; do
+            command -v "$command_name" >/dev/null 2>&1 || {
+              echo "::error::missing audit command: $command_name"
+              exit 1
+            }
+          done
+
+          audit_dir="$(mktemp -d)"
+          chmod 700 "$audit_dir"
+          trap 'rm -rf "$audit_dir"' EXIT
+          root_manifest="$audit_dir/update.json"
+          archive_manifest="$audit_dir/archive.json"
+          lock_response="$audit_dir/lock.json"
+          prefixes="$audit_dir/version-prefixes.txt"
+
+          aws s3 cp "s3://$BUCKET/update.json" "$root_manifest" \
+            --endpoint-url "$R2_ENDPOINT" --no-progress --only-show-errors
+          python3 scripts/verify-update-manifest.py "$root_manifest"
+          current_version="$(jq -er '.version | select(type == "string")' "$root_manifest")"
+          [[ "$current_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::signed root does not contain a stable SemVer"
+            exit 1
+          }
+          current_prefix="v$current_version"
+
+          # Leave enough total time for both retries after a full 30s timeout.
+          # A 30s retry budget used to expire with the first attempt, so the
+          # advertised retries never ran during a stalled Cloudflare request.
+          curl --fail --silent --show-error \
+            --proto '=https' --tlsv1.2 \
+            --connect-timeout "$R2_AUDIT_CONNECT_SECONDS" --max-time "$R2_AUDIT_REQUEST_SECONDS" \
+            --retry "$R2_AUDIT_RETRIES" --retry-all-errors --retry-max-time "$R2_AUDIT_RETRY_BUDGET_SECONDS" \
+            --max-redirs 0 --max-filesize 262144 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            --output "$lock_response" \
+            "https://api.cloudflare.com/client/v4/accounts/$R2_ACCOUNT_ID/r2/buckets/$BUCKET/lock"
+          jq -e --arg id "$LOCK_RULE_ID" --arg target "$current_prefix/" '
+            .success == true and (.errors | length) == 0 and
+            ([.result.rules[]? |
+              select(
+                .id == $id and .enabled == true and .prefix == "v" and
+                .condition.type == "Indefinite" and
+                (.prefix as $prefix | $target | startswith($prefix))
+              )] | length) == 1
+          ' "$lock_response" >/dev/null || {
+            echo "::error::required live R2 lock is missing or changed: $LOCK_RULE_ID prefix=v type=Indefinite enabled=true"
+            exit 1
+          }
+
+          aws s3 cp "s3://$BUCKET/$current_prefix/update.json" "$archive_manifest" \
+            --endpoint-url "$R2_ENDPOINT" --no-progress --only-show-errors
+          python3 scripts/verify-update-manifest.py \
+            --historical-archive "$archive_manifest"
+          cmp -s "$root_manifest" "$archive_manifest" || {
+            echo "::error::root update.json differs from permanent $current_prefix archive"
+            exit 1
+          }
+
+          aws s3 ls "s3://$BUCKET/" --endpoint-url "$R2_ENDPOINT" \
+            | awk '/ PRE /{print $2}' | sed 's#/##' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-pre(\.[0-9]+)?)?$' \
+            | sort -V > "$prefixes" || true
+          grep -qx "$current_prefix" "$prefixes" || {
+            echo "::error::current permanent release prefix is absent from the bucket inventory"
+            exit 1
+          }
+
+          inventory="$(aws s3 ls "s3://$BUCKET/v" --recursive --summarize \
+            --endpoint-url "$R2_ENDPOINT" 2>/dev/null)"
+          object_count="$(awk '/Total Objects:/{print $3}' <<<"$inventory")"
+          byte_count="$(awk '/Total Size:/{print $3}' <<<"$inventory")"
+          object_count="${object_count:-0}"
+          byte_count="${byte_count:-0}"
+          prefix_count="$(grep -c . "$prefixes" || true)"
+          gib="$(awk "BEGIN{printf \"%.2f\", $byte_count/1024/1024/1024}")"
+
+          {
+            echo "### Permanent R2 release archive"
+            echo
+            echo "- Lock: \`$LOCK_RULE_ID\` (enabled, prefix \`v\`, indefinite)"
+            echo "- Current signed root/archive: \`$current_prefix\`"
+            echo "- Version prefixes: $prefix_count"
+            echo "- Versioned objects: $object_count"
+            echo "- Versioned bytes: $byte_count (${gib} GiB)"
+            echo "- Mutation: none; all \`v*/\` release evidence is retained permanently"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          echo "✓ immutable R2 audit complete; no release object was mutated"
+  prove:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
+    name: Prove live immutable version lock
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout exact proof generator
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify lock and write release-bound proof
+        id: proof
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_R2_CONFIG_TOKEN: ${{ secrets.CLOUDFLARE_R2_CONFIG_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          BUILDER_COMMIT: ${{ inputs.builder_commit }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          CHALLENGE: ${{ inputs.challenge }}
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/r2-lock-proof.json"
+          bash scripts/create-r2-lock-attestation.sh \
+            "$RELEASE_VERSION" "$SOURCE_COMMIT" "$CANDIDATE_SHA256" \
+            "$BUILDER_COMMIT" "$BUILD_RUN_ID" "$CHALLENGE" "$output" \
+            | tee "$RUNNER_TEMP/proof-result"
+          proof_sha256="$(sed -nE 's/^R2_LOCK_PROOF_SHA256=([0-9a-f]{64})$/\1/p' "$RUNNER_TEMP/proof-result")"
+          [[ "$proof_sha256" =~ ^[0-9a-f]{64}$ ]] || {
+            echo "::error::proof generator did not emit a canonical digest"
+            exit 1
+          }
+          printf 'path=%s\nsha256=%s\n' "$output" "$proof_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload lock proof
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: yuelink-r2-lock-proof-v${{ inputs.version }}-${{ inputs.challenge }}
+          path: ${{ steps.proof.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Sign lock proof provenance
+        id: provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: ${{ steps.proof.outputs.path }}
+
+      - name: Record proof coordinates
+        env:
+          VERSION: ${{ inputs.version }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          BUILDER_COMMIT: ${{ inputs.builder_commit }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          CHALLENGE: ${{ inputs.challenge }}
+          PROOF_SHA256: ${{ steps.proof.outputs.sha256 }}
+          ATTESTATION_URL: ${{ steps.provenance.outputs.attestation-url }}
+        run: |
+          {
+            echo '## Fresh R2 lock proof'
+            echo "- version: \`v$VERSION\`"
+            echo "- source: \`$SOURCE_COMMIT\`"
+            echo "- candidate: \`$CANDIDATE_SHA256\`"
+            echo "- candidate builder: \`$BUILDER_COMMIT\`"
+            echo "- candidate build run: \`$BUILD_RUN_ID\`"
+            echo "- challenge: \`$CHALLENGE\`"
+            echo "- proof SHA-256: \`$PROOF_SHA256\`"
+            echo "- expires: 30 minutes after issuance"
+            echo "- provenance: $ATTESTATION_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
+  plan:
+    if: >-
+      github.event.workflow_run.name == 'Source attestation' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'workflow_dispatch' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      source_sha: ${{ steps.plan.outputs.source_sha }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      go_version: ${{ steps.plan.outputs.go_version }}
+      flutter_version: ${{ steps.plan.outputs.flutter_version }}
+      ndk: ${{ steps.plan.outputs.ndk }}
+      xcode: ${{ steps.plan.outputs.xcode }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Derive source, platform matrix and toolchains from canonical workflows
+        id: plan
+        shell: bash
+        env:
+          ATTESTATION_TITLE: ${{ github.event.workflow_run.display_title }}
+        run: |
+          set -euo pipefail
+          python3 scripts/release_cache_plan.py plan --title "$ATTESTATION_TITLE"
+
+  warm:
+    if: github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
+    name: Warm caches (${{ matrix.platform }})
+    needs: [plan]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - name: Checkout exact attested source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: onesyue/yuelink
+          ref: ${{ needs.plan.outputs.source_sha }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          submodules: recursive
+          persist-credentials: false
+      - name: Checkout canonical cache derivation tools
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          path: .cache-tools
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Select canonical Xcode for Apple core
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          DEVELOPER_DIR: ${{ format('/Applications/Xcode_{0}.app/Contents/Developer', needs.plan.outputs.xcode) }}
+        run: |
+          set -euo pipefail
+          test -d "$DEVELOPER_DIR"
+      - name: Record canonical Go core identity
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          # The exact script text of build-matrix.yml, not a copy of it.
+          python3 .cache-tools/scripts/release_cache_plan.py identity-script > "$RUNNER_TEMP/core-identity.sh"
+          bash "$RUNNER_TEMP/core-identity.sh"
+      - name: Record canonical Linux media identity
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .cache-tools/scripts/release_cache_plan.py step-script 'Record Linux media identity' > "$RUNNER_TEMP/media-identity.sh"
+          bash "$RUNNER_TEMP/media-identity.sh"
+      - name: Evaluate canonical release cache keys
+        id: cache_plan
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          python3 .cache-tools/scripts/release_cache_plan.py keys --platform "$PLATFORM"
+      - name: Restore compiled core from master
+        id: core
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.gocore_path }}
+          key: ${{ steps.cache_plan.outputs.gocore_key }}
+      - name: Restore Gradle dependencies from master
+        id: gradle
+        if: matrix.platform == 'android'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.gradle_path }}
+          key: ${{ steps.cache_plan.outputs.gradle_key }}
+      - name: Restore Linux media from master
+        id: linux_media_cache
+        if: matrix.platform == 'linux'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.linux_media_path }}
+          key: ${{ steps.cache_plan.outputs.linux_media_key }}
+      - name: Set up Go
+        if: steps.core.outputs.cache-hit != 'true'
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ needs.plan.outputs.go_version }}
+          cache: false
+      - name: Set up Flutter
+        id: flutter
+        if: steps.core.outputs.cache-hit != 'true' || (matrix.platform == 'android' && steps.gradle.outputs.cache-hit != 'true')
+        uses: onesyue/yuelink-ci/.github/actions/setup-flutter@d6c9eb965b79818ed944b3e2df168905b535ff49 # pinned installer v1
+        with:
+          flutter-version: ${{ needs.plan.outputs.flutter_version }}
+          cache: true
+      - name: Restore shared pub dependencies
+        if: steps.core.outputs.cache-hit != 'true' || (matrix.platform == 'android' && steps.gradle.outputs.cache-hit != 'true')
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.pub_path }}
+          key: ${{ steps.cache_plan.outputs.pub_key }}
+      - name: Setup Android NDK tools
+        if: matrix.platform == 'android' && (steps.core.outputs.cache-hit != 'true' || steps.gradle.outputs.cache-hit != 'true')
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: platform-tools
+      - name: Install canonical NDK
+        if: matrix.platform == 'android' && (steps.core.outputs.cache-hit != 'true' || steps.gradle.outputs.cache-hit != 'true')
+        shell: bash
+        env:
+          NDK: ${{ needs.plan.outputs.ndk }}
+        run: |
+          set -euo pipefail
+          sdkmanager "ndk;$NDK"
+      - name: Build exact native core and service inputs
+        if: steps.core.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          DEVELOPER_DIR: ${{ runner.os == 'macOS' && format('/Applications/Xcode_{0}.app/Contents/Developer', needs.plan.outputs.xcode) || '' }}
+          NDK: ${{ needs.plan.outputs.ndk }}
+          GOFLAGS: -mod=readonly
+          GOTOOLCHAIN: local
+        run: |
+          set -euo pipefail
+          if [ -z "$DEVELOPER_DIR" ]; then
+            unset DEVELOPER_DIR
+          fi
+          if [ "$PLATFORM" = android ]; then
+            export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/$NDK"
+            export ANDROID_NDK="$ANDROID_NDK_HOME"
+          fi
+          flutter pub get --enforce-lockfile
+          dart run slang
+          if [ "$CORE_ARCH_SCOPE" = amd64 ]; then
+            dart setup.dart build -p "$PLATFORM" -a amd64
+          else
+            test "$CORE_ARCH_SCOPE" = all
+            dart setup.dart build -p "$PLATFORM"
+          fi
+      - name: Set up Java for dependency resolution
+        if: matrix.platform == 'android' && steps.gradle.outputs.cache-hit != 'true'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Resolve Android dependencies without signing or packaging
+        if: matrix.platform == 'android' && steps.gradle.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          FLUTTER_ROOT: ${{ steps.flutter.outputs.flutter-root }}
+          NDK: ${{ needs.plan.outputs.ndk }}
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/$NDK"
+          export ANDROID_NDK="$ANDROID_NDK_HOME"
+          flutter pub get --enforce-lockfile
+          dart run slang
+          printf 'flutter.sdk=%s\nsdk.dir=%s\n' "$FLUTTER_ROOT" "$ANDROID_SDK_ROOT" > android/local.properties
+          cd android
+          ./gradlew --no-daemon --init-script "$GITHUB_WORKSPACE/.cache-tools/scripts/warm_gradle.init.gradle" :app:warmDependencyCache
+      - name: Save Gradle dependencies in master scope
+        if: github.ref == 'refs/heads/master' && matrix.platform == 'android' && steps.gradle.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.gradle_path }}
+          key: ${{ steps.cache_plan.outputs.gradle_key }}
+      - name: Install canonical Linux dependencies for media warm-up
+        if: matrix.platform == 'linux' && steps.linux_media_cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .cache-tools/scripts/select-ubuntu-https-mirror.py
+          python3 .cache-tools/scripts/release_cache_plan.py step-script 'Install Linux build dependencies' > "$RUNNER_TEMP/media-deps.sh"
+          bash "$RUNNER_TEMP/media-deps.sh"
+      - name: Build canonical Linux media for master cache
+        if: matrix.platform == 'linux' && steps.linux_media_cache.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MEDIA_CACHE_HIT: ${{ steps.linux_media_cache.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          python3 .cache-tools/scripts/release_cache_plan.py step-script 'Build source-locked Linux native media' > "$RUNNER_TEMP/media-build.sh"
+          bash "$RUNNER_TEMP/media-build.sh"
+      - name: Save Linux media in master scope
+        if: github.ref == 'refs/heads/master' && matrix.platform == 'linux' && steps.linux_media_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.linux_media_path }}
+          key: ${{ steps.cache_plan.outputs.linux_media_key }}
+      - name: Save compiled core in master scope
+        if: github.ref == 'refs/heads/master' && steps.core.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.cache_plan.outputs.gocore_path }}
+          key: ${{ steps.cache_plan.outputs.gocore_key }}
+      - name: Report measured warm-up result
+        if: always()
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          CORE_HIT: ${{ steps.core.outputs.cache-hit }}
+          CORE_KEY: ${{ steps.cache_plan.outputs.gocore_key }}
+          SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            printf '### %s core cache\n\n' "$PLATFORM"
+            printf 'Source: %s\n\nCache hit: %s\n\nResult: %s\n\nKey: %s\n' "$SOURCE_SHA" "${CORE_HIT:-false}" "$JOB_STATUS" "$CORE_KEY"
+          } >> "$GITHUB_STEP_SUMMARY"

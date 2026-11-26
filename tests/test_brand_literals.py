@@ -98,7 +98,7 @@ class BrandLiteralTests(unittest.TestCase):
             text=True,
         )
         paths = set(result.stdout.split("\0")) - ENDPOINT_EXCEPTIONS - {""}
-        self.assertIn(".github/workflows/manifest-health.yml", paths)
+        self.assertIn(".github/workflows/nightly.yml", paths)
         for relative in sorted(paths):
             if relative.startswith("tests/fixtures/"):
                 continue

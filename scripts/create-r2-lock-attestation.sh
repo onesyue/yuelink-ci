@@ -260,7 +260,7 @@ jq -S -n \
       schemaVersion: 1,
       proofType: "yuelink-r2-lock-attestation-v1",
       repository: "onesyue/yuelink-ci",
-      workflow: ".github/workflows/r2-lock-attestation.yml",
+      workflow: ".github/workflows/nightly.yml",
       workflowCommit: $workflowCommit,
       runId: $runId,
       runAttempt: $runAttempt,

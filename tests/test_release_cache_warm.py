@@ -2,7 +2,7 @@
 
 GitHub scopes a cache to the ref that saved it. Every release runs on a new
 tag ref, so a cache a release build saves is unreachable from the next
-release. The build therefore only restores, and warm-release-caches.yml saves
+release. The build therefore only restores, and nightly.yml saves
 the same identities on master after green source attestation. The warm-up
 derives every key, path, pin and the identity script from the build workflow
 at the same commit, so the two cannot drift silently.
@@ -26,8 +26,33 @@ import release_cache_plan as plan  # noqa: E402
 WORKFLOWS = ROOT / ".github/workflows"
 BUILD_MATRIX = (WORKFLOWS / "build-matrix.yml").read_text(encoding="utf-8")
 BUILD = (WORKFLOWS / "build.yml").read_text(encoding="utf-8")
-WARM = (WORKFLOWS / "warm-release-caches.yml").read_text(encoding="utf-8")
+NIGHTLY = (WORKFLOWS / "nightly.yml").read_text(encoding="utf-8")
 PLAN = (WORKFLOWS / "plan.yml").read_text(encoding="utf-8")
+
+
+def jobs_named(workflow: str, *names: str) -> str:
+    """Return the named job blocks. Workflow keys at column 2 start a block."""
+    selected: list[str] = []
+    current = ""
+    buf: list[str] = []
+    for line in workflow.splitlines(keepends=True):
+        if (
+            line.startswith("  ")
+            and not line.startswith("   ")
+            and line.rstrip().endswith(":")
+        ):
+            if current in names:
+                selected.append("".join(buf))
+            current = line.strip()[:-1]
+            buf = [line]
+        else:
+            buf.append(line)
+    if current in names:
+        selected.append("".join(buf))
+    return "".join(selected)
+
+
+WARM = jobs_named(NIGHTLY, "plan", "warm")
 SHA = "a" * 40
 INPUTS = "b" * 40
 
@@ -175,9 +200,10 @@ class WarmUpDerivesTheBuildIdentity(unittest.TestCase):
 
 class WarmUpWorkflowBoundary(unittest.TestCase):
     def test_runs_only_after_green_master_attestation(self) -> None:
-        self.assertIn("workflows: [Source attestation]", WARM)
-        self.assertIn("branches: [master]", WARM)
-        for guard in ("github.event.workflow_run.conclusion == 'success'",
+        self.assertIn('workflows: ["Build YueLink", "Source attestation"]', NIGHTLY)
+        self.assertNotIn("\n    branches:", NIGHTLY)
+        for guard in ("github.event.workflow_run.name == 'Source attestation'",
+                      "github.event.workflow_run.conclusion == 'success'",
                       "github.event.workflow_run.head_branch == 'master'",
                       "github.event.workflow_run.event == 'workflow_dispatch'"):
             self.assertIn(guard, WARM)
@@ -185,7 +211,7 @@ class WarmUpWorkflowBoundary(unittest.TestCase):
     def test_cannot_publish_sign_or_reach_release_secrets(self) -> None:
         self.assertNotIn("environment:", WARM)
         self.assertEqual(set(re.findall(r"secrets\.([A-Z0-9_]+)", WARM)), {"SRC_DEPLOY_KEY"})
-        self.assertIn("permissions:\n  contents: read\n", WARM)
+        self.assertIn("permissions:\n      contents: read\n", WARM)
         for forbidden in ("R2_", "aws s3", "id-token", "attestations: write", "contents: write"):
             self.assertNotIn(forbidden, WARM)
 

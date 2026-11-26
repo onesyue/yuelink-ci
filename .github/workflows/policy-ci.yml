@@ -10,6 +10,15 @@ on:
         description: Exact yuelink PR commit SHA to validate (optional)
         required: false
         type: string
+  workflow_call:
+    inputs:
+      yuelink_sha:
+        description: Exact yuelink PR commit SHA to validate (optional)
+        required: false
+        type: string
+    secrets:
+      SRC_DEPLOY_KEY:
+        required: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
