@@ -75,17 +75,20 @@ def one_dial_issues(build: str, dial: str, sync: str, ios: str) -> list[str]:
         issues.append("release no longer blocks on the dial summary")
     if TABLE not in build:
         issues.append("dial table shape changed")
+    matrix = (ROOT / "scripts" / "dial_platform_matrix.yml").read_text(encoding="utf-8")
     for name in ("windows", "macos", "linux", "android"):
-        if f"\n          - name: {name}\n" not in dial:
+        if f"\n- name: {name}\n" not in "\n" + matrix:
             issues.append(f"missing platform {name}")
-    if "\n          - name: ios\n" in dial:
+    if "\n- name: ios\n" in "\n" + matrix or "\n          - name: ios\n" in dial:
         issues.append("iOS dial must not block the gate")
     if "ios_unsigned_compile:" not in dial:
         issues.append("unsigned iOS compilation is missing")
     if "ios_unsigned_compile:" in dial:
         unsigned = dial.split("  ios_unsigned_compile:", 1)[1]
-        if "if: always() && inputs.run_pr_checks && needs.dial_gate.result != 'cancelled'" not in unsigned:
+        if "inputs.run_pr_checks && needs.platform_scope.outputs.ios == 'true'" not in unsigned:
             issues.append("unsigned iOS compilation must retain its required PR check")
+        if "needs: [dial_gate]" in unsigned.split("steps:", 1)[0]:
+            issues.append("unsigned iOS compilation must run with platform scope, not after the dial gate")
     if "linux_auth_storage:" not in dial:
         issues.append("auth and storage verification is missing")
     if dial.count("ssh-key:") < 4:

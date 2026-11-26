@@ -78,8 +78,62 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  platform_scope:
+    name: PR platform scope
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    outputs:
+      names: ${{ steps.scope.outputs.names }}
+      ios: ${{ steps.scope.outputs.ios }}
+      auth: ${{ steps.scope.outputs.auth }}
+      rows: ${{ steps.scope.outputs.rows }}
+    steps:
+      - name: Checkout this builder revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Compare pull request platform inputs
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = pull_request ]; then
+            if [[ ! "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::pull request base is not 40 lowercase hex"
+              exit 1
+            fi
+            git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          fi
+          python3 scripts/pr_platform_scope.py \
+            --event "$EVENT_NAME" \
+            --base "$BASE_SHA" \
+            --workflow .github/workflows/dial-gate.yml \
+            --json "$RUNNER_TEMP/dial-platform-scope/scope.json"
+      - name: Retain pull request platform scope
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dial-platform-scope
+          path: ${{ runner.temp }}/dial-platform-scope/scope.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain a dial artifact so an unchanged pull request still downloads
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dial-gate-scope
+          path: ${{ runner.temp }}/dial-platform-scope/scope.json
+          if-no-files-found: error
+          retention-days: 14
   dial_gate:
-    needs: [baseline_binding]
+    needs: [baseline_binding, platform_scope]
+    if: needs.platform_scope.outputs.names != '[]'
     name: Dial gate (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.timeout_minutes }}
@@ -103,43 +157,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: windows
-            os: windows-latest
-            kind: host
-            platform: windows
-            goos: windows
-            goarch: amd64
-            singbox: sing-box-1.14.4-windows-amd64.zip
-            timeout_minutes: 45
-            sample_timeout: 8s
-          - name: macos
-            os: macos-26
-            kind: host
-            platform: macos
-            goos: darwin
-            goarch: arm64
-            singbox: sing-box-1.14.4-darwin-arm64.tar.gz
-            timeout_minutes: 45
-            sample_timeout: 8s
-          - name: linux
-            os: ubuntu-24.04
-            kind: host
-            platform: linux
-            goos: linux
-            goarch: amd64
-            singbox: sing-box-1.14.4-linux-amd64.tar.gz
-            timeout_minutes: 45
-            sample_timeout: 8s
-          - name: android
-            os: ubuntu-24.04
-            kind: android
-            platform: android
-            goos: android
-            goarch: amd64
-            singbox: sing-box-1.14.4-android-amd64.tar.gz
-            timeout_minutes: 90
-            sample_timeout: 12s
+        include: ${{ fromJSON(needs.platform_scope.outputs.rows) }}
 
     steps:
       - name: Checkout dial-gate candidate
@@ -270,7 +288,8 @@ jobs:
 
   linux_auth_storage:
     name: Auth and storage Linux verification
-    if: inputs.run_pr_checks
+    needs: [platform_scope]
+    if: inputs.run_pr_checks && needs.platform_scope.outputs.auth == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -322,8 +341,8 @@ jobs:
 
   ios_unsigned_compile:
     name: Exact source unsigned iOS compilation
-    needs: [dial_gate]
-    if: always() && inputs.run_pr_checks && needs.dial_gate.result != 'cancelled'
+    needs: [platform_scope]
+    if: inputs.run_pr_checks && needs.platform_scope.outputs.ios == 'true'
     runs-on: macos-26
     timeout-minutes: 60
     permissions:

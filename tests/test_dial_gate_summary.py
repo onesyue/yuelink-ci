@@ -80,6 +80,9 @@ class DialGateSummaryTests(unittest.TestCase):
                 path = root / "dial-reports" / ("dial-gate-" + name)
                 path.mkdir(parents=True)
                 (path / "gate.json").write_text(report if isinstance(report, str) else json.dumps(report))
+            scope = root / "dial-scope"
+            scope.mkdir()
+            (scope / "scope.json").write_text(json.dumps({"skipped": []}))
             return subprocess.run(
                 [sys.executable, "-c", script],
                 cwd=root,

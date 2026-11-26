@@ -158,6 +158,28 @@ jobs:
           restore-keys: |
             yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-xcode-cc-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-
 
+      - name: Restore CocoaPods cache (iOS)
+        id: cocoapods_ios
+        if: matrix.platform == 'ios'
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-cocoapods-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ hashFiles('ios/Podfile.lock') }}
+
+      - name: Restore CocoaPods cache (macOS)
+        id: cocoapods_macos
+        if: matrix.platform == 'macos'
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            macos/Pods
+            ~/Library/Caches/CocoaPods
+          key: yue-sdk-3.47.8-737ba8f885dc774b53b442759999a312c9461e4e-cf636b1dfb818dd6a3ff16e390e93b1a036969c8-3.13.7-${{ hashFiles('pubspec.lock') }}-yue-cocoapods-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.platform }}-${{ hashFiles('macos/Podfile.lock') }}
+
       # ── Toolchains (Go for core, Flutter for app, Java for android) ───────
       # Flutter SDK cache stays on (reviewed 2026-08-31). setup-go's own
       # cache stays off. Module and compiler caches are separate actions/cache
@@ -658,6 +680,7 @@ jobs:
       - name: Build APKs (split-per-abi + universal)
         if: matrix.platform == 'android'
         env:
+          GRADLE_OPTS: -Dorg.gradle.caching=true
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
