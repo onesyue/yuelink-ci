@@ -459,4 +459,10 @@ if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
   并把旧根保留为 replay regression fixture；不得从 CDN 动态学习地板。
   最后收敛 yueto 签名发布账本：见 docs/reconcile-yuelink-pin.md，
   用 scripts/reconcile-yuelink-pin.py 生成验签后的 write-yuelink 参数；release-state 的 yuelink 行须为 OK。"
+  # Opt-in: with YUETO_ROOT (and YUELINK_CHECKOUT) set, wait for go-live and
+  # record the signed ledger. Never fails the release; the runbook still applies.
+  if [ -n "${YUETO_ROOT:-}" ] && [ -n "${YUELINK_CHECKOUT:-}" ]; then
+    bash "$SCRIPT_DIR/scripts/record-ledger-after-golive.sh" "${BASH_REMATCH[1]}" ||
+      echo "::warning::post-go-live ledger step failed; use docs/reconcile-yuelink-pin.md" >&2
+  fi
 fi
